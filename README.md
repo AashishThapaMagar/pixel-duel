@@ -1,6 +1,6 @@
 # Pixel Duel
 
-A 2D fighting game prototype — Street Fighter/Tekken style, but 2D — built in **Godot 4** so it's realistic to build solo. It's fully playable right now (movement, jump, punch, kick, block, chip damage, KO, round timer, restart) with placeholder colored-box "sprites" instead of art, so you can focus on getting the feel right before drawing/animating anything.
+A 2D fighting game prototype — Street Fighter/Tekken style, but 2D — built in **Godot 4** so it's realistic to build solo. It's fully playable right now (movement, jump, punch, kick, block, chip damage, KO, round timer, restart), with a real animated pixel-art fighter sprite and a dusk-skyline arena backdrop (see "Art assets" below) rather than placeholder colored boxes.
 
 A match is **four rounds, each fought under a different fighting style** — Karate, then Muay Thai, then Boxing, then Freestyle MMA — applied to both fighters so every round is a genuinely different fight, not just a reskinned one. See "Fighting styles" below.
 
@@ -34,6 +34,9 @@ pixel-duel/
     arena.gd              Round/match manager: styles per round, timer, health bars, win/KO/restart
   resources/
     styles/               karate.tres, muay_thai.tres, boxing.tres, mma.tres — one round each
+  assets/
+    sprites/fighter/       Fighter animation frames (PNG) + generate_fighter.py that drew them
+    backgrounds/           arena_bg.png + generate_arena_bg.py that drew it
   tests/
     smoke_test.gd         Optional headless test — not needed to play the game
 ```
@@ -94,9 +97,17 @@ Whoever wins more of the four rounds wins the match (round wins shown as `●○
 
 **To add a 5th style** (or replace one): duplicate one of the `.tres` files in `resources/styles/`, tweak its numbers/flags in the Godot Inspector (or by hand — they're plain text), then add it to the `round_styles` array at the top of `arena.gd`. No new signature mechanic is required — a style with all the "signature mechanic" flags off (`perfect_block_window = 0`, `kick_chip_bonus = 0`, `kicks_disabled = false`, `combo_damage_step = 0`, `has_finisher = false`) just plays as a plain numbers-only style.
 
+## Art assets
+
+The fighter and the arena backdrop are real generated images, not vector placeholders — both are produced by small Python (Pillow) scripts committed alongside their output, so the art is reproducible and easy to restyle by editing numbers rather than repainting pixels by hand.
+
+- **Fighter** (`assets/sprites/fighter/generate_fighter.py`): draws each animation frame (idle x2, walk x4, jump, punch x2, hook x2, kick x2, block, hitstun, KO) as low-res pixel art (35x50, nearest-neighbor upscaled 2x) in grayscale — outline / shadow / base / highlight tones. `Player.tscn`'s `Visual` node is an `AnimatedSprite2D` using these frames, and `player.gd` tints it per-player via `Visual.modulate` (blue for P1, red for P2) and mirrors it via `Visual.flip_h` — one sheet serves both fighters and both directions. Re-run the script after editing pose rectangles; it also writes `_contact_sheet.png`, a grid of every frame, for a quick visual check before wiring changes into Godot.
+- **Arena backdrop** (`assets/backgrounds/generate_arena_bg.py`): draws a 960x540 dusk sky gradient, stars, a distant mountain silhouette, and a lit city skyline, saved as `arena_bg.png` and shown via a `Sprite2D` behind `Ground` in `Arena.tscn`.
+- Both scripts need `pillow` (`pip install pillow`) but the game itself doesn't — only the generated PNGs are loaded at runtime.
+
 ## Natural next steps
 
-- Swap the colored-box placeholders for real sprites/animations (`AnimatedSprite2D` instead of `Polygon2D`) — ideally one sprite set per style, since Karate/Muay Thai/Boxing/MMA all *look* different in real life too.
+- Give each fighting style its own sprite recolor or accent (not just the shared blue/red team tint) — e.g. Muay Thai wraps, boxing gloves — since Karate/Muay Thai/Boxing/MMA look different in real life too.
 - Add sound effects, hit-stop (a few frozen frames on impact), and screen shake for "juice" — especially on perfect blocks and finishers, which are currently readable only through the flash-color tween.
 - Add a character-select screen and a second/third character with different base stats layered on top of the per-round style.
 - Add a simple main menu scene before the arena, and a "how to fight this round" recap screen between rounds (the banner's tagline is a start, but a full move-list per style would help new players).
