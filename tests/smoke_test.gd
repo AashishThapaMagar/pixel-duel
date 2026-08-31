@@ -56,10 +56,14 @@ func _run_tests() -> void:
 	_check(p2.state == p2.State.KO, "p2 should be in KO state after lethal hit")
 	_check(arena.round_active == false, "round_active should be false after a KO")
 
-	# Restart should fully heal both fighters and reactivate the round.
-	arena._start_new_round()
+	# Restart should fully heal both fighters. The round itself stays paused
+	# behind the round-1 style banner until it clears (mirrors real play,
+	# where the banner blocks input for a couple seconds at round start).
+	arena._begin_round(0)
 	_check(p1.health == 100 and p2.health == 100, "restart should reset both fighters to full hp")
-	_check(arena.round_active == true, "restart should reactivate the round")
+	_check(arena.round_active == false, "round should stay inactive during the intro banner")
+	arena._hide_banner()
+	_check(arena.round_active == true, "round should reactivate once the intro banner clears")
 
 	if failures.is_empty():
 		print("SMOKE_TEST: ALL PASS")

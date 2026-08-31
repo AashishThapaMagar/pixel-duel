@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="FightStyle" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fight_style.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+style_id = "mma"
+display_name = "Freestyle MMA"
+tagline = "Everything goes — land a punch, follow with a kick for a finisher."
+accent_color = Color(0.55, 0.2, 0.85, 1)
+move_speed = 260.0
+jump_velocity = -760.0
+punch_damage = 7
+punch_active_time = 0.08
+punch_total_time = 0.2
+punch_knockback = 230.0
+kick_damage = 14
+kick_active_time = 0.12
+kick_total_time = 0.36
+kick_knockback = 400.0
+kicks_disabled = false
+hook_damage = 9
+hook_active_time = 0.09
+hook_total_time = 0.26
+hook_knockback = 260.0
+block_chip_multiplier = 0.15
+kick_chip_bonus = 0.0
+perfect_block_window = 0.0
+combo_damage_step = 0
+combo_max_stacks = 1
+combo_window = 0.6
+has_finisher = true
+finisher_window = 0.35
+finisher_damage_mult = 1.5
+finisher_knockback_mult = 1.5
+finisher_cooldown = 1.5

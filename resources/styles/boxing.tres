@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="FightStyle" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fight_style.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+style_id = "boxing"
+display_name = "Boxing"
+tagline = "Fast feet, faster hands — chain hits before the window closes."
+accent_color = Color(0.75, 0.75, 0.8, 1)
+move_speed = 300.0
+jump_velocity = -780.0
+punch_damage = 5
+punch_active_time = 0.06
+punch_total_time = 0.16
+punch_knockback = 180.0
+kick_damage = 12
+kick_active_time = 0.12
+kick_total_time = 0.38
+kick_knockback = 380.0
+kicks_disabled = true
+hook_damage = 10
+hook_active_time = 0.09
+hook_total_time = 0.24
+hook_knockback = 260.0
+block_chip_multiplier = 0.12
+kick_chip_bonus = 0.0
+perfect_block_window = 0.0
+combo_damage_step = 2
+combo_max_stacks = 3
+combo_window = 0.6
+has_finisher = false
+finisher_window = 0.35
+finisher_damage_mult = 1.5
+finisher_knockback_mult = 1.5
+finisher_cooldown = 1.5

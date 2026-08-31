@@ -5,6 +5,7 @@ extends Area2D
 
 @export var damage: int = 5
 @export var knockback: float = 260.0
+@export var attack_type: String = "punch"   # "punch" | "kick" — lets styles react differently per type
 
 # Which Player node fired this hitbox (so we don't hit ourselves and so the
 # victim knows which direction to get knocked back).
@@ -35,4 +36,6 @@ func _on_area_entered(area: Area2D) -> void:
 		var attacker_facing = 1
 		if owner_player and "facing" in owner_player:
 			attacker_facing = owner_player.facing
-		victim.take_hit(damage, knockback, attacker_facing)
+		victim.take_hit(damage, knockback, attacker_facing, owner_player, attack_type)
+		if owner_player and owner_player.has_method("_on_hit_landed"):
+			owner_player._on_hit_landed(attack_type)
