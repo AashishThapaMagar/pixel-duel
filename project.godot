@@ -12,9 +12,13 @@ config_version=5
 
 config/name="Pixel Duel"
 config/description="A 2D fighting game prototype (Tekken/Street-Fighter style) built in Godot."
-run/main_scene="res://scenes/Arena.tscn"
+run/main_scene="res://scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.2", "GL Compatibility")
 config/icon="res://icon.svg"
+
+[autoload]
+
+Settings="*res://scripts/settings.gd"
 
 [display]
 

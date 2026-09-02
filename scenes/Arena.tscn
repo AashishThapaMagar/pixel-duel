@@ -164,5 +164,5 @@ offset_top = 500.0
 offset_right = 940.0
 offset_bottom = 535.0
 theme_override_font_sizes/font_size = 14
-text = "P1: A/D move, W jump, S block, F punch, G kick     |     P2: Arrows move, Up jump, Down block, K punch, L kick     |     R restart     |     4 rounds — style changes each round"
+text = "P1: A/D move, W jump, S block, F punch, G kick     |     P2: Arrows move, Up jump, Down block, K punch, L kick     |     R restart     |     Esc: menu"
 horizontal_alignment = 1

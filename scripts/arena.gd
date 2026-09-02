@@ -60,6 +60,10 @@ func _ready() -> void:
 	_begin_round(0)
 
 func _process(delta: float) -> void:
+	if Input.is_action_just_pressed("ui_cancel"):
+		get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
+		return
+
 	if intro_timer > 0.0:
 		intro_timer -= delta
 		if intro_timer <= 0.0:

@@ -1,0 +1,109 @@
+[gd_scene load_steps=3 format=3 uid="uid://cmainmenu001"]
+
+[ext_resource type="Script" path="res://scripts/main_menu.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/backgrounds/arena_bg.png" id="2"]
+
+[node name="MainMenu" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1")
+
+[node name="Background" type="TextureRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("2")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Dim" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.35)
+mouse_filter = 2
+
+[node name="Title" type="Label" parent="."]
+offset_left = 0.0
+offset_top = 60.0
+offset_right = 960.0
+offset_bottom = 130.0
+theme_override_font_sizes/font_size = 56
+text = "PIXEL DUEL"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="."]
+offset_left = 0.0
+offset_top = 132.0
+offset_right = 960.0
+offset_bottom = 158.0
+theme_override_font_sizes/font_size = 16
+text = "4 rounds. 4 fighting styles. One winner."
+horizontal_alignment = 1
+
+[node name="MainScreen" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="VBox" type="VBoxContainer" parent="MainScreen"]
+offset_left = 380.0
+offset_top = 230.0
+offset_right = 580.0
+offset_bottom = 410.0
+theme_override_constants/separation = 16
+
+[node name="PlayButton" type="Button" parent="MainScreen/VBox"]
+custom_minimum_size = Vector2(200, 46)
+theme_override_font_sizes/font_size = 20
+text = "PLAY"
+
+[node name="SettingsButton" type="Button" parent="MainScreen/VBox"]
+custom_minimum_size = Vector2(200, 46)
+theme_override_font_sizes/font_size = 20
+text = "SETTINGS"
+
+[node name="ExitButton" type="Button" parent="MainScreen/VBox"]
+custom_minimum_size = Vector2(200, 46)
+theme_override_font_sizes/font_size = 20
+text = "EXIT"
+
+[node name="SettingsScreen" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+visible = false
+
+[node name="VBox" type="VBoxContainer" parent="SettingsScreen"]
+offset_left = 280.0
+offset_top = 190.0
+offset_right = 680.0
+offset_bottom = 400.0
+theme_override_constants/separation = 20
+
+[node name="SettingsLabel" type="Label" parent="SettingsScreen/VBox"]
+theme_override_font_sizes/font_size = 28
+text = "SETTINGS"
+horizontal_alignment = 1
+
+[node name="FullscreenCheck" type="CheckBox" parent="SettingsScreen/VBox"]
+theme_override_font_sizes/font_size = 18
+text = "Fullscreen"
+
+[node name="VolumeRow" type="HBoxContainer" parent="SettingsScreen/VBox"]
+custom_minimum_size = Vector2(0, 32)
+theme_override_constants/separation = 12
+
+[node name="VolumeLabel" type="Label" parent="SettingsScreen/VBox/VolumeRow"]
+custom_minimum_size = Vector2(90, 0)
+theme_override_font_sizes/font_size = 18
+text = "Volume"
+
+[node name="VolumeSlider" type="HSlider" parent="SettingsScreen/VBox/VolumeRow"]
+custom_minimum_size = Vector2(260, 0)
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.05
+value = 0.8
+
+[node name="BackButton" type="Button" parent="SettingsScreen/VBox"]
+custom_minimum_size = Vector2(160, 42)
+theme_override_font_sizes/font_size = 18
+text = "BACK"

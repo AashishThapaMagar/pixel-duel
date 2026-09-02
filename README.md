@@ -16,6 +16,17 @@ This has been test-run headlessly (imported and simulated in Godot 4.2) with no 
 | Punch (light) | F | K |
 | Kick (heavy) | G | L |
 | Restart after round ends | R | R |
+| Back to main menu | Esc | Esc |
+
+## Main menu
+
+The game boots into `scenes/MainMenu.tscn` (set as `run/main_scene` in project.godot) rather than straight into a fight:
+
+- **Play** — starts a fresh match at `Arena.tscn` (round 1, Karate).
+- **Settings** — Fullscreen toggle and a Volume slider, both backed by the `Settings` autoload (`scripts/settings.gd`), which applies them immediately (`DisplayServer`/`AudioServer`) and persists them to `user://settings.cfg` so they survive a restart. Volume controls the Master audio bus — there's no sound yet, but the plumbing is there for whenever sound effects are added.
+- **Exit** — quits.
+
+Both screens live in the one `MainMenu` scene (`MainScreen` / `SettingsScreen` Control nodes toggled visible by `main_menu.gd`) rather than separate scene files, since there's so little to each. Pressing Esc during a match returns to this menu at any time.
 
 ## Project layout
 
@@ -24,9 +35,12 @@ pixel-duel/
   project.godot        Engine/project settings + input map
   icon.svg              Project icon
   scenes/
-    Arena.tscn           Main scene: two fighters, ground, camera, UI
+    MainMenu.tscn        Entry point: Play / Settings / Exit
+    Arena.tscn           A match: two fighters, ground, camera, UI
     Player.tscn          A single fighter (body, hit/hurt boxes, collision)
   scripts/
+    main_menu.gd         Main menu screen-switching (Play/Settings/Exit)
+    settings.gd           Autoload: fullscreen/volume, applied + saved to user://settings.cfg
     player.gd            Movement, attacks, blocking, health, state machine
     fight_style.gd        FightStyle resource: one fighting discipline's stats + mechanic flags
     hitbox.gd             Damage-dealing region, active only during attack frames
