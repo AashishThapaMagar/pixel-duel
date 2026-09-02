@@ -1,24 +1,29 @@
-[gd_scene load_steps=22 format=3 uid="uid://bq0player001"]
+[gd_scene load_steps=27 format=3 uid="uid://bq0player001"]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/hurtbox.gd" id="2"]
 [ext_resource type="Script" path="res://scripts/hitbox.gd" id="3"]
 [ext_resource type="Texture2D" path="res://assets/sprites/fighter/idle_0.png" id="4"]
 [ext_resource type="Texture2D" path="res://assets/sprites/fighter/idle_1.png" id="5"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/walk_0.png" id="6"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/walk_1.png" id="7"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/walk_2.png" id="8"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/walk_3.png" id="9"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/jump.png" id="10"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/punch_0.png" id="11"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/punch_1.png" id="12"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/hook_0.png" id="13"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/hook_1.png" id="14"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/kick_0.png" id="15"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/kick_1.png" id="16"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/block.png" id="17"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/hitstun.png" id="18"]
-[ext_resource type="Texture2D" path="res://assets/sprites/fighter/ko.png" id="19"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/idle_2.png" id="6"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/idle_3.png" id="7"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/walk_0.png" id="8"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/walk_1.png" id="9"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/walk_2.png" id="10"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/walk_3.png" id="11"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/jump.png" id="12"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/punch_0.png" id="13"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/punch_1.png" id="14"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/punch_2.png" id="15"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/hook_0.png" id="16"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/hook_1.png" id="17"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/hook_2.png" id="18"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/kick_0.png" id="19"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/kick_1.png" id="20"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/kick_2.png" id="21"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/block.png" id="22"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/hitstun.png" id="23"]
+[ext_resource type="Texture2D" path="res://assets/sprites/fighter/ko.png" id="24"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
 size = Vector2(44, 100)
@@ -34,23 +39,29 @@ animations = [{
 }, {
 "duration": 1.0,
 "texture": ExtResource("5")
-}],
-"loop": true,
-"name": &"idle",
-"speed": 2.0
 }, {
-"frames": [{
 "duration": 1.0,
 "texture": ExtResource("6")
 }, {
 "duration": 1.0,
 "texture": ExtResource("7")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 4.0
 }, {
+"frames": [{
 "duration": 1.0,
 "texture": ExtResource("8")
 }, {
 "duration": 1.0,
 "texture": ExtResource("9")
+}, {
+"duration": 1.0,
+"texture": ExtResource("10")
+}, {
+"duration": 1.0,
+"texture": ExtResource("11")
 }],
 "loop": true,
 "name": &"walk",
@@ -58,7 +69,7 @@ animations = [{
 }, {
 "frames": [{
 "duration": 1.0,
-"texture": ExtResource("10")
+"texture": ExtResource("12")
 }],
 "loop": false,
 "name": &"jump",
@@ -66,40 +77,49 @@ animations = [{
 }, {
 "frames": [{
 "duration": 1.0,
-"texture": ExtResource("11")
-}, {
-"duration": 1.0,
-"texture": ExtResource("12")
-}],
-"loop": false,
-"name": &"punch",
-"speed": 9.0
-}, {
-"frames": [{
-"duration": 1.0,
 "texture": ExtResource("13")
 }, {
 "duration": 1.0,
 "texture": ExtResource("14")
+}, {
+"duration": 1.0,
+"texture": ExtResource("15")
+}],
+"loop": false,
+"name": &"punch",
+"speed": 13.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("16")
+}, {
+"duration": 1.0,
+"texture": ExtResource("17")
+}, {
+"duration": 1.0,
+"texture": ExtResource("18")
 }],
 "loop": false,
 "name": &"hook",
-"speed": 8.0
+"speed": 11.0
 }, {
 "frames": [{
 "duration": 1.0,
-"texture": ExtResource("15")
+"texture": ExtResource("19")
 }, {
 "duration": 1.0,
-"texture": ExtResource("16")
+"texture": ExtResource("20")
+}, {
+"duration": 1.0,
+"texture": ExtResource("21")
 }],
 "loop": false,
 "name": &"kick",
-"speed": 6.0
+"speed": 9.0
 }, {
 "frames": [{
 "duration": 1.0,
-"texture": ExtResource("17")
+"texture": ExtResource("22")
 }],
 "loop": false,
 "name": &"block",
@@ -107,7 +127,7 @@ animations = [{
 }, {
 "frames": [{
 "duration": 1.0,
-"texture": ExtResource("18")
+"texture": ExtResource("23")
 }],
 "loop": false,
 "name": &"hitstun",
@@ -115,7 +135,7 @@ animations = [{
 }, {
 "frames": [{
 "duration": 1.0,
-"texture": ExtResource("19")
+"texture": ExtResource("24")
 }],
 "loop": false,
 "name": &"ko",
@@ -132,7 +152,7 @@ position = Vector2(0, 0)
 sprite_frames = SubResource("SpriteFrames_fighter")
 animation = &"idle"
 centered = false
-offset = Vector2(-22, -100)
+offset = Vector2(-44, -128)
 texture_filter = 1
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
