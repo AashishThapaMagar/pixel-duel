@@ -22,7 +22,7 @@ func _ready() -> void:
 	volume_slider.value_changed.connect(Settings.set_volume)
 
 func _on_play_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/Arena.tscn")
+	get_tree().change_scene_to_file("res://scenes/CharacterSelect.tscn")
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()

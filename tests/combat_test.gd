@@ -112,7 +112,7 @@ func _run() -> void:
 	await _frames(1)
 	Input.action_release("p1_kick")
 	await _frames(3)
-	_check(p1.state == p1.State.PUNCH and p1.attack_variant == "hook", "Buffered heavy must become a Boxing hook after recovery")
+	_check(p1.state == p1.State.PUNCH and p1.attack_variant == "rear_hook", "Buffered heavy must become a Boxing rear hook after recovery")
 	await _reset(2)
 	p1._on_hit_landed("punch")
 	p1._start_attack(p1.State.PUNCH, "hook")

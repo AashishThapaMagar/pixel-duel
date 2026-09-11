@@ -4,6 +4,9 @@ signal health_changed(new_health: int, max_health: int)
 signal ko
 signal impact(point: Vector2, blocked: bool, heavy: bool)
 
+const ROSTER := preload("res://scripts/fighter_roster.gd")
+const MOVES := preload("res://scripts/move_catalog.gd")
+
 enum State { IDLE, WALK, JUMP, PUNCH, KICK, BLOCK, HITSTUN, KO, BLOCKSTUN, DASH, JUMP_START, LAND }
 
 @export var player_id: int = 1
@@ -53,13 +56,21 @@ var stun_timer: float = 0.0
 var input_prefix: String = "p1_"
 var opponent: Node = null
 var current_style: FightStyle = null
+var character_index: int = 0
+var character_profile: Dictionary = ROSTER.profile(0)
 var block_hold_time: float = 999.0
 var combo_stacks: int = 0
 var hitstop_remaining: float = 0.0
 var controls_enabled: bool = true
+var combat_paused: bool = false
 var action_timer: float = 0.0
 var combat_time: float = 0.0
 var attack_connected: bool = false
+var current_move: Dictionary = {}
+var chain_step: int = 0
+var combo_hits: int = 0
+var combo_damage: int = 0
+var _buffered_direction: int = 0
 var _buffered_action: String = ""
 var _buffer_remaining: float = 0.0
 var _last_tap_dir: int = 0
@@ -95,6 +106,21 @@ func apply_style(new_style: FightStyle) -> void:
 		"hook_damage", "hook_startup_time", "hook_active_time", "hook_total_time",
 		"hook_knockback", "block_chip_multiplier"]:
 		set(property, new_style.get(property))
+	# Always start with resource values so bonuses cannot stack between rounds.
+	move_speed *= float(character_profile.speed)
+	punch_damage += int(character_profile.punch_bonus)
+	hook_damage += int(character_profile.punch_bonus)
+	kick_damage += int(character_profile.kick_bonus)
+	block_chip_multiplier = maxf(0.0, block_chip_multiplier + float(character_profile.chip_bonus))
+
+func apply_character(index: int) -> void:
+	character_index = clampi(index, 0, ROSTER.PROFILES.size() - 1)
+	character_profile = ROSTER.profile(character_index)
+	base_color = character_profile.color
+	if current_style != null:
+		apply_style(current_style)
+	if is_node_ready():
+		_update_animation()
 
 func _physics_process(delta: float) -> void:
 	# Capture presses during hit-stop, but pause their expiry and the combat clock
@@ -159,6 +185,7 @@ func _capture_input() -> void:
 		if Input.is_action_just_pressed(input_prefix + action):
 			_buffered_action = action
 			_buffer_remaining = input_buffer_time
+			_buffered_direction = int(Input.get_axis(input_prefix + "left", input_prefix + "right")) * facing
 	for direction in [-1, 1]:
 		var action: String = "left" if direction < 0 else "right"
 		if Input.is_action_just_pressed(input_prefix + action):
@@ -213,18 +240,49 @@ func _consume_action() -> bool:
 	if _buffered_action.is_empty() or not is_on_floor():
 		return false
 	var action := _buffered_action
+	var direction := _buffered_direction
+	# A neutral (no-direction) buffer continues the current chain; a directional
+	# press always starts a fresh directional move instead of linking.
+	var next_id := _next_chain_move(action) if direction == 0 else ""
 	_buffered_action = ""
 	_buffer_remaining = 0.0
 	if action == "jump":
 		state = State.JUMP_START
 		action_timer = JUMP_START_TIME
 		_jump_direction = Input.get_axis(input_prefix + "left", input_prefix + "right")
-	elif action == "punch":
-		_start_attack(State.PUNCH, "jab")
 	else:
-		var hook: bool = current_style != null and current_style.kicks_disabled
-		_start_attack(State.PUNCH if hook else State.KICK, "hook" if hook else "kick")
+		if not next_id.is_empty():
+			_start_style_move(next_id, chain_step + 1)
+		else:
+			var move_id := "jab" if action == "punch" else "kick"
+			if direction > 0:
+				move_id = "cross" if action == "punch" else "forward_heavy"
+			elif direction < 0:
+				move_id = "hook" if action == "punch" else "back_heavy"
+			_start_style_move(move_id)
 	return true
+
+func _next_chain_move(action: String) -> String:
+	if current_move.is_empty() or not attack_connected or chain_step >= 2:
+		return ""
+	if action == "punch":
+		return current_move.next_light
+	if action == "kick":
+		return current_move.next_heavy
+	return ""
+
+func _start_style_move(move_id: String, step: int = 0) -> void:
+	var style_id: String = current_style.style_id if current_style != null else "karate"
+	var data: Dictionary = MOVES.for_style(style_id)[move_id]
+	_start_attack(State.KICK if data.kind == "kick" else State.PUNCH, data.pose)
+	current_move = data
+	chain_step = step
+	_update_animation()
+
+func move_name() -> String:
+	if not current_move.is_empty():
+		return str(current_move.name) + (" / FINISHER" if attack_variant == "finisher" else "")
+	return attack_variant.capitalize()
 
 func _enter_block() -> void:
 	state = State.BLOCK
@@ -232,17 +290,25 @@ func _enter_block() -> void:
 	velocity.x = 0.0
 
 func attack_startup() -> float:
+	if not current_move.is_empty():
+		return current_move.startup
 	return hook_startup_time if attack_variant == "hook" else (kick_startup_time if attack_variant in ["kick", "finisher"] else punch_startup_time)
 
 func attack_active_time() -> float:
+	if not current_move.is_empty():
+		return current_move.active
 	return hook_active_time if attack_variant == "hook" else (kick_active_time if attack_variant in ["kick", "finisher"] else punch_active_time)
 
 func attack_duration() -> float:
+	if not current_move.is_empty():
+		return current_move.startup + current_move.active + current_move.recovery
 	# Style data may shorten total duration, but every move still needs recovery.
 	var total := hook_total_time if attack_variant == "hook" else (kick_total_time if attack_variant in ["kick", "finisher"] else punch_total_time)
 	return maxf(total, attack_startup() + attack_active_time() + 0.05)
 
 func _start_attack(new_state: int, variant: String = "jab") -> void:
+	current_move = {}
+	chain_step = 0
 	hitbox.set_active(false)
 	state = new_state
 	attack_timer = 0.0
@@ -262,6 +328,14 @@ func _process_attack(delta: float) -> void:
 	var heavy: bool = attack_variant in ["kick", "finisher"]
 	var damage: int = kick_damage if heavy else (hook_damage if attack_variant == "hook" else punch_damage)
 	var knockback: float = kick_knockback if heavy else (hook_knockback if attack_variant == "hook" else punch_knockback)
+	if not current_move.is_empty():
+		heavy = current_move.kind == "kick"
+		var base: int = punch_damage if current_move.base == "punch" else (hook_damage if current_move.base == "hook" else kick_damage)
+		# Later links scale damage and early punches use less pushback so the
+		# next strike can connect. A three-move cap prevents endless cancels.
+		damage = maxi(1, int(round(base * float(current_move.damage) * (1.0 - chain_step * 0.12))))
+		knockback = (kick_knockback if heavy else punch_knockback) * float(current_move.push)
+		velocity.x = facing * float(current_move.lunge) / attack_startup() if attack_timer < attack_startup() else 0.0
 	if attack_variant == "finisher":
 		damage = int(round(damage * current_style.finisher_damage_mult))
 		knockback *= current_style.finisher_knockback_mult
@@ -270,13 +344,22 @@ func _process_attack(delta: float) -> void:
 	hitbox.attack_type = "kick" if heavy else "punch"
 	var reach := 64.0 if heavy else (44.0 if attack_variant == "hook" else 58.0)
 	hitbox.position = Vector2(facing * reach, -66.0 if heavy else -88.0)
+	if not current_move.is_empty():
+		hitbox.position = Vector2(facing * float(current_move.reach), float(current_move.height))
 	hitbox.set_active(attack_timer >= attack_startup() and attack_timer < attack_startup() + attack_active_time())
+	# Auto-advance a catalog move into its next chain link as soon as active
+	# frames end, so the player doesn't need to re-press the button in time.
+	if not current_move.is_empty() and _buffered_direction == 0 and not _next_chain_move(_buffered_action).is_empty() and attack_timer >= attack_startup() + attack_active_time():
+		_consume_action()
+		return
 	# A confirmed jab can cancel into the heavy button once contact ends.
-	if attack_connected and attack_variant == "jab" and _buffered_action == "kick" and attack_timer >= attack_startup() + attack_active_time():
+	if current_move.is_empty() and attack_connected and attack_variant == "jab" and _buffered_action == "kick" and attack_timer >= attack_startup() + attack_active_time():
 		_consume_action()
 		return
 	if attack_timer >= attack_duration():
 		hitbox.set_active(false)
+		current_move = {}
+		chain_step = 0
 		state = State.IDLE
 		_process_move_and_actions(delta)
 
@@ -285,8 +368,10 @@ func _combo_bonus() -> int:
 		return combo_stacks * current_style.combo_damage_step
 	return 0
 
-func _on_hit_landed(attack_type: String) -> void:
+func _on_hit_landed(attack_type: String, continued: bool = false, dealt: int = 0) -> void:
 	attack_connected = true
+	combo_hits = combo_hits + 1 if continued else 1
+	combo_damage = combo_damage + dealt if continued else dealt
 	if current_style != null and current_style.combo_damage_step > 0:
 		combo_stacks = mini(combo_stacks + 1, current_style.combo_max_stacks - 1) if combat_time - _last_land_time <= current_style.combo_window else mini(1, current_style.combo_max_stacks - 1)
 	_last_land_type = attack_type
@@ -380,6 +465,7 @@ func reset_for_new_round() -> void:
 	hitbox.set_active(false)
 	visual.modulate = Color.WHITE
 	controls_enabled = true
+	combat_paused = false
 	hitstop_remaining = 0.0
 	attack_timer = 0.0
 	stun_timer = 0.0
@@ -388,6 +474,11 @@ func reset_for_new_round() -> void:
 	block_hold_time = 999.0
 	combo_stacks = 0
 	attack_connected = false
+	current_move = {}
+	chain_step = 0
+	combo_hits = 0
+	combo_damage = 0
+	_buffered_direction = 0
 	attack_variant = "jab"
 	_buffered_action = ""
 	_buffer_remaining = 0.0

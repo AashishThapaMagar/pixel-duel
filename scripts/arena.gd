@@ -12,6 +12,7 @@ const KARATE := preload("res://resources/styles/karate.tres")
 const MUAY_THAI := preload("res://resources/styles/muay_thai.tres")
 const BOXING := preload("res://resources/styles/boxing.tres")
 const MMA := preload("res://resources/styles/mma.tres")
+const MOVES := preload("res://scripts/move_catalog.gd")
 
 @onready var player1: CharacterBody2D = $Player1
 @onready var player2: CharacterBody2D = $Player2
@@ -41,12 +42,21 @@ var match_over: bool = false
 var p1_start_pos: Vector2
 var p2_start_pos: Vector2
 var combat_effects: Node2D
+var move_guide: PanelContainer
+var guide_title: Label
+var guide_text: Label
+var combo_labels: Array[Label] = []
+var _resume_physics: Array[bool] = [false, false]
 
 func _ready() -> void:
 	player1.opponent = player2
 	player2.opponent = player1
 	p1_start_pos = player1.position
 	p2_start_pos = player2.position
+	player1.apply_character(MatchSetup.selected_fighters[0])
+	player2.apply_character(MatchSetup.selected_fighters[1])
+	$UI/P1Label.text = "P1 / " + player1.character_profile.name
+	$UI/P2Label.text = "P2 / " + player2.character_profile.name
 	combat_effects = Node2D.new()
 	combat_effects.set_script(preload("res://scripts/combat_effects.gd"))
 	combat_effects.z_index = 2
@@ -63,14 +73,23 @@ func _ready() -> void:
 	player2.health_changed.connect(func(h, mh): health_bar2.value = h)
 	player1.ko.connect(func(): _end_round(2))
 	player2.ko.connect(func(): _end_round(1))
+	_build_move_ui()
 
 	result_label.visible = false
 	_update_pips()
 	_begin_round(0)
 
 func _process(delta: float) -> void:
+	if Input.is_action_just_pressed("move_list"):
+		_toggle_move_guide()
 	if Input.is_action_just_pressed("ui_cancel"):
+		if move_guide.visible:
+			_toggle_move_guide()
+			return
 		get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
+		return
+	_update_combo_ui()
+	if move_guide.visible:
 		return
 
 	if intro_timer > 0.0:
@@ -153,6 +172,8 @@ func _begin_round(index: int) -> void:
 	combat_effects.reset()
 	round_index = index
 	var fight_style: FightStyle = round_styles[index]
+	guide_title.text = "ROUND %d / %s" % [index + 1, fight_style.display_name.to_upper()]
+	guide_text.text = MOVES.guide(fight_style.style_id)
 
 	player1.position = p1_start_pos
 	player2.position = p2_start_pos
@@ -172,6 +193,79 @@ func _begin_round(index: int) -> void:
 	player2.set_physics_process(false)
 
 	_show_banner(index, fight_style)
+	$UI/ControlsHint.text = "P1: A/D move, W jump, S guard, F light, G heavy   |   P2: Arrows, Up jump, Down guard, K light, L heavy\nLight > Light > Light: punch chain   |   F1: moves & combos   |   Double-tap: dash   |   R: next round   |   Esc: menu"
+
+func _build_move_ui() -> void:
+	for player in 2:
+		var label := Label.new()
+		label.position = Vector2(40 if player == 0 else 620, 93)
+		label.size = Vector2(300, 50)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if player == 0 else HORIZONTAL_ALIGNMENT_RIGHT
+		label.add_theme_font_size_override("font_size", 14)
+		label.add_theme_color_override("font_color", Color("ffe0a4"))
+		$UI.add_child(label)
+		combo_labels.append(label)
+	var moves_button := Button.new()
+	moves_button.text = "MOVES [F1]"
+	moves_button.position = Vector2(418, 92)
+	moves_button.size = Vector2(124, 30)
+	moves_button.focus_mode = Control.FOCUS_NONE
+	moves_button.pressed.connect(_toggle_move_guide)
+	$UI.add_child(moves_button)
+	move_guide = PanelContainer.new()
+	move_guide.position = Vector2(80, 83)
+	move_guide.size = Vector2(800, 425)
+	var panel := StyleBoxFlat.new()
+	panel.bg_color = Color("131d2d")
+	panel.border_color = Color("8aabc4")
+	panel.set_border_width_all(2)
+	panel.content_margin_left = 20
+	panel.content_margin_right = 20
+	panel.content_margin_top = 16
+	panel.content_margin_bottom = 16
+	move_guide.add_theme_stylebox_override("panel", panel)
+	$UI.add_child(move_guide)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 9)
+	move_guide.add_child(column)
+	guide_title = Label.new()
+	guide_title.add_theme_font_size_override("font_size", 23)
+	column.add_child(guide_title)
+	guide_text = Label.new()
+	guide_text.add_theme_font_size_override("font_size", 14)
+	column.add_child(guide_text)
+	var close_button := Button.new()
+	close_button.text = "RESUME / F1"
+	close_button.focus_mode = Control.FOCUS_NONE
+	close_button.pressed.connect(_toggle_move_guide)
+	column.add_child(close_button)
+	move_guide.hide()
+
+func _toggle_move_guide() -> void:
+	if move_guide.visible:
+		player1.combat_paused = false
+		player2.combat_paused = false
+		move_guide.hide()
+		player1.set_physics_process(_resume_physics[0])
+		player2.set_physics_process(_resume_physics[1])
+	else:
+		_resume_physics.assign([player1.is_physics_processing(), player2.is_physics_processing()])
+		player1.combat_paused = true
+		player2.combat_paused = true
+		player1.set_physics_process(false)
+		player2.set_physics_process(false)
+		move_guide.show()
+
+func _update_combo_ui() -> void:
+	var fighters := [player1, player2]
+	for i in 2:
+		var fighter: Node = fighters[i]
+		var text := ""
+		if fighter.state in [fighter.State.PUNCH, fighter.State.KICK]:
+			text = fighter.move_name()
+		if fighter.combo_hits > 1 and fighter.combat_time - fighter._last_land_time < 1.1:
+			text += "\n%d HITS / %d DAMAGE" % [fighter.combo_hits, fighter.combo_damage]
+		combo_labels[i].text = text
 
 func _show_banner(index: int, fight_style: FightStyle) -> void:
 	banner_round.text = "ROUND %d" % (index + 1)

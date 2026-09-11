@@ -42,7 +42,7 @@ func sync_pose(owner_fighter: Node) -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
-	if fighter == null:
+	if fighter == null or fighter.combat_paused:
 		return
 	if not _initialized:
 		_last_position = fighter.global_position
@@ -127,7 +127,8 @@ func _process(delta: float) -> void:
 func _attack_pose(guard: Array[Vector2]) -> Array[Vector2]:
 	var windup: Array[Vector2] = guard.duplicate()
 	var contact: Array[Vector2] = guard.duplicate()
-	var heavy: bool = fighter.attack_variant in ["kick", "finisher"]
+	var variant: String = fighter.attack_variant
+	var heavy: bool = variant in ["kick", "finisher", "front_kick", "side_kick", "knee"]
 	if heavy:
 		windup[0] += Vector2(-5, 1)
 		windup[6] = Vector2(16, -45)
@@ -139,6 +140,22 @@ func _attack_pose(guard: Array[Vector2]) -> Array[Vector2]:
 		contact[4] = Vector2(14, -92)
 		contact[5] = Vector2(-20, -6)
 		contact[6] = Vector2(64, -66)
+		if variant == "front_kick":
+			contact[1] = Vector2(-4, -93)
+			contact[2] = Vector2(-2, -115)
+			contact[6] = Vector2(66, -60)
+		elif variant == "side_kick":
+			windup[6] = Vector2(2, -47)
+			contact[1].x -= 7.0
+			contact[2].x -= 7.0
+			contact[6] = Vector2(69, -65)
+		elif variant == "knee":
+			contact[0] = Vector2(1, -61)
+			contact[1] = Vector2(7, -93)
+			contact[2] = Vector2(10, -114)
+			contact[3] = Vector2(3, -108)
+			contact[4] = Vector2(24, -108)
+			contact[6] = Vector2(25, -45)
 	else:
 		windup[1].x -= 4.0
 		windup[4] = Vector2(15, -91)
@@ -150,6 +167,35 @@ func _attack_pose(guard: Array[Vector2]) -> Array[Vector2]:
 		if fighter.attack_variant == "hook":
 			windup[4] = Vector2(8, -72)
 			contact[4] = Vector2(47, -96)
+		elif variant in ["cross", "rear_hook", "uppercut", "overhand"]:
+			# The rear hand crosses as the torso rotates; the lead hand guards.
+			windup[3] = Vector2(-10, -89)
+			contact[0].x += 3.0
+			contact[1].x = 23.0
+			contact[2].x += 8.0
+			contact[3] = Vector2(73, -88)
+			contact[4] = Vector2(28, -104)
+			if variant == "rear_hook":
+				windup[3] = Vector2(-16, -77)
+				contact[3] = Vector2(52, -95)
+			elif variant == "uppercut":
+				windup[1].y += 6.0
+				windup[3] = Vector2(10, -59)
+				contact[3] = Vector2(44, -96)
+			elif variant == "overhand":
+				windup[3] = Vector2(6, -130)
+				contact[3] = Vector2(63, -98)
+		elif variant == "body_hook":
+			windup[4] = Vector2(10, -68)
+			contact[1].y += 7.0
+			contact[2].y += 7.0
+			contact[4] = Vector2(53, -64)
+		elif variant == "elbow":
+			windup[4] = Vector2(9, -105)
+			contact[4] = Vector2(20, -110)
+		elif variant == "backfist":
+			windup[4] = Vector2(-2, -108)
+			contact[4] = Vector2(63, -99)
 	var elapsed: float = fighter.attack_timer
 	var startup: float = fighter.attack_startup()
 	var active_end: float = startup + fighter.attack_active_time()
