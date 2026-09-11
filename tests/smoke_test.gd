@@ -21,7 +21,7 @@ func _process(_delta: float) -> bool:
 		_run_tests()
 		done = true
 	if frame >= 6:
-		return true
+		quit(0 if failures.is_empty() else 1)
 	return false
 
 func _check(cond: bool, msg: String) -> void:

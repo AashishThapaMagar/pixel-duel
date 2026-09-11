@@ -160,9 +160,9 @@ visible = false
 
 [node name="ControlsHint" type="Label" parent="UI"]
 offset_left = 20.0
-offset_top = 500.0
+offset_top = 489.0
 offset_right = 940.0
 offset_bottom = 535.0
-theme_override_font_sizes/font_size = 14
-text = "P1: A/D move, W jump, S block, F punch, G kick     |     P2: Arrows move, Up jump, Down block, K punch, L kick     |     R restart     |     Esc: menu"
+theme_override_font_sizes/font_size = 13
+text = "P1: A/D move, W jump, S guard, F light, G heavy   |   P2: Arrows move, Up jump, Down guard, K light, L heavy\nDouble-tap move: dash   |   Land light, then heavy: chain   |   R: next round   |   Esc: menu"
 horizontal_alignment = 1

@@ -19,12 +19,14 @@ class_name FightStyle
 
 @export_group("Punch")
 @export var punch_damage: int = 6
+@export var punch_startup_time: float = 0.05
 @export var punch_active_time: float = 0.08
 @export var punch_total_time: float = 0.22
 @export var punch_knockback: float = 220.0
 
 @export_group("Kick")
 @export var kick_damage: int = 12
+@export var kick_startup_time: float = 0.1
 @export var kick_active_time: float = 0.12
 @export var kick_total_time: float = 0.38
 @export var kick_knockback: float = 380.0
@@ -32,6 +34,7 @@ class_name FightStyle
 
 @export_group("Hook (only thrown when kicks_disabled)")
 @export var hook_damage: int = 9
+@export var hook_startup_time: float = 0.075
 @export var hook_active_time: float = 0.09
 @export var hook_total_time: float = 0.26
 @export var hook_knockback: float = 260.0

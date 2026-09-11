@@ -40,12 +40,21 @@ var match_over: bool = false
 
 var p1_start_pos: Vector2
 var p2_start_pos: Vector2
+var combat_effects: Node2D
 
 func _ready() -> void:
 	player1.opponent = player2
 	player2.opponent = player1
 	p1_start_pos = player1.position
 	p2_start_pos = player2.position
+	combat_effects = Node2D.new()
+	combat_effects.set_script(preload("res://scripts/combat_effects.gd"))
+	combat_effects.z_index = 2
+	add_child(combat_effects)
+	combat_effects.fighters = [player1, player2]
+	combat_effects.camera = $Camera2D
+	player1.impact.connect(combat_effects.add_impact)
+	player2.impact.connect(combat_effects.add_impact)
 
 	health_bar1.max_value = player1.max_health
 	health_bar2.max_value = player2.max_health
@@ -71,6 +80,8 @@ func _process(delta: float) -> void:
 		return
 
 	if round_active:
+		if player1.hitstop_remaining > 0.0 or player2.hitstop_remaining > 0.0:
+			return
 		time_remaining = max(0.0, time_remaining - delta)
 		timer_label.text = str(int(ceil(time_remaining)))
 		if time_remaining <= 0.0:
@@ -95,6 +106,11 @@ func _end_round(winner: int) -> void:
 	if not round_active:
 		return
 	round_active = false
+	for fighter in [player1, player2]:
+		fighter.controls_enabled = false
+		fighter.hitbox.set_active(false)
+		if fighter.state != fighter.State.KO:
+			fighter.state = fighter.State.IDLE
 
 	if winner == 1:
 		round_wins[0] += 1
@@ -134,6 +150,7 @@ func _start_new_match() -> void:
 	_begin_round(0)
 
 func _begin_round(index: int) -> void:
+	combat_effects.reset()
 	round_index = index
 	var fight_style: FightStyle = round_styles[index]
 

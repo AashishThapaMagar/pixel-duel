@@ -1,41 +1,36 @@
 extends Area2D
-## Hitbox: the region of an attack that DEALS damage.
-## The owning Player enables/disables this (via `set_active`) only during the
-## "active frames" of an attack animation, then turns it off again.
-
+## Logical activation avoids changing physics monitoring during collision callbacks.
 @export var damage: int = 5
 @export var knockback: float = 260.0
-@export var attack_type: String = "punch"   # "punch" | "kick" — lets styles react differently per type
-
-# Which Player node fired this hitbox (so we don't hit ourselves and so the
-# victim knows which direction to get knocked back).
+@export var attack_type: String = "punch"
 var owner_player: Node = null
-# Tracks who's already been hit during the current active window, so a single
-# swing can't multi-hit the same opponent every physics frame it overlaps.
+var active: bool = false
 var _already_hit: Array = []
 
 func _ready() -> void:
-	monitoring = false
+	monitoring = true
 	area_entered.connect(_on_area_entered)
 
-func set_active(active: bool) -> void:
-	monitoring = active
-	if active:
+func set_active(value: bool) -> void:
+	# Reset once at contact's leading edge, never on every active physics tick.
+	if value and not active:
 		_already_hit.clear()
+	active = value
+
+func _physics_process(_delta: float) -> void:
+	# area_entered alone misses a defender who overlaps during the windup.
+	if active and owner_player != null and owner_player.hitstop_remaining <= 0.0:
+		for area in get_overlapping_areas():
+			_on_area_entered(area)
 
 func _on_area_entered(area: Area2D) -> void:
-	if not monitoring:
+	if not active or owner_player == null or not owner_player.controls_enabled:
 		return
-	if area.get_parent() == owner_player:
+	if area.get_parent() == owner_player or area in _already_hit:
 		return
-	if area in _already_hit:
-		return
-	var victim = area.get_parent()
-	if victim and victim.has_method("take_hit"):
+	var victim := area.get_parent()
+	if victim != null and victim.has_method("take_hit"):
 		_already_hit.append(area)
-		var attacker_facing = 1
-		if owner_player and "facing" in owner_player:
-			attacker_facing = owner_player.facing
-		victim.take_hit(damage, knockback, attacker_facing, owner_player, attack_type)
-		if owner_player and owner_player.has_method("_on_hit_landed"):
+		var landed: bool = victim.take_hit(damage, knockback, owner_player.facing, owner_player, attack_type)
+		if landed:
 			owner_player._on_hit_landed(attack_type)

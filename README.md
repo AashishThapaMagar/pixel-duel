@@ -1,22 +1,27 @@
 # Pixel Duel
 
-A 2D fighting game prototype — Street Fighter/Tekken style, but 2D — built in **Godot 4** so it's realistic to build solo. It's fully playable right now (movement, jump, punch, kick, block, chip damage, KO, round timer, restart), with a real animated pixel-art fighter sprite and a dusk-skyline arena backdrop (see "Art assets" below) rather than placeholder colored boxes.
+A local two-player 2D fighting game prototype built in **Godot 4.2+**. The fighters now use a continuously animated 2D joint rig with connected limbs, distinct guards, anticipation, contact poses, recovery, hit reactions, and a falling KO. Combat runs at 60 physics ticks per second.
+
+This is a foundation for responsive fighting-game movement, not a finished AAA character or 3D animation system. Tekken-style 3D presentation would be a separate production step involving modeled and rigged characters and authored animation clips.
 
 A match is **four rounds, each fought under a different fighting style** — Karate, then Muay Thai, then Boxing, then Freestyle MMA — applied to both fighters so every round is a genuinely different fight, not just a reskinned one. See "Fighting styles" below.
 
-This has been test-run headlessly (imported and simulated in Godot 4.2) with no script or scene errors, and an automated smoke test (`tests/smoke_test.gd`) confirms damage, blocking, KO, and round-restart all work correctly.
+The smoke and combat regression suites exercise damage, real hitbox overlaps, startup/recovery, hit-stop, buffered input, dashes, jumping, style mechanics, and round reset in Godot 4.2.
 
 ## Controls
 
 | Action | Player 1 | Player 2 |
 |---|---|---|
 | Move | A / D | Left / Right arrows |
+| Dash / backdash | Double-tap A / D | Double-tap Left / Right |
 | Jump | W | Up arrow |
 | Block | S (hold) | Down arrow (hold) |
 | Punch (light) | F | K |
 | Kick (heavy) | G | L |
 | Restart after round ends | R | R |
 | Back to main menu | Esc | Esc |
+
+Pressing an attack shortly before recovery ends queues it for the first available frame (a 130 ms input buffer). A **landed light attack into heavy** can cancel its recovery after contact; a blocked or missed light must finish recovery. In Boxing, heavy throws a hook. A forward dash can be interrupted with an attack or guard; a backdash has no invulnerability.
 
 ## Main menu
 
@@ -42,6 +47,8 @@ pixel-duel/
     main_menu.gd         Main menu screen-switching (Play/Settings/Exit)
     settings.gd           Autoload: fullscreen/volume, applied + saved to user://settings.cfg
     player.gd            Movement, attacks, blocking, health, state machine
+    fighter_visual.gd    Articulated 2D fighter and combat-synchronized poses
+    combat_effects.gd    Ground shadows, contact sparks, camera shake
     fight_style.gd        FightStyle resource: one fighting discipline's stats + mechanic flags
     hitbox.gd             Damage-dealing region, active only during attack frames
     hurtbox.gd             Damage-receiving region
@@ -52,6 +59,7 @@ pixel-duel/
     sprites/fighter/       Fighter animation frames (PNG) + generate_fighter.py that drew them
     backgrounds/           arena_bg.png + generate_arena_bg.py that drew it
   tests/
+    combat_test.gd        Movement, input, collision, and style regression suite
     smoke_test.gd         Optional headless test — not needed to play the game
 ```
 
@@ -65,7 +73,7 @@ pixel-duel/
 ## 2. Run the game
 
 - Open Godot, click **Import**, select the `project.godot` file in this folder, then open the project.
-- Press **F5** (or the Play button) to run. `Arena.tscn` is already set as the main scene.
+- Press **F5** (or the Play button) to run. `MainMenu.tscn` is the main scene; choose Play to enter the arena.
 - Edit `.gd` scripts in VS Code; edit `.tscn` scenes (moving nodes, resizing collision shapes, tweaking the layout) in the Godot editor itself — that part isn't done from VS Code.
 
 ## 3. Put it on GitHub
@@ -88,13 +96,18 @@ git push -u origin main
 
 The included `.gitignore` already excludes Godot's local cache folder (`.godot/`) so you're not committing generated files.
 
-## How the fighting mechanics work (for when you want to extend them)
+## Movement and combat flow
 
-- **State machine** in `player.gd`: `IDLE, WALK, JUMP, PUNCH, KICK, BLOCK, HITSTUN, KO`.
-- **Facing** is automatic — each fighter always turns to face their opponent, like real fighting games, so you never have to think about "player 2 is mirrored."
-- **Hitboxes** (the fist/foot that deals damage) only turn on for a short "active window" during an attack (`punch_active_time` / `kick_active_time`), then turn back off — this is what gives attacks a proper "whiff" if you swing too early or late, instead of an invisible damage aura around the character.
-- **Blocking** checks whether the defender is holding block *and* actually facing the attacker; if so damage is reduced to a small "chip damage" percentage (`block_chip_multiplier`) instead of full damage.
-- Tunable numbers (damage, speeds, timings, health) are all `@export` variables at the top of `player.gd`, so you can tweak game feel directly in the Godot Inspector without touching code.
+- Ground movement accelerates quickly and brakes firmly. Backward walking uses 72% of forward speed. Double-tap within 220 ms to dash.
+- Jumps have a 50 ms anticipation pose, conserved horizontal launch momentum, limited air correction, and 50 ms of landing recovery. Stage bounds prevent walking off the arena.
+- Grounded neutral and guard states face the opponent automatically. Attacks and jumps commit their facing until they finish.
+- Every attack has **startup, active, and recovery** phases. Style resources expose startup and active durations plus total duration; at least 50 ms of recovery is enforced. The striking pose and hitbox use the same clock.
+- Hitboxes deal damage once per opponent per swing, including when the opponent was already overlapping when contact began. Hits and parries immediately disable an interrupted fighter's outgoing hitbox.
+- Normal hits push defenders away from the attacker. Guard has its own blockstun and reduced pushback. Only unblocked hits grant a hit confirm or count toward style chains.
+- Light impacts freeze both fighters for 45 ms; kicks freeze them for 75 ms. Inputs remain buffered during the freeze, while combat clocks pause. Contact sparks and subtle camera shake distinguish hits from guard impacts.
+- Round end locks combat while allowing the KO animation to settle. Restart clears buffered inputs, hit-stop, stale attacks, combo history, and animation state.
+
+The controller lives in `scripts/player.gd`. The visual rig in `scripts/fighter_visual.gd` uses fixed-length two-bone limbs and blends neutral, locomotion, jump, and reaction poses. Attack poses sample the combat clock directly to avoid animation lag. `scripts/combat_effects.gd` draws ground shadows and contact sparks.
 
 ## Fighting styles (rounds 1–4)
 
@@ -111,20 +124,13 @@ Whoever wins more of the four rounds wins the match (round wins shown as `●○
 
 **To add a 5th style** (or replace one): duplicate one of the `.tres` files in `resources/styles/`, tweak its numbers/flags in the Godot Inspector (or by hand — they're plain text), then add it to the `round_styles` array at the top of `arena.gd`. No new signature mechanic is required — a style with all the "signature mechanic" flags off (`perfect_block_window = 0`, `kick_chip_bonus = 0`, `kicks_disabled = false`, `combo_damage_step = 0`, `has_finisher = false`) just plays as a plain numbers-only style.
 
-## Art assets
+## Art and animation
 
-The fighter and the arena backdrop are real generated images, not vector placeholders — both are produced by small Python (Pillow) scripts committed alongside their output, so the art is reproducible and easy to restyle by editing numbers rather than repainting pixels by hand.
+`Player.tscn` uses the code-native 2D fighter rig in `scripts/fighter_visual.gd`. Skin, clothing, wraps, and style accents are colored separately. Karate, Boxing, Muay Thai, and MMA use different guard poses. The footwork cycle follows distance traveled, so walking into an obstacle does not keep the walk cycle running.
 
-- **Fighter** (`assets/sprites/fighter/generate_fighter.py`): draws each animation frame (idle x4, walk x4, jump, punch x3, hook x3, kick x3, block, hitstun, KO — 21 frames total) as low-res pixel art (76x64, nearest-neighbor upscaled 2x) in grayscale — outline / shadow / base / highlight / glove tones, plus a headband, a face (eye + mouth), distinct fists and shoes, a belt line, and a soft contact shadow to ground the character. `Player.tscn`'s `Visual` node is an `AnimatedSprite2D` using these frames, and `player.gd` tints it per-player via `Visual.modulate` (blue for P1, red for P2) and mirrors it via `Visual.flip_h` — one sheet serves both fighters and both directions. When editing pose rectangles, keep a leg's *top* edge fixed at the hip (only shift it horizontally) — shifting it vertically opens a visible gap against the torso, which is exactly what the walk cycle looked like before that got fixed. Re-run the script after editing; it also writes `_contact_sheet.png`, a grid of every frame, for a quick visual check before wiring changes into Godot.
-- **Arena backdrop** (`assets/backgrounds/generate_arena_bg.py`): draws a 960x540 dusk sky gradient, stars, a distant mountain silhouette, and a lit city skyline, saved as `arena_bg.png` and shown via a `Sprite2D` behind `Ground` in `Arena.tscn`.
-- Both scripts need `pillow` (`pip install pillow`) but the game itself doesn't — only the generated PNGs are loaded at runtime.
+The original PNG fighter frames and their Pillow generator remain in `assets/sprites/fighter/` as legacy assets; they are no longer the default character visuals. The skyline backdrop still uses `assets/backgrounds/arena_bg.png`.
 
-## Natural next steps
-
-- Give each fighting style its own sprite recolor or accent (not just the shared blue/red team tint) — e.g. Muay Thai wraps, boxing gloves — since Karate/Muay Thai/Boxing/MMA look different in real life too.
-- Add sound effects, hit-stop (a few frozen frames on impact), and screen shake for "juice" — especially on perfect blocks and finishers, which are currently readable only through the flash-color tween.
-- Add a character-select screen and a second/third character with different base stats layered on top of the per-round style.
-- Add a simple main menu scene before the arena, and a "how to fight this round" recap screen between rounds (the banner's tagline is a start, but a full move-list per style would help new players).
+Further character work can replace the renderer with authored sprites or a skeletal character while retaining the combat timings. Full 3D characters, throws, crouching/high-low attacks, air attacks, audio, and online play are not implemented.
 
 ## Optional: automated test
 
@@ -135,3 +141,11 @@ godot --headless --path . -s res://tests/smoke_test.gd
 ```
 
 (or `Godot_v4.2.2-stable_linux.x86_64 --headless ...` depending on how your download is named — this is a command-line/CI convenience, not something you run through the Godot editor UI.)
+
+For the movement and combat regression suite:
+
+```bash
+godot --headless --path . -s res://tests/combat_test.gd
+```
+
+Both test scripts exit with a nonzero status on assertion failures.
