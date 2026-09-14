@@ -23,20 +23,50 @@ The smoke and combat regression suites exercise damage, real hitbox overlaps, st
 
 Pressing an attack shortly before recovery ends queues it for the first available frame (a 130 ms input buffer). A **landed light attack into heavy** can cancel its recovery after contact; a blocked or missed light must finish recovery. In Boxing, heavy throws a hook. A forward dash can be interrupted with an attack or guard; a backdash has no invulnerability.
 
+## Command moves and combat timing
+
+Every style has six directional normals and two original motion-command enders. Forward/back always mean toward/away from the opponent. For P1 facing right:
+
+- **Driving ender:** S, S+D, D+G (down, down-forward, forward + heavy).
+- **Breaking ender:** S, S+A, A+G (down, down-back, back + heavy).
+- Finish the three-direction motion within 0.4 seconds. Mirror left/right when facing left; P2 uses Down/Left/Right and L.
+- Land **F → F → quarter-circle forward + G** for the command combo. Each button needs a fresh press; holding an attack does not continue a string.
+
+Only a confirmed jab or cross can cancel into a command ender. Cancels open after active frames and close six frames later. Misses and blocked hits must recover. Enders cannot cancel again and are vulnerable on block or whiff.
+
+Attacks have individual hitstun and blockstun. Hitting startup gives **COUNTER HIT** (+20% damage and six extra stun frames); catching recovery displays **PUNISH**. Uninterrupted hits scale damage by 15 percentage points per hit, down to 40%; escaping hitstun resets scaling. The combo count tracks actual uninterrupted hits, including manually linked attacks.
+
+Press **F1** for all commands, combos, startup/active/recovery timings, and estimated on-block advantage at 60 Hz. These are original mechanics and tuning for Who Won?, not copied franchise frame data.
+
 ## Main menu
 
 The game boots into `scenes/MainMenu.tscn` (set as `run/main_scene` in project.godot) rather than straight into a fight:
 
-- **Start Game** — goes straight into a four-round match with the default fighters. No character selection screen is shown.
+- **Start Game** — goes straight into a four-round match with the default fighters, using whatever mode and arena were last chosen in Match Setup (2 Players / vs AI, and one of seven illustrated Himalayan arenas). No character selection screen is shown.
+- **Match Setup** — a dialog to pick **2 Players** or **vs AI** (Player 2 is then piloted by `scripts/ai_controller.gd`) and to cycle through the available **arenas** with `<`/`>`. Both choices persist on the `MatchSetup` autoload until changed again, and the top-right header line reflects the current mode.
 - **How to play** — shows both players' controls, dash and attack-chain tips, and the F1 move guide shortcut.
 - **Settings** — Fullscreen toggle and a Volume slider, both backed by the `Settings` autoload (`scripts/settings.gd`), which applies them immediately (`DisplayServer`/`AudioServer`) and persists them to `user://settings.cfg` so they survive a restart. Volume controls the Master audio bus — there's no sound yet, but the plumbing is there for whenever sound effects are added.
 - **Exit** — quits.
 
-The title screen features the Who Won? wordmark, subtle abstract arena lighting, and an orange Start Game button with dark text in every interaction state. It contains no character artwork. Settings and How to Play open as dialogs with keyboard focus and Esc to close. Tab and Enter navigate the home menu.
+The title screen features the Who Won? wordmark, subtle abstract arena lighting, and an orange Start Game button with dark text in every interaction state. It contains no character artwork. Settings, How to Play, and Match Setup open as dialogs with keyboard focus and Esc to close. Tab and Enter navigate the home menu.
+
+### Player vs AI
+
+Choosing **vs AI** in Match Setup hands Player 2's controls to `scripts/ai_controller.gd`, which reacts through the same `p2_*` input actions a human would use (`Input.action_press`/`action_release`) rather than reaching into Player internals — it approaches or backs off based on distance, blocks incoming attacks after a short human-like reaction delay (not every hit), and throws light/heavy attacks on its own decision timer, so it's a real but beatable opponent. `scenes/Arena.tscn` spawns it in `arena.gd` only when `MatchSetup.vs_ai` is true, and Player 2's HUD label gets an "· AI" suffix.
+
+### Arenas
+
+Seven selectable Himalayan backdrops live in assets/backgrounds/himalayan/: **Himalayan Lake**, **Prayer Flag Pass**, **Lakeside Temple**, **Rhododendron Grove**, **Terrace Village**, **Moonlit Monastery**, and **Sunrise Summit**. Match Setup previews each scene and shows its position in the seven-arena collection. The illustrated terraces replace the visible legacy floor while keeping the same collision floor, fighter positions, and stage bounds. Original background assets remain on disk.
+
+The artwork was generated with the built-in image_gen tool. Full prompts are in [docs/arena-art-prompts.md](docs/arena-art-prompts.md). Each texture is scaled to the 960 x 540 game canvas at runtime.
 
 The match HUD includes mirrored health bars, delayed damage trails, low-health and low-timer colors, round-win markers, and next-round/rematch buttons. F1 opens a scrolling move guide and pauses combat; Esc closes it or returns to the menu.
 
 Interface code lives in `scripts/main_menu.gd`, `character_select.gd`, `match_hud.gd`, `ui_kit.gd`, and `menu_backdrop.gd`. The layout uses the project's 960 × 540 canvas and scales with the game window.
+
+### Match setup: mode and arena
+
+`scripts/match_setup.gd` (the `MatchSetup` autoload) also holds `vs_ai: bool` and `selected_arena: int`, set from the main menu's Match Setup dialog and read by `arena.gd` when a match starts. See "Player vs AI" and "Arenas" above.
 
 ## Project layout
 
@@ -49,12 +79,15 @@ pixel-duel/
     Arena.tscn           A match: two fighters, ground, camera, UI
     Player.tscn          A single fighter (body, hit/hurt boxes, collision)
   scripts/
-    main_menu.gd         Main menu screen-switching (Play/Settings/Exit)
+    main_menu.gd         Main menu screen-switching (Play/Match Setup/Settings/Exit)
+    match_setup.gd         Autoload: selected fighters, selected_arena, vs_ai — survives scene changes
     settings.gd           Autoload: fullscreen/volume, applied + saved to user://settings.cfg
     player.gd            Movement, attacks, blocking, health, state machine
+    ai_controller.gd      Player-vs-AI opponent: drives p1_*/p2_* input actions like a human would
     fighter_visual.gd    Articulated 2D fighter and combat-synchronized poses
     combat_effects.gd    Ground shadows, contact sparks, camera shake
     fight_style.gd        FightStyle resource: one fighting discipline's stats + mechanic flags
+    arena_catalog.gd       Selectable arena backdrops: name, tagline, texture, ground tint
     hitbox.gd             Damage-dealing region, active only during attack frames
     hurtbox.gd             Damage-receiving region
     arena.gd              Round/match manager: styles per round, timer, health bars, win/KO/restart
@@ -62,7 +95,7 @@ pixel-duel/
     styles/               karate.tres, muay_thai.tres, boxing.tres, mma.tres — one round each
   assets/
     sprites/fighter/       Fighter animation frames (PNG) + generate_fighter.py that drew them
-    backgrounds/           arena_bg.png + generate_arena_bg.py that drew it
+    backgrounds/           arena_bg*.png + generate_arena_bg.py / generate_arenas.py that drew them
   tests/
     combat_test.gd        Movement, input, collision, and style regression suite
     smoke_test.gd         Optional headless test — not needed to play the game
@@ -133,7 +166,7 @@ Whoever wins more of the four rounds wins the match (round wins shown as `●○
 
 `Player.tscn` uses the code-native 2D fighter rig in `scripts/fighter_visual.gd`. Skin, clothing, wraps, and style accents are colored separately. Karate, Boxing, Muay Thai, and MMA use different guard poses. The footwork cycle follows distance traveled, so walking into an obstacle does not keep the walk cycle running.
 
-The original PNG fighter frames and their Pillow generator remain in `assets/sprites/fighter/` as legacy assets; they are no longer the default character visuals. The skyline backdrop still uses `assets/backgrounds/arena_bg.png`.
+The original PNG fighter frames and their Pillow generator remain in `assets/sprites/fighter/` as legacy assets; they are no longer the default character visuals. The preserved legacy skyline backdrop uses `assets/backgrounds/arena_bg.png`.
 
 Further character work can replace the renderer with authored sprites or a skeletal character while retaining the combat timings. Full 3D characters, throws, crouching/high-low attacks, air attacks, audio, and online play are not implemented.
 
@@ -162,3 +195,20 @@ godot --headless --path . -s res://tests/ui_flow_test.gd
 ```
 
 For rendered UI screenshots, omit `--headless` and append `-- --capture`; images are saved under `.godot/`.
+
+The combat input regression suite also verifies mirrored motions, a live three-hit command combo against held guard, counter hits, recovery punishes, damage scaling, and round resets:
+
+```bash
+godot --headless --path . -s res://tests/fighting_system_test.gd
+```
+
+## Story mode later
+
+Story mode is planned after the core game is finished, using the user's script for dialogue, scenes, and fight progression. No story content or story menu is included yet.
+
+
+Seven-arena selection and render check:
+
+godot --path . -s res://tests/arena_gallery_test.gd -- --capture
+
+This validates all seven textures, selector wraparound, Match Setup fight launch, and unchanged floor collision; screenshots are written to .godot/arena-01.png through arena-07.png.

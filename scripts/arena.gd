@@ -13,9 +13,13 @@ const MUAY_THAI := preload("res://resources/styles/muay_thai.tres")
 const BOXING := preload("res://resources/styles/boxing.tres")
 const MMA := preload("res://resources/styles/mma.tres")
 const MOVES := preload("res://scripts/move_catalog.gd")
+const ARENAS := preload("res://scripts/arena_catalog.gd")
+const AI_CONTROLLER := preload("res://scripts/ai_controller.gd")
 
 @onready var player1: CharacterBody2D = $Player1
 @onready var player2: CharacterBody2D = $Player2
+@onready var background: Sprite2D = $Background
+@onready var ground: Node2D = $Ground
 @onready var health_bar1: ProgressBar = $UI/HealthBar1
 @onready var health_bar2: ProgressBar = $UI/HealthBar2
 @onready var timer_label: Label = $UI/TimerLabel
@@ -42,6 +46,7 @@ var match_over: bool = false
 var p1_start_pos: Vector2
 var p2_start_pos: Vector2
 var combat_effects: Node2D
+var ai_controller: Node
 var move_guide: PanelContainer
 var guide_title: Label
 var guide_text: Label
@@ -49,6 +54,15 @@ var combo_labels: Array[Label] = []
 var _resume_physics: Array[bool] = [false, false]
 
 func _ready() -> void:
+	var arena_data: Dictionary = ARENAS.arena(MatchSetup.selected_arena)
+	background.texture = load(arena_data.texture)
+	background.scale = Vector2(960.0, 540.0) / background.texture.get_size()
+	background.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	# The painting supplies the visible terrace; collision stays at y=450.
+	$Ground/GroundVisual.hide()
+	$Ground/GroundLip.hide()
+	ground.modulate = arena_data.ground_tint
+
 	player1.opponent = player2
 	player2.opponent = player1
 	p1_start_pos = player1.position
@@ -56,7 +70,13 @@ func _ready() -> void:
 	player1.apply_character(MatchSetup.selected_fighters[0])
 	player2.apply_character(MatchSetup.selected_fighters[1])
 	$UI/P1Label.text = "P1 / " + player1.character_profile.name
-	$UI/P2Label.text = "P2 / " + player2.character_profile.name
+	$UI/P2Label.text = "P2 / " + player2.character_profile.name + (" · AI" if MatchSetup.vs_ai else "")
+
+	if MatchSetup.vs_ai:
+		ai_controller = AI_CONTROLLER.new()
+		ai_controller.fighter = player2
+		ai_controller.opponent = player1
+		add_child(ai_controller)
 	combat_effects = Node2D.new()
 	combat_effects.set_script(preload("res://scripts/combat_effects.gd"))
 	combat_effects.z_index = 2
@@ -190,7 +210,8 @@ func _begin_round(index: int) -> void:
 	player2.set_physics_process(false)
 
 	_show_banner(index, fight_style)
-	$UI/ControlsHint.text = "P1   A/D move   W jump   S guard   F/G attack        |        P2   Arrows move/jump   Down guard   K/L attack\nF1  MOVES & COMBOS     /     DOUBLE-TAP TO DASH     /     ESC  MENU"
+	var p2_hint := "P2 is AI-controlled" if MatchSetup.vs_ai else "P2   Arrows move/jump   Down guard   K/L attack"
+	$UI/ControlsHint.text = "P1   A/D move   W jump   S guard   F/G attack        |        %s\nF1  MOVES & COMBOS     /     DOUBLE-TAP TO DASH     /     ESC  MENU" % p2_hint
 
 func _build_move_ui() -> void:
 	for player in 2:

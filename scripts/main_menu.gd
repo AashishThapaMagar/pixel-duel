@@ -1,11 +1,19 @@
 extends Control
 const UI := preload("res://scripts/ui_kit.gd")
 const BACKDROP := preload("res://scripts/menu_backdrop.gd")
+const ARENA_CATALOG := preload("res://scripts/arena_catalog.gd")
 var modal: Control
 var modal_content: Control
 var play_button: Button
 var return_focus: Control
 var transitioning: bool = false
+var mode_summary_label: Label
+var mode_two_button: Button
+var mode_ai_button: Button
+var arena_name_label: Label
+var arena_tagline_label: Label
+var arena_preview: TextureRect
+var arena_count_label: Label
 
 func _ready() -> void:
 	theme = UI.theme()
@@ -17,7 +25,7 @@ func _ready() -> void:
 	var accent := Color("ff9966")
 	UI.label(self, "W / W", Vector2(36, 23), Vector2(90, 25), 19, accent).add_theme_font_override("font", display_font)
 	UI.label(self, "WHO WON?", Vector2(116, 27), Vector2(145, 22), 12, Color("b2bccb"))
-	UI.label(self, "LOCAL VERSUS   /   2 PLAYERS", Vector2(644, 27), Vector2(245, 22), 11, UI.MUTED)
+	mode_summary_label = UI.label(self, "LOCAL VERSUS   /   2 PLAYERS", Vector2(644, 27), Vector2(245, 22), 11, UI.MUTED)
 	var quit_button := UI.button(self, "EXIT", Vector2(873, 20), Vector2(58, 32))
 	quit_button.add_theme_font_size_override("font_size", 11)
 	quit_button.pressed.connect(func(): get_tree().quit())
@@ -47,14 +55,17 @@ func _ready() -> void:
 	play_button.add_theme_stylebox_override("focus", focus)
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 		play_button.add_theme_color_override(state, Color("16100d"))
-	play_button.pressed.connect(_on_play_pressed)
-	var guide := UI.button(self, "HOW TO PLAY", Vector2(322, 393), Vector2(153, 33))
+	play_button.pressed.connect(_start_fight)
+	var guide := UI.button(self, "HOW TO PLAY", Vector2(250, 393), Vector2(146, 33))
 	guide.add_theme_font_size_override("font_size", 11)
 	guide.pressed.connect(_show_guide)
-	var settings := UI.button(self, "SETTINGS", Vector2(485, 393), Vector2(153, 33))
+	var match_setup := UI.button(self, "MATCH SETUP", Vector2(407, 393), Vector2(146, 33))
+	match_setup.add_theme_font_size_override("font_size", 11)
+	match_setup.pressed.connect(_show_match_setup)
+	var settings := UI.button(self, "SETTINGS", Vector2(564, 393), Vector2(146, 33))
 	settings.add_theme_font_size_override("font_size", 11)
 	settings.pressed.connect(_show_settings)
-	for button in [guide, settings, quit_button]:
+	for button in [guide, match_setup, settings, quit_button]:
 		button.add_theme_stylebox_override("normal", UI.box(Color("101722"), Color("303b49")))
 		button.add_theme_stylebox_override("hover", UI.box(Color("232a33"), accent))
 		button.add_theme_stylebox_override("focus", UI.box(Color(0, 0, 0, 0), accent, 1))
@@ -65,8 +76,10 @@ func _ready() -> void:
 	var footer := UI.label(self, "READY WHEN YOU ARE.", Vector2(654, 507), Vector2(270, 20), 10, accent)
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	play_button.grab_focus()
+	_refresh_mode_summary()
 	UI.enter(self)
-func _on_play_pressed() -> void:
+
+func _start_fight() -> void:
 	if transitioning or is_instance_valid(modal):
 		return
 	transitioning = true
@@ -74,6 +87,72 @@ func _on_play_pressed() -> void:
 	var tween := create_tween()
 	tween.tween_property(self, "modulate:a", 0.0, 0.16)
 	tween.tween_callback(func(): get_tree().change_scene_to_file("res://scenes/Arena.tscn"))
+
+func _show_match_setup() -> void:
+	if transitioning or is_instance_valid(modal):
+		return
+	_open_modal("HOW YOU'LL FIGHT", "MATCH SETUP")
+	arena_preview = TextureRect.new()
+	arena_preview.position = Vector2(28, 116)
+	arena_preview.size = Vector2(230, 130)
+	arena_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	arena_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	arena_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	modal_content.add_child(arena_preview)
+	UI.label(modal_content, "SEVEN PLACES. ONE WINNER.", Vector2(28, 251), Vector2(230, 20), 10, UI.MUTED)
+	UI.label(modal_content, "MODE", Vector2(280, 96), Vector2(140, 20), 11, UI.MUTED)
+	mode_two_button = UI.button(modal_content, "2 PLAYERS", Vector2(280, 120), Vector2(148, 34))
+	mode_ai_button = UI.button(modal_content, "VS AI", Vector2(440, 120), Vector2(148, 34))
+	mode_two_button.focus_mode = Control.FOCUS_NONE
+	mode_ai_button.focus_mode = Control.FOCUS_NONE
+	mode_two_button.pressed.connect(func(): _set_vs_ai(false))
+	mode_ai_button.pressed.connect(func(): _set_vs_ai(true))
+
+	arena_count_label = UI.label(modal_content, "ARENA", Vector2(280, 169), Vector2(250, 20), 11, UI.MUTED)
+	var arena_prev := UI.button(modal_content, "<", Vector2(280, 193), Vector2(32, 36))
+	arena_name_label = UI.label(modal_content, "", Vector2(316, 193), Vector2(236, 36), 12, UI.LIME)
+	arena_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	arena_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var arena_next := UI.button(modal_content, ">", Vector2(556, 193), Vector2(32, 36))
+	arena_prev.focus_mode = Control.FOCUS_NONE
+	arena_next.focus_mode = Control.FOCUS_NONE
+	arena_prev.pressed.connect(func(): _cycle_arena(-1))
+	arena_next.pressed.connect(func(): _cycle_arena(1))
+	arena_tagline_label = UI.label(modal_content, "", Vector2(280, 239), Vector2(308, 37), 12, UI.MUTED)
+	arena_tagline_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+	UI.label(modal_content, "Choose your setting. Every arena uses the same fighting rules.", Vector2(28, 279), Vector2(566, 22), 12, UI.MUTED)
+	var fight := UI.button(modal_content, "FIGHT  /  ENTER", Vector2(258, 311), Vector2(152, 38), true)
+	fight.pressed.connect(func():
+		_close_modal()
+		_start_fight())
+	_refresh_match_setup()
+	fight.grab_focus()
+
+func _set_vs_ai(value: bool) -> void:
+	MatchSetup.vs_ai = value
+	_refresh_match_setup()
+	_refresh_mode_summary()
+
+func _cycle_arena(step: int) -> void:
+	MatchSetup.selected_arena = posmod(MatchSetup.selected_arena + step, ARENA_CATALOG.ARENAS.size())
+	_refresh_match_setup()
+
+func _refresh_match_setup() -> void:
+	var arena_data: Dictionary = ARENA_CATALOG.arena(MatchSetup.selected_arena)
+	arena_name_label.text = arena_data.name
+	arena_tagline_label.text = arena_data.tagline
+	arena_preview.texture = load(arena_data.texture)
+	arena_count_label.text = "ARENA %02d / %02d" % [MatchSetup.selected_arena + 1, ARENA_CATALOG.ARENAS.size()]
+	for pair in [[mode_two_button, not MatchSetup.vs_ai], [mode_ai_button, MatchSetup.vs_ai]]:
+		var button: Button = pair[0]
+		var active: bool = pair[1]
+		button.add_theme_stylebox_override("normal", UI.box(Color("29352b") if active else UI.PANEL, UI.LIME if active else UI.LINE, 2 if active else 1))
+		button.add_theme_color_override("font_color", UI.LIME if active else UI.WHITE)
+		button.add_theme_color_override("font_hover_color", UI.LIME)
+
+func _refresh_mode_summary() -> void:
+	mode_summary_label.text = "LOCAL VERSUS   /   PLAYER VS AI" if MatchSetup.vs_ai else "LOCAL VERSUS   /   2 PLAYERS"
 
 func _open_modal(title: String, eyebrow: String) -> void:
 	return_focus = get_viewport().gui_get_focus_owner()

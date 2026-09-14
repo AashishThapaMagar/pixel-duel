@@ -1,6 +1,8 @@
 extends Node
 ## Selection survives scene changes; round restart never changes the roster.
 var selected_fighters: Array[int] = [0, 1]
+var selected_arena: int = 0
+var vs_ai: bool = false
 
 func _ready() -> void:
 	if not InputMap.has_action("move_list"):

@@ -81,6 +81,32 @@ func _run() -> void:
 	p1.set_physics_process(true)
 	await roll("left")
 	check(p1.current_move.name == "Turning side kick", "Quarter-circle back starts the other ender")
+	# Real input, collisions and held guard expose any gap in the command combo.
+	await reset()
+	p1.set_physics_process(true)
+	p2.set_physics_process(true)
+	Input.action_press("p1_punch")
+	await frames(1)
+	Input.action_release("p1_punch")
+	for i in 30:
+		if p1.combo_hits == 1:
+			break
+		await frames(1)
+	Input.action_press("p2_block")
+	Input.action_press("p1_punch")
+	await frames(1)
+	Input.action_release("p1_punch")
+	for i in 30:
+		if p1.combo_hits == 2:
+			break
+		await frames(1)
+	await roll("right")
+	for i in 40:
+		if p1.combo_hits == 3:
+			break
+		await frames(1)
+	check(p1.combo_hits == 3 and p1.current_move.name == "Driving straight", "Real inputs produce a gapless three-hit command combo")
+	check(p1.combo_damage == 100 - p2.health, "Command combo display matches actual scaled damage")
 	# A held light button must not produce automatic follow-ups.
 	await reset()
 	p1.set_physics_process(true)
