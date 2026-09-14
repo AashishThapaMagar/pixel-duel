@@ -17,8 +17,41 @@ var _initialized: bool = false
 
 # Hip, chest, head, rear wrist, lead wrist, rear ankle, lead ankle.
 func _guard() -> Array[Vector2]:
-	return [Vector2(-3, -57), Vector2(2, -91), Vector2(6, -113),
+	var result: Array[Vector2] = [Vector2(-3, -57), Vector2(2, -91), Vector2(6, -113),
 		Vector2(-5, -96), Vector2(30, -101), Vector2(-25, -6), Vector2(26, -6)]
+	if fighter != null and fighter.is_action_fight():
+		match fighter.character_profile.stance:
+			"keeper":
+				result[0].y += 5
+				result[3] = Vector2(-17, -83)
+				result[4] = Vector2(35, -84)
+				result[5].x = -32
+				result[6].x = 32
+			"sprinter", "runner":
+				result[1].x += 6
+				result[2].x += 7
+				result[3] = Vector2(-14, -86)
+				result[4] = Vector2(29, -94)
+			"grappler":
+				result[0].y += 5
+				result[1].y += 7
+				result[2].y += 7
+				result[3] = Vector2(2, -84)
+				result[4] = Vector2(37, -81)
+			"showman":
+				result[3] = Vector2(-19, -62)
+				result[4] = Vector2(30, -82)
+			"flow":
+				result[0].y += 8
+				result[1] += Vector2(-7 + sin(phase) * 5, 9)
+				result[2] += Vector2(-9 + sin(phase) * 5, 9)
+				result[3] = Vector2(-28, -72)
+				result[4] = Vector2(32, -72)
+				result[5].x -= 6
+			"master":
+				result[3] = Vector2(-3, -81)
+				result[4] = Vector2(35, -98)
+	return result
 
 func reset_pose() -> void:
 	pose = _guard()
@@ -98,6 +131,9 @@ func _process(delta: float) -> void:
 			target[2] += Vector2(-6, 4)
 			target[3] = Vector2(15, -110)
 			target[4] = Vector2(22, -102)
+			if fighter.is_action_fight() and fighter.character_profile.id == "anug":
+				target[3] = Vector2(22, -113)
+				target[4] = Vector2(32, -98)
 			if fighter.state == fighter.State.BLOCKSTUN:
 				target[1].x -= 5.0
 				target[2].x -= 6.0
@@ -196,6 +232,36 @@ func _attack_pose(guard: Array[Vector2]) -> Array[Vector2]:
 		elif variant == "backfist":
 			windup[4] = Vector2(-2, -108)
 			contact[4] = Vector2(63, -99)
+	match variant:
+		"dive":
+			windup[0].y += 12
+			contact = [Vector2(-8, -43), Vector2(22, -61), Vector2(40, -76), Vector2(59, -66), Vector2(68, -72), Vector2(-47, -20), Vector2(-18, -6)]
+		"save":
+			contact = [Vector2(-8, -34), Vector2(13, -59), Vector2(27, -80), Vector2(42, -48), Vector2(49, -52), Vector2(-36, -6), Vector2(29, -6)]
+		"grapple":
+			windup[3] = Vector2(10, -82)
+			windup[4] = Vector2(22, -79)
+			contact[1] += Vector2(14, 7)
+			contact[2] += Vector2(13, 6)
+			contact[3] = Vector2(43, -78)
+			contact[4] = Vector2(49, -69)
+		"sweep":
+			contact = [Vector2(-6, -27), Vector2(-17, -58), Vector2(-20, -79), Vector2(-40, -33), Vector2(11, -65), Vector2(-30, -5), Vector2(58, -26)]
+		"cartwheel":
+			contact = [Vector2(13, -65), Vector2(-9, -43), Vector2(-20, -23), Vector2(-26, -6), Vector2(11, -7), Vector2(-10, -112), Vector2(66, -72)]
+		"spin":
+			windup[1].x -= 12
+			windup[3] = Vector2(-40, -79)
+			contact = [Vector2(1, -62), Vector2(-18, -90), Vector2(-26, -110), Vector2(-44, -82), Vector2(12, -107), Vector2(-16, -6), Vector2(69, -65)]
+		"taunt":
+			contact[3] = Vector2(-32, -79)
+			contact[4] = Vector2(30, -113)
+			contact[2].y -= 4
+		"feint":
+			contact[1].x -= 20
+			contact[2].x -= 23
+			contact[3] = Vector2(-33, -87)
+			contact[4] = Vector2(12, -94)
 	var elapsed: float = fighter.attack_timer
 	var startup: float = fighter.attack_startup()
 	var active_end: float = startup + fighter.attack_active_time()

@@ -21,6 +21,8 @@ var _decision_timer: float = 0.0
 var _held_block: bool = false
 var _held_dir: int = 0
 var _jump_cooldown: float = 0.0
+var _attack_seen_time: float = 0.0
+var _combo_reaction: float = 0.0
 
 func _ready() -> void:
 	process_physics_priority = -100
@@ -30,7 +32,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if fighter == null or opponent == null or not is_instance_valid(fighter) or not is_instance_valid(opponent):
 		return
-	if fighter.state == fighter.State.KO or opponent.state == opponent.State.KO or not fighter.controls_enabled:
+	if fighter.state == fighter.State.KO or opponent.state == opponent.State.KO or not fighter.controls_enabled or fighter.combat_paused or not fighter.is_physics_processing():
 		_release_all()
 		return
 
@@ -45,8 +47,24 @@ func _physics_process(delta: float) -> void:
 	# React to an incoming attack: hold guard while it stays in range.
 	var opponent_attacking: bool = opponent.state in [opponent.State.PUNCH, opponent.State.KICK] \
 		and opponent.attack_timer >= opponent.attack_startup() * 0.5
+	# _attack_seen_time requires an attack to stay visible for a beat before
+	# guarding it, rather than reacting on the very first frame it starts.
+	_attack_seen_time = _attack_seen_time + delta if opponent_attacking else 0.0
+	# Anant is tuned slightly sharper than the regular roster: he reacts to
+	# attacks sooner, decides more often, and follows a landed hit into the
+	# command ender rather than only jabbing — but with no stat or HP edge.
+	var boss: bool = fighter.character_profile.id == "anant"
+	# After a landed hit, wait a beat (matching a human's reaction) then
+	# continue the chain, same as a buffered player input would.
+	if fighter.attack_connected and fighter.state in [fighter.State.PUNCH, fighter.State.KICK]:
+		_combo_reaction += delta
+		if _combo_reaction > 0.07 and fighter.chain_step < 2 and fighter._buffered_action.is_empty():
+			_request_move("drive" if boss and fighter.chain_step == 1 and fighter.stamina > 24 else "jab")
+			_combo_reaction = -0.3
+	else:
+		_combo_reaction = 0.0
 	var can_engage_guard: bool = fighter.state in [fighter.State.IDLE, fighter.State.WALK, fighter.State.BLOCK]
-	if opponent_attacking and abs_distance < ATTACK_RANGE + 24.0 and can_engage_guard:
+	if opponent_attacking and _attack_seen_time >= (0.12 if boss else 0.18) and abs_distance < ATTACK_RANGE + 24.0 and can_engage_guard:
 		if not _held_block and _reaction_cooldown <= 0.0:
 			if randf() < 0.7:
 				_set_block(true)
@@ -61,6 +79,13 @@ func _physics_process(delta: float) -> void:
 	if _decision_timer > 0.0:
 		return
 	_decision_timer = DECISION_INTERVAL + randf() * 0.25
+	if boss:
+		_decision_timer *= 0.7
+	# Low on stamina: retreat instead of attacking into a possible guard break.
+	if fighter.stamina < 18.0:
+		_set_block(false)
+		_set_move(-toward if abs_distance < 180.0 else 0)
+		return
 
 	if abs_distance > APPROACH_RANGE and _jump_cooldown <= 0.0 and randf() < 0.15:
 		_tap(_prefix + "jump")
@@ -73,7 +98,29 @@ func _physics_process(delta: float) -> void:
 	else:
 		_set_move(0)
 		if fighter.state in [fighter.State.IDLE, fighter.State.WALK] and randf() < 0.6:
-			_tap(_prefix + ("kick" if randf() < 0.4 else "punch"))
+			var move_id := "jab"
+			# Sab's forward_heavy is his grab, so he reaches for it in close
+			# range; Abhi's back_heavy is his taunt, used to bank stamina
+			# only when he's not already flush against the opponent.
+			if fighter.character_profile.id == "sab" and abs_distance < 62 and randf() < 0.5:
+				move_id = "forward_heavy"
+			elif fighter.character_profile.id == "abhi" and fighter.stamina < 55 and abs_distance > 85:
+				move_id = "back_heavy"
+			elif randf() < 0.35:
+				move_id = "drive" if randf() < 0.5 else "breaker"
+			elif randf() < 0.4:
+				move_id = "kick"
+			_request_move(move_id)
+
+func _request_move(id: String) -> void:
+	# AI decisions enter the same expiring buffer and hit-confirm rules as input.
+	fighter._buffered_action = "punch" if id == "jab" else "kick"
+	fighter._buffered_direction = 1 if id == "forward_heavy" else (-1 if id == "back_heavy" else 0)
+	fighter._buffered_move = id if id in ["drive", "breaker"] else ""
+	fighter._buffer_remaining = fighter.input_buffer_time
+
+func _exit_tree() -> void:
+	_release_all()
 
 func _set_move(direction: int) -> void:
 	if direction == _held_dir:

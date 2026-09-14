@@ -68,8 +68,8 @@ static func for_style(style_id: String) -> Dictionary:
 	moves.cross.next_heavy = "back_heavy" if style_id == "muay_thai" else ("kick" if style_id == "mma" else "forward_heavy")
 	return moves
 
-static func guide(style_id: String) -> String:
-	var moves := for_style(style_id)
+static func guide(style_id: String, custom_moves: Dictionary = {}) -> String:
+	var moves := for_style(style_id) if custom_moves.is_empty() else custom_moves
 	var result := "LIGHT: F (P1) / K (P2)     HEAVY: G (P1) / L (P2)\nForward / back are relative to your opponent.\n\n"
 	var commands := ["Light", "Forward + light", "Back + light", "Heavy", "Forward + heavy", "Back + heavy", "Down, down-forward, forward + heavy", "Down, down-back, back + heavy"]
 	var ids := ["jab", "cross", "hook", "kick", "forward_heavy", "back_heavy", "drive", "breaker"]

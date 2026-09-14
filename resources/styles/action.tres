@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="FightStyle" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/fight_style.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+style_id = "action"
+display_name = "Action Fight"
+tagline = "Read your rival. Commit to your move. Own the opening."
+perfect_block_window = 0.07

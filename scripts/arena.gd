@@ -2,16 +2,10 @@ extends Node2D
 ## Match/round manager: wires the two fighters together, drives the round
 ## timer, shows health bars, and handles round-over / restart.
 ##
-## A match is four rounds, each fought under a different FightStyle (Karate,
-## Muay Thai, Boxing, Freestyle MMA — see scripts/fight_style.gd), applied to
-## BOTH fighters so it's a fair fight under that round's rules. Each round
-## opens with a style banner, and whoever wins the most of the four rounds
-## wins the match; round wins show as pips next to each health bar.
+## Four rounds retain each fighter's action moveset. Most round wins takes
+## the match. Arcade victories advance through the roster to Anant.
 
-const KARATE := preload("res://resources/styles/karate.tres")
-const MUAY_THAI := preload("res://resources/styles/muay_thai.tres")
-const BOXING := preload("res://resources/styles/boxing.tres")
-const MMA := preload("res://resources/styles/mma.tres")
+const ACTION := preload("res://resources/styles/action.tres")
 const MOVES := preload("res://scripts/move_catalog.gd")
 const ARENAS := preload("res://scripts/arena_catalog.gd")
 const AI_CONTROLLER := preload("res://scripts/ai_controller.gd")
@@ -35,7 +29,7 @@ const AI_CONTROLLER := preload("res://scripts/ai_controller.gd")
 const ROUND_TIME := 99.0
 const INTRO_TIME := 2.2
 
-var round_styles: Array = [KARATE, MUAY_THAI, BOXING, MMA]
+var round_styles: Array = [ACTION, ACTION, ACTION, ACTION]
 var round_index: int = 0          # 0-based into round_styles
 var round_wins: Array = [0, 0]    # [player1 wins, player2 wins]
 var time_remaining: float = ROUND_TIME
@@ -62,6 +56,11 @@ func _ready() -> void:
 	$Ground/GroundVisual.hide()
 	$Ground/GroundLip.hide()
 	ground.modulate = arena_data.ground_tint
+	var ambience := preload("res://scripts/arena_ambience.gd").new()
+	ambience.name = "ArenaAmbience"
+	ambience.arena_index = MatchSetup.selected_arena
+	add_child(ambience)
+	move_child(ambience, background.get_index() + 1)
 
 	player1.opponent = player2
 	player2.opponent = player1
@@ -179,6 +178,19 @@ func _end_round(winner: int) -> void:
 	result_label.visible = true
 
 func _start_new_match() -> void:
+	if MatchSetup.arcade:
+		# A win advances to the next rival (or restarts the run fresh after
+		# beating Anant); a loss or draw retries the same rival unchanged.
+		# The scene reload re-reads MatchSetup's updated fighters/arena.
+		if round_wins[0] > round_wins[1]:
+			if MatchSetup.is_final_boss():
+				MatchSetup.begin_arcade()
+			else:
+				MatchSetup.arcade_index += 1
+				MatchSetup.selected_fighters[1] = MatchSetup.arcade_opponents[MatchSetup.arcade_index]
+				MatchSetup.selected_arena = (MatchSetup.selected_arena + 1) % ARENAS.ARENAS.size()
+		get_tree().reload_current_scene()
+		return
 	round_wins = [0, 0]
 	match_over = false
 	_update_pips()
@@ -188,13 +200,15 @@ func _begin_round(index: int) -> void:
 	combat_effects.reset()
 	round_index = index
 	var fight_style: FightStyle = round_styles[index]
-	guide_title.text = "ROUND %d / %s" % [index + 1, fight_style.display_name.to_upper()]
-	guide_text.text = MOVES.guide(fight_style.style_id)
 
 	player1.position = p1_start_pos
 	player2.position = p2_start_pos
 	player1.apply_style(fight_style)
 	player2.apply_style(fight_style)
+	guide_title.text = "ROUND %d / FIGHTER MOVEBOOK" % (index + 1)
+	guide_text.text = "STAMINA: strikes and dashes spend it; moving or resting restores it. Empty guard can break.\nTHROWS: jump, interrupt startup, or tap Light + Heavy together within 0.16s before contact.\nISH: low strikes deal +25% damage to his weak knee.\nABHI: Back + Heavy taunts; finish uninterrupted for +24 stamina (5s cooldown).\nSUP: Back + Heavy retreats; it is not invincible.\n\n"
+	for fighter in [player1, player2]:
+		guide_text.text += "%s / %s\n%s\n\n%s\n\n" % [fighter.character_profile.name, fighter.character_profile.title, fighter.character_profile.trait, MOVES.guide("action", fighter.available_moves())]
 	player1.reset_for_new_round()
 	player2.reset_for_new_round()
 
@@ -296,9 +310,11 @@ func _update_combo_ui() -> void:
 
 func _show_banner(index: int, fight_style: FightStyle) -> void:
 	banner_round.text = "ROUND %d" % (index + 1)
-	banner_name.text = fight_style.display_name.to_upper()
+	banner_name.text = "%s  VS  %s" % [player1.character_profile.name, player2.character_profile.name]
 	banner_name.modulate = fight_style.accent_color
 	banner_tagline.text = fight_style.tagline
+	if MatchSetup.arcade:
+		banner_tagline.text = "FINAL BOSS / ANANT" if MatchSetup.is_final_boss() else "ARCADE / RIVAL %d OF %d" % [MatchSetup.arcade_index + 1, MatchSetup.arcade_opponents.size()]
 	banner.visible = true
 	banner.modulate.a = 0.0
 	banner.position.x = 106.0

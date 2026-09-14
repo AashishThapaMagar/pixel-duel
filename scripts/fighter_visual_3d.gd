@@ -159,7 +159,8 @@ func _update_profile() -> void:
 	for side in ["rear", "lead"]:
 		parts[side + "_shin"].material_override = materials.skin if _outfit == "shorts" else materials.cloth
 		parts[side + "_knee"].material_override = materials.skin if _outfit == "shorts" else materials.cloth
-		parts[side + "_upper"].material_override = materials.cloth if _outfit == "suit" else materials.skin
+		parts[side + "_upper"].material_override = materials.cloth if _outfit in ["suit", "keeper"] else materials.skin
+		parts[side + "_forearm"].material_override = materials.cloth if _outfit == "keeper" else materials.skin
 
 func _process(delta: float) -> void:
 	super._process(delta)
@@ -205,9 +206,9 @@ func _update_model() -> void:
 		parts[side + "_shoulder"].position = _point(shoulder, depth)
 		parts[side + "_elbow"].position = _point(elbow, depth)
 		parts[side + "_hand"].position = _point(hand, depth)
-		var gloves: bool = fighter != null and fighter.current_style != null and fighter.current_style.kicks_disabled
+		var gloves: bool = _outfit == "keeper" or (fighter != null and fighter.current_style != null and fighter.current_style.kicks_disabled)
 		parts[side + "_hand"].scale = Vector3(7.5, 8.2, 7.2) if gloves else Vector3(5.8, 6.7, 5.8)
-		parts[side + "_hand"].material_override = materials.cloth if gloves else materials.skin
+		parts[side + "_hand"].material_override = materials.accent if gloves else materials.skin
 	parts.torso.position = _point((chest + hip) * 0.5)
 	parts.torso.rotation.z = -(chest - hip).angle() - PI * 0.5
 	parts.torso.scale = Vector3(_build, 1.0, 0.62 * _build)
@@ -226,6 +227,13 @@ func _update_model() -> void:
 	parts.brow.position = _point(head + Vector2(5, -3), 7.8)
 	parts.brow.rotation.z = -0.12
 	parts.mouth.position = _point(head + Vector2(6, 6), 6.8)
+	# Head details follow the neck during dives and inverted cartwheel poses.
+	var head_angle := -(head - chest).angle() - PI * 0.5
+	var pivot := _point(head)
+	var head_basis := Basis(Vector3.BACK, head_angle)
+	for key in ["head", "jaw", "ear", "nose", "hair", "crest", "headband", "eye", "brow", "mouth"]:
+		parts[key].position = pivot + head_basis * (parts[key].position - pivot)
+		parts[key].rotation.z = head_angle + (-0.12 if key == "brow" else 0.0)
 	parts.belt.position = _point(hip + Vector2(0, -1))
 	parts.belt_tail.position = _point(hip + Vector2(5, 8), 8.5)
 	parts.belt_tail.rotation.z = 0.2

@@ -46,6 +46,8 @@ func _wait_for_hits(count: int) -> void:
 func _run() -> void:
 	arena = load("res://scenes/Arena.tscn").instantiate()
 	root.add_child(arena)
+	# Archived style resources remain covered independently of the action roster.
+	arena.round_styles = [load("res://resources/styles/karate.tres"), load("res://resources/styles/muay_thai.tres"), load("res://resources/styles/boxing.tres"), load("res://resources/styles/mma.tres")]
 	arena.set_process(false)
 	p1 = arena.get_node("Player1")
 	p2 = arena.get_node("Player2")
@@ -149,7 +151,7 @@ func _run() -> void:
 		_check(false, "Starting a ready match must reach the arena")
 		quit(1)
 		return
-	_check(current_scene.get_node("Player1").character_profile.id == "briggs", "P1 character must reach the match")
-	_check(current_scene.get_node("Player2").character_profile.id == "vale", "P2 character must reach the match")
+	_check(current_scene.get_node("Player1").character_profile.id == "sab", "P1 character must reach the match")
+	_check(current_scene.get_node("Player2").character_profile.id == "bib", "P2 character must reach the match")
 	print("STYLE_COMBO_TEST: ALL PASS" if failures.is_empty() else "STYLE_COMBO_TEST: %d FAILURES" % failures.size())
 	quit(0 if failures.is_empty() else 1)

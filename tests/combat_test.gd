@@ -35,6 +35,8 @@ func _reset(style_index: int = 0) -> void:
 func _run() -> void:
 	arena = load("res://scenes/Arena.tscn").instantiate()
 	root.add_child(arena)
+	# Retain regression coverage for archived style resources; gameplay uses action.tres.
+	arena.round_styles = [load("res://resources/styles/karate.tres"), load("res://resources/styles/muay_thai.tres"), load("res://resources/styles/boxing.tres"), load("res://resources/styles/mma.tres")]
 	p1 = arena.get_node("Player1")
 	p2 = arena.get_node("Player2")
 	arena.set_process(false)

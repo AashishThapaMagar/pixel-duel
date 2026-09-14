@@ -1,12 +1,8 @@
 # Who Won?
 
-A local two-player 2D fighting game prototype built in **Godot 4.2+**. The fighters now use a continuously animated 2D joint rig with connected limbs, distinct guards, anticipation, contact poses, recovery, hit reactions, and a falling KO. Combat runs at 60 physics ticks per second.
+An original action fighting game prototype in Godot 4.2+, with articulated 3D fighters on a 2D combat plane and seven animated Himalayan arenas. Every match lasts **four rounds**. Each fighter keeps their own moves throughout; the most round wins takes the match.
 
-This is a foundation for responsive fighting-game movement, not a finished AAA character or 3D animation system. Tekken-style 3D presentation would be a separate production step involving modeled and rigged characters and authored animation clips.
-
-A match is **four rounds, each fought under a different fighting style** — Karate, then Muay Thai, then Boxing, then Freestyle MMA — applied to both fighters so every round is a genuinely different fight, not just a reskinned one. See "Fighting styles" below.
-
-The smoke and combat regression suites exercise damage, real hitbox overlaps, startup/recovery, hit-stop, buffered input, dashes, jumping, style mechanics, and round reset in Godot 4.2.
+Choose **Match Setup > Fighters** to select Anug, Ish, Sab, Bib, Abhi, Sup, or Anant. Start Game uses your selected fighters. The home screen remains free of character previews.
 
 ## Controls
 
@@ -21,11 +17,11 @@ The smoke and combat regression suites exercise damage, real hitbox overlaps, st
 | Restart after round ends | R | R |
 | Back to main menu | Esc | Esc |
 
-Pressing an attack shortly before recovery ends queues it for the first available frame (a 130 ms input buffer). A **landed light attack into heavy** can cancel its recovery after contact; a blocked or missed light must finish recovery. In Boxing, heavy throws a hook. A forward dash can be interrupted with an attack or guard; a backdash has no invulnerability.
+Pressing an attack shortly before recovery ends queues it for the first available frame (a 130 ms input buffer). A **landed light attack into heavy** can cancel its recovery after contact; a blocked or missed light must finish recovery. A forward dash can be interrupted with an attack or guard; a backdash has no invulnerability.
 
 ## Command moves and combat timing
 
-Every style has six directional normals and two original motion-command enders. Forward/back always mean toward/away from the opponent. For P1 facing right:
+Every fighter has six directional normals and two original motion-command enders. Forward/back always mean toward/away from the opponent. For P1 facing right:
 
 - **Driving ender:** S, S+D, D+G (down, down-forward, forward + heavy).
 - **Breaking ender:** S, S+A, A+G (down, down-back, back + heavy).
@@ -40,19 +36,12 @@ Press **F1** for all commands, combos, startup/active/recovery timings, and esti
 
 ## Main menu
 
-The game boots into `scenes/MainMenu.tscn` (set as `run/main_scene` in project.godot) rather than straight into a fight:
+- **Start Game** enters a four-round match using your saved-in-session setup.
+- **Match Setup** selects 2 Players, vs AI, or Arcade, plus one of seven arenas. **Fighters** opens compact name selectors and trait descriptions for both players.
+- **Arcade** fights the other regular roster members before **Anant**, the final boss. Each rival is a four-round match. Win to advance; losses and draws retry the same rival. Defeating Anant completes the run. Starting Arcade with Anant also ends in an Anant mirror match.
+- **How to Play**, **Settings**, and **Exit** remain available. Fullscreen and volume settings persist between launches.
 
-- **Start Game** — goes straight into a four-round match with the default fighters, using whatever mode and arena were last chosen in Match Setup (2 Players / vs AI, and one of seven illustrated Himalayan arenas). No character selection screen is shown.
-- **Match Setup** — a dialog to pick **2 Players** or **vs AI** (Player 2 is then piloted by `scripts/ai_controller.gd`) and to cycle through the available **arenas** with `<`/`>`. Both choices persist on the `MatchSetup` autoload until changed again, and the top-right header line reflects the current mode.
-- **How to play** — shows both players' controls, dash and attack-chain tips, and the F1 move guide shortcut.
-- **Settings** — Fullscreen toggle and a Volume slider, both backed by the `Settings` autoload (`scripts/settings.gd`), which applies them immediately (`DisplayServer`/`AudioServer`) and persists them to `user://settings.cfg` so they survive a restart. Volume controls the Master audio bus — there's no sound yet, but the plumbing is there for whenever sound effects are added.
-- **Exit** — quits.
-
-The title screen features the Who Won? wordmark, subtle abstract arena lighting, and an orange Start Game button with dark text in every interaction state. It contains no character artwork. Settings, How to Play, and Match Setup open as dialogs with keyboard focus and Esc to close. Tab and Enter navigate the home menu.
-
-### Player vs AI
-
-Choosing **vs AI** in Match Setup hands Player 2's controls to `scripts/ai_controller.gd`, which reacts through the same `p2_*` input actions a human would use (`Input.action_press`/`action_release`) rather than reaching into Player internals — it approaches or backs off based on distance, blocks incoming attacks after a short human-like reaction delay (not every hit), and throws light/heavy attacks on its own decision timer, so it's a real but beatable opponent. `scenes/Arena.tscn` spawns it in `arena.gd` only when `MatchSetup.vs_ai` is true, and Player 2's HUD label gets an "· AI" suffix.
+The AI uses movement/guard inputs and the same expiring attack buffer, stamina costs, hit confirms, startup and recovery as players. It reacts to visible attacks after a delay. Anant decides more frequently, but has no immunity, automatic damage, or extra health.
 
 ### Arenas
 
@@ -83,16 +72,16 @@ pixel-duel/
     match_setup.gd         Autoload: selected fighters, selected_arena, vs_ai — survives scene changes
     settings.gd           Autoload: fullscreen/volume, applied + saved to user://settings.cfg
     player.gd            Movement, attacks, blocking, health, state machine
-    ai_controller.gd      Player-vs-AI opponent: drives p1_*/p2_* input actions like a human would
+    ai_controller.gd      Player-vs-AI opponent: movement inputs and buffered attack decisions
     fighter_visual.gd    Articulated 2D fighter and combat-synchronized poses
     combat_effects.gd    Ground shadows, contact sparks, camera shake
     fight_style.gd        FightStyle resource: one fighting discipline's stats + mechanic flags
     arena_catalog.gd       Selectable arena backdrops: name, tagline, texture, ground tint
     hitbox.gd             Damage-dealing region, active only during attack frames
     hurtbox.gd             Damage-receiving region
-    arena.gd              Round/match manager: styles per round, timer, health bars, win/KO/restart
+    arena.gd              Round/match manager: four-round matches, timer, health bars, win/KO/restart
   resources/
-    styles/               karate.tres, muay_thai.tres, boxing.tres, mma.tres — one round each
+    styles/               action.tres for live matches; archived discipline resources
   assets/
     sprites/fighter/       Fighter animation frames (PNG) + generate_fighter.py that drew them
     backgrounds/           arena_bg*.png + generate_arena_bg.py / generate_arenas.py that drew them
@@ -147,20 +136,27 @@ The included `.gitignore` already excludes Godot's local cache folder (`.godot/`
 
 The controller lives in `scripts/player.gd`. The visual rig in `scripts/fighter_visual.gd` uses fixed-length two-bone limbs and blends neutral, locomotion, jump, and reaction poses. Attack poses sample the combat clock directly to avoid animation lag. `scripts/combat_effects.gd` draws ground shadows and contact sparks.
 
-## Fighting styles (rounds 1–4)
+## Action roster
 
-Each round, `Arena` pulls one `FightStyle` resource from `resources/styles/` and calls `apply_style()` on both fighters — it overwrites their movement/damage/timing numbers *and* flips on that style's one signature mechanic. Everything else in `player.gd` (state machine, hit detection, KO) stays the same; styles only change the numbers and a small, clearly-marked branch per mechanic.
+| Fighter | Identity | Tradeoff |
+|---|---|---|
+| Anug | Goalkeeper glove checks, diving clearance, low saves; larger timed-parry window | 65 stamina, slower recovery of stamina |
+| Ish | Fast footwork and powerful punches | Low strikes hit his weak knee for 25% extra damage; weaker kicks |
+| Sab | Heavy fists and short-range clinch throws that beat guard | 65 stamina; expensive grabs and committed recovery |
+| Bib | Fastest movement, 135 stamina, running kicks | Weak punches |
+| Abhi | Heavy punches, 125 stamina, a talking taunt | More guard chip and stamina drain while blocking |
+| Sup | Sway stance, low spiral, cartwheel strike, spinning kick and retreat feint | Evasion requires spacing; no invulnerability |
+| Anant | Strong all-round final boss with punches, kicks and a throw | No specialist weakness; normal 100 HP, stamina costs and punishable recovery |
 
-| Round | Style | Feel | Signature mechanic |
-|---|---|---|---|
-| 1 | **Karate** (`karate.tres`) | Fast, precise, low damage | **Perfect block**: block within `perfect_block_window` (0.15s) of a hit landing and it's a full parry — zero chip damage, the attacker gets knocked into hitstun instead. Rewards blocking on reaction, not just holding it. |
-| 2 | **Muay Thai** (`muay_thai.tres`) | Slower, heaviest damage/knockback | **Chip-through kicks**: kicks add `kick_chip_bonus` on top of normal chip damage even when blocked — "low kicks still hurt." Guard alone isn't enough against the legs. |
-| 3 | **Boxing** (`boxing.tres`) | Fastest feet, punches only | **No kicks / combo bonus**: the kick button throws a **hook** (a heavier punch) instead of a leg attack, and consecutive landed hits within `combo_window` escalate in damage (`combo_damage_step` per stack, up to `combo_max_stacks`) — reward aggression and chaining. |
-| 4 | **Freestyle MMA** (`mma.tres`) | Everything mixed, highest stakes | **Finisher**: land a punch, then land a kick within `finisher_window` (0.35s), and that kick becomes a finisher at `finisher_damage_mult`/`finisher_knockback_mult` (on a `finisher_cooldown`) — punches and kicks are meant to be mixed, not spammed alone. |
+Light strikes cost 5 stamina, regular heavies 11, command enders 18, grabs 20, and dashes 7. Stamina regenerates after 0.65 seconds without spending while idle, walking or jumping. Guard consumes stamina on impact and breaks if it cannot pay, leaving 0.55 seconds of vulnerability. Health and stamina reset each round.
 
-Whoever wins more of the four rounds wins the match (round wins shown as `●○○○`-style pips next to each health bar); a tie in rounds is a match draw. Each round opens with a ~2.2s style banner (name + tagline) during which both fighters are frozen (`Arena._begin_round` disables their `_physics_process`) so nobody gets a free hit in before the round officially starts.
+**Throw counterplay:** jump, interrupt the windup, stay beyond grabbing range, or tap Light + Heavy together within 0.16 seconds before contact. Throws cannot grab airborne opponents or chain into hitstun/blockstun.
 
-**To add a 5th style** (or replace one): duplicate one of the `.tres` files in `resources/styles/`, tweak its numbers/flags in the Godot Inspector (or by hand — they're plain text), then add it to the `round_styles` array at the top of `arena.gd`. No new signature mechanic is required — a style with all the "signature mechanic" flags off (`perfect_block_window = 0`, `kick_chip_bonus = 0`, `kicks_disabled = false`, `combo_damage_step = 0`, `has_finisher = false`) just plays as a plain numbers-only style.
+**Abhi:** Back + Heavy performs Big Talk. Completing its 0.9-second vulnerable animation restores 24 stamina; interruption grants nothing. Five-second cooldown. The taunt uses on-screen text, not recorded voice.
+
+**Sup:** Back + Heavy retreats with Slip Away. It deals no damage and grants no invulnerability.
+
+Character stats live in `scripts/fighter_roster.gd`, attacks in `scripts/action_moves.gd`, and shared action rules in `resources/styles/action.tres`. Older discipline resources remain on disk for legacy regression tests, but are not used in normal matches.
 
 ## Art and animation
 
@@ -212,3 +208,11 @@ Seven-arena selection and render check:
 godot --path . -s res://tests/arena_gallery_test.gd -- --capture
 
 This validates all seven textures, selector wraparound, Match Setup fight launch, and unchanged floor collision; screenshots are written to .godot/arena-01.png through arena-07.png.
+
+All seven arenas include animated birds, drifting cloud wisps, and small backpackers following distant walking routes. Lake stages feature a rowing boat, the grove has windblown petals, and the high-altitude stages have light drifting snow. Scenery stays behind the fighters, pauses with the move guide, and continues across rounds without affecting combat physics. The arena gallery check also verifies animation, drawing order, and pause behavior.
+
+Action roster, actual hitbox contact, stamina, special abilities, selection and arcade progression:
+
+godot --headless --path . -s res://tests/action_roster_test.gd
+
+Omit --headless and append -- --capture to save roster and signature-pose screenshots under .godot/action-*.png.

@@ -3,6 +3,25 @@ extends Node
 var selected_fighters: Array[int] = [0, 1]
 var selected_arena: int = 0
 var vs_ai: bool = false
+var arcade: bool = false
+var arcade_opponents: Array[int] = []
+var arcade_index: int = 0
+
+## Builds the run's opponent order: every regular roster fighter (indices
+## 0-5) except the one the player picked, in roster order, with Anant
+## (index 6, always the final boss) appended last.
+func begin_arcade() -> void:
+	arcade_opponents.clear()
+	for i in 6:
+		if i != selected_fighters[0]:
+			arcade_opponents.append(i)
+	arcade_opponents.append(6)
+	arcade_index = 0
+	selected_fighters[1] = arcade_opponents[0]
+	vs_ai = true
+
+func is_final_boss() -> bool:
+	return arcade and arcade_index == arcade_opponents.size() - 1
 
 func _ready() -> void:
 	if not InputMap.has_action("move_list"):

@@ -48,7 +48,7 @@ func _run() -> void:
 	await settle()
 	var arena := current_scene
 	check(arena.get_script().resource_path.ends_with("arena.gd"), "Start enters arena")
-	check(arena.player1.character_profile.name == "REN" and arena.player2.character_profile.name == "NARA", "Direct play uses the default fighters")
+	check(arena.player1.character_profile.name == "SAB" and arena.player2.character_profile.name == "BIB", "Direct play preserves selected fighters")
 	var hud := arena.get_child(arena.get_child_count() - 1)
 	check(hud.damage_bars[0].size == arena.health_bar1.size, "Damage trail matches health bar dimensions")
 	await screenshot("ui-intro")

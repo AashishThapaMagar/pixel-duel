@@ -2,6 +2,7 @@ extends Control
 const UI := preload("res://scripts/ui_kit.gd")
 const BACKDROP := preload("res://scripts/menu_backdrop.gd")
 const ARENA_CATALOG := preload("res://scripts/arena_catalog.gd")
+const ROSTER := preload("res://scripts/fighter_roster.gd")
 var modal: Control
 var modal_content: Control
 var play_button: Button
@@ -10,6 +11,7 @@ var transitioning: bool = false
 var mode_summary_label: Label
 var mode_two_button: Button
 var mode_ai_button: Button
+var mode_arcade_button: Button
 var arena_name_label: Label
 var arena_tagline_label: Label
 var arena_preview: TextureRect
@@ -38,7 +40,7 @@ func _ready() -> void:
 	title.add_theme_color_override("font_shadow_color", Color("573223"))
 	title.add_theme_constant_override("shadow_offset_x", 3)
 	title.add_theme_constant_override("shadow_offset_y", 5)
-	var subtitle := UI.label(self, "Four rounds. Four fighting styles. Settle it in the arena.", Vector2(130, 269), Vector2(700, 28), 15, Color("a6b1c3"))
+	var subtitle := UI.label(self, "Seven fighters. Four rounds. Your style. Your fight.", Vector2(130, 269), Vector2(700, 28), 15, Color("a6b1c3"))
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	play_button = UI.button(self, "START GAME    /    ENTER", Vector2(322, 322), Vector2(316, 54))
 	play_button.name = "StartGame"
@@ -70,7 +72,7 @@ func _ready() -> void:
 		button.add_theme_stylebox_override("hover", UI.box(Color("232a33"), accent))
 		button.add_theme_stylebox_override("focus", UI.box(Color(0, 0, 0, 0), accent, 1))
 		button.add_theme_color_override("font_hover_color", accent)
-	var styles := UI.label(self, "01  KARATE     /     02  MUAY THAI     /     03  BOXING     /     04  MMA", Vector2(120, 461), Vector2(720, 24), 11, Color("798799"))
+	var styles := UI.label(self, "ANUG   /   ISH   /   SAB   /   BIB   /   ABHI   /   SUP   /   ANANT", Vector2(120, 461), Vector2(720, 24), 11, Color("798799"))
 	styles.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	UI.label(self, "ONE KEYBOARD. TWO RIVALS.", Vector2(36, 507), Vector2(330, 20), 10, Color("7e8a9b"))
 	var footer := UI.label(self, "READY WHEN YOU ARE.", Vector2(654, 507), Vector2(270, 20), 10, accent)
@@ -83,7 +85,8 @@ func _start_fight() -> void:
 	if transitioning or is_instance_valid(modal):
 		return
 	transitioning = true
-	MatchSetup.selected_fighters.assign([0, 1])
+	if MatchSetup.arcade:
+		MatchSetup.begin_arcade()
 	var tween := create_tween()
 	tween.tween_property(self, "modulate:a", 0.0, 0.16)
 	tween.tween_callback(func(): get_tree().change_scene_to_file("res://scenes/Arena.tscn"))
@@ -101,8 +104,16 @@ func _show_match_setup() -> void:
 	modal_content.add_child(arena_preview)
 	UI.label(modal_content, "SEVEN PLACES. ONE WINNER.", Vector2(28, 251), Vector2(230, 20), 10, UI.MUTED)
 	UI.label(modal_content, "MODE", Vector2(280, 96), Vector2(140, 20), 11, UI.MUTED)
-	mode_two_button = UI.button(modal_content, "2 PLAYERS", Vector2(280, 120), Vector2(148, 34))
-	mode_ai_button = UI.button(modal_content, "VS AI", Vector2(440, 120), Vector2(148, 34))
+	mode_two_button = UI.button(modal_content, "2 PLAYERS", Vector2(280, 120), Vector2(96, 34))
+	mode_ai_button = UI.button(modal_content, "VS AI", Vector2(386, 120), Vector2(96, 34))
+	mode_arcade_button = UI.button(modal_content, "ARCADE", Vector2(492, 120), Vector2(96, 34))
+	for button in [mode_two_button, mode_ai_button, mode_arcade_button]:
+		button.add_theme_font_size_override("font_size", 12)
+	mode_arcade_button.pressed.connect(func():
+		MatchSetup.arcade = true
+		MatchSetup.vs_ai = true
+		_refresh_match_setup()
+		_refresh_mode_summary())
 	mode_two_button.focus_mode = Control.FOCUS_NONE
 	mode_ai_button.focus_mode = Control.FOCUS_NONE
 	mode_two_button.pressed.connect(func(): _set_vs_ai(false))
@@ -121,7 +132,11 @@ func _show_match_setup() -> void:
 	arena_tagline_label = UI.label(modal_content, "", Vector2(280, 239), Vector2(308, 37), 12, UI.MUTED)
 	arena_tagline_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-	UI.label(modal_content, "Choose your setting. Every arena uses the same fighting rules.", Vector2(28, 279), Vector2(566, 22), 12, UI.MUTED)
+	UI.label(modal_content, "Arcade: beat the roster, then face Anant. Four rounds per rival.", Vector2(28, 279), Vector2(566, 22), 12, UI.MUTED)
+	var roster_button := UI.button(modal_content, "FIGHTERS", Vector2(28, 311), Vector2(180, 38))
+	roster_button.pressed.connect(func():
+		_close_modal()
+		_show_roster())
 	var fight := UI.button(modal_content, "FIGHT  /  ENTER", Vector2(258, 311), Vector2(152, 38), true)
 	fight.pressed.connect(func():
 		_close_modal()
@@ -130,6 +145,7 @@ func _show_match_setup() -> void:
 	fight.grab_focus()
 
 func _set_vs_ai(value: bool) -> void:
+	MatchSetup.arcade = false
 	MatchSetup.vs_ai = value
 	_refresh_match_setup()
 	_refresh_mode_summary()
@@ -144,7 +160,7 @@ func _refresh_match_setup() -> void:
 	arena_tagline_label.text = arena_data.tagline
 	arena_preview.texture = load(arena_data.texture)
 	arena_count_label.text = "ARENA %02d / %02d" % [MatchSetup.selected_arena + 1, ARENA_CATALOG.ARENAS.size()]
-	for pair in [[mode_two_button, not MatchSetup.vs_ai], [mode_ai_button, MatchSetup.vs_ai]]:
+	for pair in [[mode_two_button, not MatchSetup.vs_ai], [mode_ai_button, MatchSetup.vs_ai and not MatchSetup.arcade], [mode_arcade_button, MatchSetup.arcade]]:
 		var button: Button = pair[0]
 		var active: bool = pair[1]
 		button.add_theme_stylebox_override("normal", UI.box(Color("29352b") if active else UI.PANEL, UI.LIME if active else UI.LINE, 2 if active else 1))
@@ -153,6 +169,34 @@ func _refresh_match_setup() -> void:
 
 func _refresh_mode_summary() -> void:
 	mode_summary_label.text = "LOCAL VERSUS   /   PLAYER VS AI" if MatchSetup.vs_ai else "LOCAL VERSUS   /   2 PLAYERS"
+	if MatchSetup.arcade:
+		mode_summary_label.text = "ARCADE   /   ROAD TO ANANT"
+
+func _show_roster() -> void:
+	_open_modal("CHOOSE YOUR FIGHTERS", "THE ROSTER")
+	for player in 2:
+		var x := 28.0 + player * 292.0
+		UI.label(modal_content, "PLAYER %d" % (player + 1), Vector2(x, 101), Vector2(265, 22), 13, UI.LIME if player == 0 else UI.VIOLET)
+		var picker := OptionButton.new()
+		picker.position = Vector2(x, 132)
+		picker.size = Vector2(266, 36)
+		for profile in ROSTER.PROFILES:
+			picker.add_item(profile.name)
+		picker.select(MatchSetup.selected_fighters[player])
+		modal_content.add_child(picker)
+		var detail := UI.label(modal_content, "", Vector2(x, 181), Vector2(260, 106), 13, UI.MUTED)
+		detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var update := func(index: int):
+			MatchSetup.selected_fighters[player] = index
+			var profile := ROSTER.profile(index)
+			detail.text = "%s\n%s\nStamina: %d" % [profile.title, profile.trait, profile.stamina]
+		picker.item_selected.connect(update)
+		update.call(MatchSetup.selected_fighters[player])
+	UI.label(modal_content, "Arcade chooses your rivals automatically; Anant is always last.", Vector2(28, 283), Vector2(566, 20), 11, UI.MUTED)
+	var done := UI.button(modal_content, "MATCH SETUP", Vector2(258, 311), Vector2(152, 38), true)
+	done.pressed.connect(func():
+		_close_modal()
+		_show_match_setup())
 
 func _open_modal(title: String, eyebrow: String) -> void:
 	return_focus = get_viewport().gui_get_focus_owner()
@@ -211,7 +255,7 @@ func _show_guide() -> void:
 		var x := 28.0 + player * 294
 		UI.label(modal_content, "PLAYER %d" % (player + 1), Vector2(x, 108), Vector2(255, 24), 15, UI.LIME if player == 0 else UI.VIOLET)
 		UI.label(modal_content, "A / D   Move    W   Jump\nS   Guard    F   Light    G   Heavy" if player == 0 else "Arrows   Move / Jump\nDown   Guard    K   Light    L   Heavy", Vector2(x, 143), Vector2(270, 59), 14)
-	UI.label(modal_content, "Double-tap to dash. Land light into heavy to chain attacks.\nFour rounds change your fighting style. Most round wins takes it.\nOpen F1 during a match for your current moves and combos.", Vector2(28, 224), Vector2(566, 75), 13, UI.MUTED)
+	UI.label(modal_content, "Double-tap to dash. Confirm hits to chain attacks. Manage stamina.\nKeep your fighter's moves across four rounds. Most wins takes it.\nF1: moves, throws, weaknesses and signature commands.", Vector2(28, 224), Vector2(566, 75), 13, UI.MUTED)
 
 func _close_modal() -> void:
 	if not is_instance_valid(modal):

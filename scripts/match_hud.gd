@@ -8,6 +8,7 @@ var damage_tweens: Array[Tween] = []
 var result_panel: Panel
 var next_button: Button
 var result_detail: Label
+var stamina_bars: Array[ProgressBar] = []
 
 func _ready() -> void:
 	arena = get_parent()
@@ -57,6 +58,17 @@ func _ready() -> void:
 		health.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if i == 0 else HORIZONTAL_ALIGNMENT_LEFT
 		health_labels.append(health)
 		var fighter: Node = arena.player1 if i == 0 else arena.player2
+		var stamina_bar := ProgressBar.new()
+		stamina_bar.position = Vector2(x + 90, 76)
+		stamina_bar.size = Vector2(145, 6)
+		stamina_bar.show_percentage = false
+		stamina_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stamina_bar.add_theme_stylebox_override("background", UI.box(Color("282c36"), UI.LINE, 0))
+		stamina_bar.add_theme_stylebox_override("fill", UI.box(Color("56cbbc"), Color("56cbbc"), 0))
+		layer.add_child(stamina_bar)
+		stamina_bar.set_deferred("size", Vector2(145, 6))
+		stamina_bars.append(stamina_bar)
+		UI.label(layer, "STAMINA", Vector2(x + 90, 83), Vector2(145, 13), 8, UI.MUTED)
 		fighter.health_changed.connect(_health_changed.bind(i))
 		arena.combo_labels[i].position.y = 110
 		arena.combo_labels[i].add_theme_font_size_override("font_size", 17)
@@ -129,6 +141,11 @@ func _continue_match() -> void:
 		arena._begin_round(arena.round_index + 1)
 
 func _process(_delta: float) -> void:
+	for i in 2:
+		var fighter: Node = arena.player1 if i == 0 else arena.player2
+		stamina_bars[i].max_value = fighter.character_profile.stamina
+		stamina_bars[i].value = fighter.stamina
+		stamina_bars[i].modulate = UI.RED if fighter.stamina < 18.0 else Color.WHITE
 	var show_result: bool = arena.result_label.visible
 	if show_result and not result_panel.visible:
 		UI.enter(result_panel)
@@ -136,4 +153,9 @@ func _process(_delta: float) -> void:
 	if show_result:
 		next_button.text = "REMATCH / R" if arena.match_over else "NEXT ROUND / R"
 		result_detail.text = "%s  /  SCORE %d : %d" % ["MATCH COMPLETE" if arena.match_over else "ROUND %d COMPLETE" % (arena.round_index + 1), arena.round_wins[0], arena.round_wins[1]]
+		if arena.match_over and MatchSetup.arcade:
+			var won: bool = arena.round_wins[0] > arena.round_wins[1]
+			next_button.text = ("NEW RUN / R" if MatchSetup.is_final_boss() else "NEXT RIVAL / R") if won else "RETRY RIVAL / R"
+			if won and MatchSetup.is_final_boss():
+				result_detail.text = "ANANT DEFEATED / ARCADE COMPLETE"
 	arena.timer_label.add_theme_color_override("font_color", UI.RED if arena.time_remaining <= 10 else UI.WHITE)

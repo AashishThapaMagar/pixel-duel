@@ -7,6 +7,7 @@ signal impact(point: Vector2, blocked: bool, heavy: bool)
 const ROSTER := preload("res://scripts/fighter_roster.gd")
 const MOVES := preload("res://scripts/move_catalog.gd")
 const MOTIONS := preload("res://scripts/motion_input.gd")
+const ACTION_MOVES := preload("res://scripts/action_moves.gd")
 
 enum State { IDLE, WALK, JUMP, PUNCH, KICK, BLOCK, HITSTUN, KO, BLOCKSTUN, DASH, JUMP_START, LAND }
 
@@ -89,6 +90,34 @@ var _last_land_type: String = ""
 var _last_land_time: float = -999.0
 var _finisher_cooldown_until: float = -999.0
 var _flash_tween: Tween
+var stamina: float = 100.0
+var stamina_delay: float = 0.0
+var taunt_ready_at: float = 0.0
+var throw_tech_until: float = -1.0
+
+## "action" is the style_id of resources/styles/action.tres, the one style
+## resource live matches now use for all four rounds. Archived styles
+## (karate/muay_thai/boxing/mma) still load in the regression tests, so this
+## flag is how stamina, throws, guard breaks and per-fighter moves stay
+## opt-in instead of changing behavior for that legacy coverage.
+func is_action_fight() -> bool:
+	return current_style != null and current_style.style_id == "action"
+
+func spend_stamina(amount: float) -> bool:
+	if not is_action_fight():
+		return true
+	if stamina < amount:
+		combat_notice = "CATCH YOUR BREATH"
+		notice_until = combat_time + 0.6
+		return false
+	stamina -= amount
+	stamina_delay = 0.65
+	return true
+
+func available_moves() -> Dictionary:
+	if is_action_fight():
+		return ACTION_MOVES.for_fighter(character_profile.id)
+	return MOVES.for_style(current_style.style_id if current_style != null else "karate")
 
 const GRAVITY := 2200.0
 const DASH_DURATION := 0.16
@@ -124,6 +153,7 @@ func apply_style(new_style: FightStyle) -> void:
 func apply_character(index: int) -> void:
 	character_index = clampi(index, 0, ROSTER.PROFILES.size() - 1)
 	character_profile = ROSTER.profile(character_index)
+	stamina = character_profile.stamina
 	base_color = character_profile.color
 	if current_style != null:
 		apply_style(current_style)
@@ -139,6 +169,9 @@ func _physics_process(delta: float) -> void:
 		hitstop_remaining = maxf(0.0, hitstop_remaining - delta)
 		return
 	combat_time += delta
+	stamina_delay = maxf(0.0, stamina_delay - delta)
+	if is_action_fight() and controls_enabled and stamina_delay <= 0.0 and state in [State.IDLE, State.WALK, State.JUMP]:
+		stamina = minf(character_profile.stamina, stamina + float(character_profile.regen) * delta)
 	if combat_time - _last_land_time > (current_style.combo_window if current_style != null else 0.6):
 		combo_stacks = 0
 	_update_facing()
@@ -190,6 +223,11 @@ func _physics_process(delta: float) -> void:
 	_update_animation()
 
 func _capture_input() -> void:
+	# Throw tech: tapping Light + Heavy together opens a 0.16s window (checked
+	# in take_hit) during which an incoming grapple is escaped instead of landing.
+	if Input.is_action_pressed(input_prefix + "punch") and Input.is_action_pressed(input_prefix + "kick") and (Input.is_action_just_pressed(input_prefix + "punch") or Input.is_action_just_pressed(input_prefix + "kick")):
+		throw_tech_until = combat_time + 0.16
+		return
 	if facing != _motion_facing:
 		motion_input.reset()
 		_motion_facing = facing
@@ -206,7 +244,7 @@ func _capture_input() -> void:
 		var action: String = "left" if direction < 0 else "right"
 		if Input.is_action_just_pressed(input_prefix + action):
 			if direction == _last_tap_dir and combat_time - _last_tap_time <= 0.22:
-				if state in [State.IDLE, State.WALK] and is_on_floor():
+				if state in [State.IDLE, State.WALK] and is_on_floor() and spend_stamina(7.0):
 					state = State.DASH
 					_dash_dir = direction
 					action_timer = DASH_DURATION
@@ -292,8 +330,19 @@ func _next_chain_move(action: String) -> String:
 	return ""
 
 func _start_style_move(move_id: String, step: int = 0) -> void:
-	var style_id: String = current_style.style_id if current_style != null else "karate"
-	var data: Dictionary = MOVES.for_style(style_id)[move_id]
+	var data: Dictionary = available_moves()[move_id]
+	# "utility" moves (Abhi's taunt, Sup's feint) deal no damage and never
+	# open a hitbox (see _process_attack) — they're on their own cooldown gate.
+	if data.get("utility", "") == "taunt" and combat_time < taunt_ready_at:
+		combat_notice = "LET THE FISTS TALK"
+		notice_until = combat_time + 0.6
+		return
+	if not spend_stamina(float(data.get("cost", 0.0))):
+		return
+	if data.get("utility", "") == "taunt":
+		taunt_ready_at = combat_time + 5.0
+		combat_notice = "IS THAT ALL YOU GOT?"
+		notice_until = combat_time + 0.9
 	_start_attack(State.KICK if data.kind == "kick" else State.PUNCH, data.pose)
 	current_move = data
 	chain_step = step
@@ -366,7 +415,7 @@ func _process_attack(delta: float) -> void:
 	hitbox.position = Vector2(facing * reach, -66.0 if heavy else -88.0)
 	if not current_move.is_empty():
 		hitbox.position = Vector2(facing * float(current_move.reach), float(current_move.height))
-	hitbox.set_active(attack_timer >= attack_startup() and attack_timer < attack_startup() + attack_active_time())
+	hitbox.set_active(current_move.get("utility", "").is_empty() and attack_timer >= attack_startup() and attack_timer < attack_startup() + attack_active_time())
 	# A fresh buffered press and a confirmed hit are required. Cancels close
 	# six frames into recovery; holding an attack never advances the string.
 	if not current_move.is_empty():
@@ -382,6 +431,11 @@ func _process_attack(delta: float) -> void:
 		_consume_action()
 		return
 	if attack_timer >= attack_duration():
+		# Reaching the end of the animation uninterrupted is the payoff for
+		# taunting; take_hit clears current_move on interruption, so a hit
+		# taken mid-taunt never reaches this branch and grants nothing.
+		if current_move.get("utility", "") == "taunt":
+			stamina = minf(character_profile.stamina, stamina + 24.0)
 		hitbox.set_active(false)
 		current_move = {}
 		chain_step = 0
@@ -426,13 +480,40 @@ func _process_hitstun(delta: float) -> void:
 func take_hit(damage: int, knockback: float, attacker_facing: int, attacker: Node = null, attack_type: String = "punch") -> bool:
 	if state == State.KO or not controls_enabled:
 		return false
+	var move: Dictionary = attacker.current_move if attacker != null else {}
+	var grapple: bool = move.get("kind", "") == "grapple"
+	if grapple:
+		# Throws lose to jumps, active hitstun, spacing, or a timed two-button tech.
+		if not is_on_floor() or state in [State.HITSTUN, State.BLOCKSTUN] or absf(global_position.x - attacker.global_position.x) > 64.0:
+			return false
+		if combat_time <= throw_tech_until:
+			combat_notice = "THROW ESCAPE"
+			notice_until = combat_time + 0.9
+			throw_tech_until = -1.0
+			attacker.apply_parry_punish()
+			velocity.x = attacker_facing * 140.0
+			return false
 	var blocked: bool = state in [State.BLOCK, State.BLOCKSTUN] and attacker_facing != facing
+	blocked = blocked and not grapple
 	var attacking := state in [State.PUNCH, State.KICK]
 	var counter: bool = not blocked and attacking and attack_timer < attack_startup()
 	var punish: bool = not blocked and attacking and attack_timer >= attack_startup() + attack_active_time()
 	var continued: bool = state == State.HITSTUN and stun_timer > 0.0 and _combo_attacker == attacker
-	var move: Dictionary = attacker.current_move if attacker != null else {}
-	var perfect: bool = blocked and state == State.BLOCK and current_style != null and current_style.perfect_block_window > 0.0 and block_hold_time <= current_style.perfect_block_window
+	var parry_window: float = current_style.perfect_block_window if current_style != null else 0.0
+	if is_action_fight() and character_profile.id == "anug":
+		parry_window = 0.12
+	var perfect: bool = blocked and state == State.BLOCK and parry_window > 0.0 and block_hold_time <= parry_window
+	var guard_broken := false
+	if blocked and not perfect and is_action_fight():
+		# Abhi's trait is extra guard chip: blocking him drains stamina faster.
+		var guard_cost := damage * (1.1 if character_profile.id == "abhi" else 0.6)
+		guard_broken = stamina < guard_cost
+		stamina = maxf(0.0, stamina - guard_cost)
+		stamina_delay = 0.8
+		if guard_broken:
+			blocked = false
+			combat_notice = "GUARD BREAK"
+			notice_until = combat_time + 1.0
 	hitbox.set_active(false)
 	var heavy := attack_type == "kick"
 	var freeze := 0.075 if heavy else 0.045
@@ -447,6 +528,11 @@ func take_hit(damage: int, knockback: float, attacker_facing: int, attacker: Nod
 			attacker.apply_parry_punish()
 		return false
 	var dealt := damage
+	# Ish's weak knee: unblocked low strikes (height close to the ground,
+	# i.e. not a punch/kick aimed at the torso or head) deal 25% extra.
+	if is_action_fight() and character_profile.id == "ish" and not blocked and float(move.get("height", -88.0)) >= -65.0:
+		damage = roundi(damage * 1.25)
+		dealt = damage
 	if not blocked:
 		motion_input.reset()
 		_received_hits = _received_hits + 1 if continued else 1
@@ -469,9 +555,17 @@ func take_hit(damage: int, knockback: float, attacker_facing: int, attacker: Nod
 		stun_timer = float(move.hitstun) if not move.is_empty() else (hitstun_time_heavy if heavy else hitstun_time_light)
 		if counter and not move.is_empty():
 			stun_timer += 6.0 / 60.0
+		if guard_broken:
+			stun_timer = maxf(stun_timer, 0.55)
+		if grapple:
+			velocity.y = -260.0
+			stun_timer = 0.55
 	health = maxi(0, health - dealt)
 	velocity.x = attacker_facing * knockback * (0.3 if blocked else 1.0)
 	health_changed.emit(health, max_health)
+	current_move = {}
+	attack_connected = false
+	chain_step = 0
 	_flash(Color(0.65, 0.85, 1.0) if blocked else Color(1.0, 0.65, 0.55))
 	if health <= 0:
 		state = State.KO
@@ -498,6 +592,10 @@ func _flash(color: Color) -> void:
 	_flash_tween.tween_property(visual, "modulate", Color.WHITE, 0.15)
 
 func reset_for_new_round() -> void:
+	stamina = character_profile.stamina
+	stamina_delay = 0.0
+	taunt_ready_at = 0.0
+	throw_tech_until = -1.0
 	if _flash_tween != null:
 		_flash_tween.kill()
 	health = max_health

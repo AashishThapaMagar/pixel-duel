@@ -61,6 +61,17 @@ func _run() -> void:
 		check((arena.background.texture.get_size() * arena.background.scale).is_equal_approx(Vector2(960, 540)), "Artwork fills the game canvas")
 		check(arena.player1.is_on_floor() and arena.player2.is_on_floor(), "Fighters stand on the unchanged collision floor")
 		check(not arena.get_node("Ground/GroundVisual").visible, "Legacy floor does not cover the illustrated terrace")
+		var ambience: Node2D = arena.get_node("ArenaAmbience")
+		check(ambience.get_index() > arena.background.get_index() and ambience.get_index() < arena.player1.get_index(), "Scenery renders between painting and fighters")
+		var before: Vector2 = ambience.bird_position(0)
+		await settle()
+		check(not ambience.bird_position(0).is_equal_approx(before), "Birds move over time in every arena")
+		check(not ambience.hiker_position(0.2).is_equal_approx(ambience.hiker_position(0.8)), "Tourists have a traversable route")
+		arena._toggle_move_guide()
+		var paused_time: float = ambience.elapsed
+		await settle()
+		check(is_equal_approx(ambience.elapsed, paused_time), "Move guide pauses scenery")
+		arena._toggle_move_guide()
 		await save_view("arena-%02d" % (i + 1))
 		arena.queue_free()
 		await process_frame

@@ -64,23 +64,25 @@ func _run() -> void:
 	arena.set_process(false)
 	p1 = arena.player1
 	p2 = arena.player2
+	p1.apply_character(1)
+	p2.apply_character(5)
 	await reset()
 	p2.position.x = 800
 	p1.set_physics_process(true)
 	await roll("right")
-	check(p1.current_move.name == "Driving straight", "Real right-facing motion starts the command move")
+	check(p1.current_move.name == p1.available_moves().drive.name, "Real right-facing motion starts the command move")
 	await reset()
 	p1.position.x = 600
 	p2.position.x = 200
 	p1.facing = -1
 	p1.set_physics_process(true)
 	await roll("left")
-	check(p1.current_move.name == "Driving straight", "Motion mirrors when facing left")
+	check(p1.current_move.name == p1.available_moves().drive.name, "Motion mirrors when facing left")
 	await reset()
 	p2.position.x = 800
 	p1.set_physics_process(true)
 	await roll("left")
-	check(p1.current_move.name == "Turning side kick", "Quarter-circle back starts the other ender")
+	check(p1.current_move.name == p1.available_moves().breaker.name, "Quarter-circle back starts the other ender")
 	# Real input, collisions and held guard expose any gap in the command combo.
 	await reset()
 	p1.set_physics_process(true)
@@ -105,7 +107,7 @@ func _run() -> void:
 		if p1.combo_hits == 3:
 			break
 		await frames(1)
-	check(p1.combo_hits == 3 and p1.current_move.name == "Driving straight", "Real inputs produce a gapless three-hit command combo")
+	check(p1.combo_hits == 3 and p1.current_move.name == p1.available_moves().drive.name, "Real inputs produce a gapless three-hit command combo")
 	check(p1.combo_damage == 100 - p2.health, "Command combo display matches actual scaled damage")
 	# A held light button must not produce automatic follow-ups.
 	await reset()
@@ -122,7 +124,7 @@ func _run() -> void:
 	p1._buffered_action = "kick"
 	p1._buffer_remaining = 0.13
 	p1._process_attack(0.001)
-	check(p1.current_move.name == "Gyaku-zuki / reverse straight", "Cancel window closes before recovery ends")
+	check(p1.current_move.name == p1.available_moves().cross.name, "Cancel window closes before recovery ends")
 	# A confirmed jab can cancel into a buffered motion ender, but a whiff cannot.
 	await reset()
 	p1._start_style_move("jab")
@@ -131,10 +133,10 @@ func _run() -> void:
 	p1._buffered_move = "drive"
 	p1._buffer_remaining = 0.13
 	p1._process_attack(0.001)
-	check(p1.current_move.name != "Driving straight", "Whiff cannot special-cancel")
+	check(p1.current_move.name != p1.available_moves().drive.name, "Whiff cannot special-cancel")
 	p1.attack_connected = true
 	p1._process_attack(0.001)
-	check(p1.current_move.name == "Driving straight", "Hit confirm permits motion ender")
+	check(p1.current_move.name == p1.available_moves().drive.name, "Hit confirm permits motion ender")
 	# Counter hit and recovery punish are distinct and give accurate feedback.
 	await reset()
 	p1._start_style_move("jab")
