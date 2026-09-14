@@ -74,6 +74,7 @@ func _ready() -> void:
 	player1.ko.connect(func(): _end_round(2))
 	player2.ko.connect(func(): _end_round(1))
 	_build_move_ui()
+	add_child(preload("res://scripts/match_hud.gd").new())
 
 	result_label.visible = false
 	_update_pips()
@@ -137,7 +138,6 @@ func _end_round(winner: int) -> void:
 		round_wins[1] += 1
 	_update_pips()
 
-	var style: FightStyle = round_styles[round_index]
 	var round_no := round_index + 1
 	var winner_text := "DRAW"
 	if winner == 1:
@@ -152,13 +152,9 @@ func _end_round(winner: int) -> void:
 			match_winner = "PLAYER 1"
 		elif round_wins[1] > round_wins[0]:
 			match_winner = "PLAYER 2"
-		result_label.text = "ROUND %d (%s): %s\n\n%s WINS THE MATCH %d-%d\nPress R for a new match" % [
-			round_no, style.display_name.to_upper(), winner_text, match_winner, round_wins[0], round_wins[1]
-		]
+		result_label.text = "MATCH DRAW" if match_winner == "DRAW" else match_winner + " TAKES THE MATCH"
 	else:
-		result_label.text = "ROUND %d (%s): %s\nPress R for Round %d" % [
-			round_no, style.display_name.to_upper(), winner_text, round_no + 1
-		]
+		result_label.text = winner_text
 
 	result_label.visible = true
 
@@ -183,6 +179,7 @@ func _begin_round(index: int) -> void:
 	player2.reset_for_new_round()
 
 	time_remaining = ROUND_TIME
+	timer_label.text = str(int(ROUND_TIME))
 	round_label.text = "ROUND %d / %d" % [index + 1, round_styles.size()]
 	result_label.visible = false
 	round_active = false
@@ -193,7 +190,7 @@ func _begin_round(index: int) -> void:
 	player2.set_physics_process(false)
 
 	_show_banner(index, fight_style)
-	$UI/ControlsHint.text = "P1: A/D move, W jump, S guard, F light, G heavy   |   P2: Arrows, Up jump, Down guard, K light, L heavy\nLight > Light > Light: punch chain   |   F1: moves & combos   |   Double-tap: dash   |   R: next round   |   Esc: menu"
+	$UI/ControlsHint.text = "P1   A/D move   W jump   S guard   F/G attack        |        P2   Arrows move/jump   Down guard   K/L attack\nF1  MOVES & COMBOS     /     DOUBLE-TAP TO DASH     /     ESC  MENU"
 
 func _build_move_ui() -> void:
 	for player in 2:
@@ -231,9 +228,16 @@ func _build_move_ui() -> void:
 	guide_title = Label.new()
 	guide_title.add_theme_font_size_override("font_size", 23)
 	column.add_child(guide_title)
+	var scroll := ScrollContainer.new()
+	scroll.name = "MoveScroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(scroll)
 	guide_text = Label.new()
-	guide_text.add_theme_font_size_override("font_size", 14)
-	column.add_child(guide_text)
+	guide_text.add_theme_font_size_override("font_size", 13)
+	guide_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	guide_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(guide_text)
 	var close_button := Button.new()
 	close_button.text = "RESUME / F1"
 	close_button.focus_mode = Control.FOCUS_NONE
@@ -265,6 +269,8 @@ func _update_combo_ui() -> void:
 			text = fighter.move_name()
 		if fighter.combo_hits > 1 and fighter.combat_time - fighter._last_land_time < 1.1:
 			text += "\n%d HITS / %d DAMAGE" % [fighter.combo_hits, fighter.combo_damage]
+		if fighter.combat_time < fighter.notice_until:
+			text += "\n" + fighter.combat_notice
 		combo_labels[i].text = text
 
 func _show_banner(index: int, fight_style: FightStyle) -> void:
@@ -273,6 +279,11 @@ func _show_banner(index: int, fight_style: FightStyle) -> void:
 	banner_name.modulate = fight_style.accent_color
 	banner_tagline.text = fight_style.tagline
 	banner.visible = true
+	banner.modulate.a = 0.0
+	banner.position.x = 106.0
+	var entrance := create_tween().set_parallel(true)
+	entrance.tween_property(banner, "modulate:a", 1.0, 0.2)
+	entrance.tween_property(banner, "position:x", 130.0, 0.3).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	intro_timer = INTRO_TIME
 
 func _hide_banner() -> void:

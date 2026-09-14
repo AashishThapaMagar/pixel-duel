@@ -45,9 +45,9 @@ func _ready() -> void:
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	add_child(sprite)
 	for key in ["skin", "cloth", "dark", "accent", "hair", "wrap", "team"]:
-		var material := StandardMaterial3D.new()
-		material.roughness = 0.8
-		materials[key] = material
+		var surface_material := StandardMaterial3D.new()
+		surface_material.roughness = 0.8
+		materials[key] = surface_material
 	materials.dark.albedo_color = Color("1c2331")
 	materials.wrap.albedo_color = Color("e6e2d8")
 	_build_model()
@@ -62,34 +62,34 @@ func _light(angles: Vector3, color: Color, energy: float) -> void:
 	light.light_energy = energy
 	viewport_3d.add_child(light)
 
-func _mesh(key: String, mesh: Mesh, material: String) -> MeshInstance3D:
+func _mesh(key: String, mesh: Mesh, surface_material: String) -> MeshInstance3D:
 	var part := MeshInstance3D.new()
 	part.mesh = mesh
-	part.material_override = materials[material]
+	part.material_override = materials[surface_material]
 	model.add_child(part)
 	parts[key] = part
 	return part
 
-func _sphere(key: String, size: Vector3, material: String) -> void:
+func _sphere(key: String, size: Vector3, surface_material: String) -> void:
 	var mesh := SphereMesh.new()
 	mesh.radius = 1.0
 	mesh.height = 2.0
 	mesh.radial_segments = 16
 	mesh.rings = 8
-	_mesh(key, mesh, material).scale = size
+	_mesh(key, mesh, surface_material).scale = size
 
-func _box(key: String, size: Vector3, material: String) -> void:
+func _box(key: String, size: Vector3, surface_material: String) -> void:
 	var mesh := BoxMesh.new()
 	mesh.size = size
-	_mesh(key, mesh, material)
+	_mesh(key, mesh, surface_material)
 
-func _bone(key: String, radius: float, material: String) -> void:
+func _bone(key: String, radius: float, surface_material: String) -> void:
 	var mesh := CapsuleMesh.new()
 	mesh.radius = radius
 	mesh.height = 30.0
 	mesh.radial_segments = 12
 	mesh.rings = 4
-	_mesh(key, mesh, material)
+	_mesh(key, mesh, surface_material)
 
 func _build_model() -> void:
 	for side in ["rear", "lead"]:

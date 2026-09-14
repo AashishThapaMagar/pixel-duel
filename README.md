@@ -1,4 +1,4 @@
-# Pixel Duel
+# Who Won?
 
 A local two-player 2D fighting game prototype built in **Godot 4.2+**. The fighters now use a continuously animated 2D joint rig with connected limbs, distinct guards, anticipation, contact poses, recovery, hit reactions, and a falling KO. Combat runs at 60 physics ticks per second.
 
@@ -27,11 +27,16 @@ Pressing an attack shortly before recovery ends queues it for the first availabl
 
 The game boots into `scenes/MainMenu.tscn` (set as `run/main_scene` in project.godot) rather than straight into a fight:
 
-- **Play** — starts a fresh match at `Arena.tscn` (round 1, Karate).
+- **Start Game** — goes straight into a four-round match with the default fighters. No character selection screen is shown.
+- **How to play** — shows both players' controls, dash and attack-chain tips, and the F1 move guide shortcut.
 - **Settings** — Fullscreen toggle and a Volume slider, both backed by the `Settings` autoload (`scripts/settings.gd`), which applies them immediately (`DisplayServer`/`AudioServer`) and persists them to `user://settings.cfg` so they survive a restart. Volume controls the Master audio bus — there's no sound yet, but the plumbing is there for whenever sound effects are added.
 - **Exit** — quits.
 
-Both screens live in the one `MainMenu` scene (`MainScreen` / `SettingsScreen` Control nodes toggled visible by `main_menu.gd`) rather than separate scene files, since there's so little to each. Pressing Esc during a match returns to this menu at any time.
+The title screen features the Who Won? wordmark, subtle abstract arena lighting, and an orange Start Game button with dark text in every interaction state. It contains no character artwork. Settings and How to Play open as dialogs with keyboard focus and Esc to close. Tab and Enter navigate the home menu.
+
+The match HUD includes mirrored health bars, delayed damage trails, low-health and low-timer colors, round-win markers, and next-round/rematch buttons. F1 opens a scrolling move guide and pauses combat; Esc closes it or returns to the menu.
+
+Interface code lives in `scripts/main_menu.gd`, `character_select.gd`, `match_hud.gd`, `ui_kit.gd`, and `menu_backdrop.gd`. The layout uses the project's 960 × 540 canvas and scales with the game window.
 
 ## Project layout
 
@@ -149,3 +154,11 @@ godot --headless --path . -s res://tests/combat_test.gd
 ```
 
 Both test scripts exit with a nonzero status on assertion failures.
+
+To validate menu dialogs, direct match entry, button contrast, health display, round progression, and rematches:
+
+```bash
+godot --headless --path . -s res://tests/ui_flow_test.gd
+```
+
+For rendered UI screenshots, omit `--headless` and append `-- --capture`; images are saved under `.godot/`.

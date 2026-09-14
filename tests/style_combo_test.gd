@@ -53,7 +53,7 @@ func _run() -> void:
 	for style_index in 4:
 		var style_id: String = arena.round_styles[style_index].style_id
 		var moves := MOVES.for_style(style_id)
-		_check(moves.size() == 6, "Each style must expose six techniques")
+		_check(moves.size() == 8, "Each style must expose six normals and two command enders")
 		for move_id in moves:
 			await _reset(style_index)
 			p1.set_physics_process(false)
@@ -139,7 +139,16 @@ func _run() -> void:
 	select._toggle_ready(1)
 	_check(not select.start_button.disabled, "Both ready must enable start")
 	select._start_match()
-	await _frames(3)
+	# Selection fades out before changing scenes. Bound the wait so a broken
+	# transition reports a failure instead of accessing missing fighter nodes.
+	for i in 60:
+		await _frames(1)
+		if is_instance_valid(current_scene) and current_scene.has_node("Player1"):
+			break
+	if not is_instance_valid(current_scene) or not current_scene.has_node("Player1"):
+		_check(false, "Starting a ready match must reach the arena")
+		quit(1)
+		return
 	_check(current_scene.get_node("Player1").character_profile.id == "briggs", "P1 character must reach the match")
 	_check(current_scene.get_node("Player2").character_profile.id == "vale", "P2 character must reach the match")
 	print("STYLE_COMBO_TEST: ALL PASS" if failures.is_empty() else "STYLE_COMBO_TEST: %d FAILURES" % failures.size())

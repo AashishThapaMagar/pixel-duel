@@ -31,7 +31,7 @@ func _on_area_entered(area: Area2D) -> void:
 	var victim := area.get_parent()
 	if victim != null and victim.has_method("take_hit"):
 		_already_hit.append(area)
-		var continued: bool = victim.state == victim.State.HITSTUN and victim.stun_timer > 0.0
+		var continued: bool = victim.state == victim.State.HITSTUN and victim.stun_timer > 0.0 and victim._combo_attacker == owner_player
 		var previous_health: int = victim.health
 		var landed: bool = victim.take_hit(damage, knockback, owner_player.facing, owner_player, attack_type)
 		if landed:

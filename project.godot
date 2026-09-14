@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Pixel Duel"
+config/name="Who Won?"
 config/description="A 2D fighting game prototype (Tekken/Street-Fighter style) built in Godot."
 run/main_scene="res://scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.2", "GL Compatibility")

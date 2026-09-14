@@ -6,7 +6,8 @@ static func _move(label: String, pose: String, kind: String, base: String, reach
 	startup: float, active: float, recovery: float, damage: float, push: float, lunge: float = 0.0) -> Dictionary:
 	return {"name": label, "pose": pose, "kind": kind, "base": base, "reach": reach, "height": height,
 		"startup": startup, "active": active, "recovery": recovery, "damage": damage, "push": push,
-		"lunge": lunge, "next_light": "", "next_heavy": ""}
+		"lunge": lunge, "next_light": "", "next_heavy": "",
+		"hitstun": 0.25, "blockstun": 0.15, "cancel_window": 0.1, "special_cancel": false}
 
 static func for_style(style_id: String) -> Dictionary:
 	var moves := {
@@ -36,6 +37,32 @@ static func for_style(style_id: String) -> Dictionary:
 			moves.hook = _move("Overhand", "overhand", "punch", "hook", 55, -94, 0.12, 0.06, 0.26, 1.2, 1.0, 12)
 			moves.kick.name = "Body round kick"
 	moves.jab.next_light = "cross"
+	moves.jab.startup = 5.0 / 60.0
+	moves.cross.startup = 7.0 / 60.0
+	moves.jab.hitstun = 14.0 / 60.0
+	moves.cross.hitstun = 17.0 / 60.0
+	moves.jab.blockstun = 8.0 / 60.0
+	moves.cross.blockstun = 10.0 / 60.0
+	moves.jab.special_cancel = true
+	moves.cross.special_cancel = true
+	# Original motion-command enders: committed approach vs. slower space-maker.
+	moves.drive = _move("Driving straight", "cross", "punch", "hook", 62, -88, 10.0 / 60.0, 4.0 / 60.0, 23.0 / 60.0, 1.6, 1.35, 35)
+	moves.breaker = _move("Turning side kick", "side_kick", "kick", "kick", 70, -65, 19.0 / 60.0, 5.0 / 60.0, 28.0 / 60.0, 1.65, 1.7, 10)
+	if style_id == "muay_thai":
+		moves.drive = _move("Step-in knee", "knee", "kick", "kick", 35, -69, 11.0 / 60.0, 4.0 / 60.0, 24.0 / 60.0, 1.4, 1.2, 42)
+		moves.breaker.name = "Power teep"
+		moves.breaker.pose = "front_kick"
+	elif style_id == "boxing":
+		moves.drive.name = "Step-in cross"
+		moves.breaker = _move("Shovel uppercut", "uppercut", "punch", "hook", 42, -89, 17.0 / 60.0, 5.0 / 60.0, 28.0 / 60.0, 1.8, 1.7, 28)
+	elif style_id == "mma":
+		moves.drive.name = "Driving overhand"
+		moves.drive.pose = "overhand"
+		moves.breaker.name = "Power body kick"
+		moves.breaker.pose = "kick"
+	for id in ["drive", "breaker"]:
+		moves[id].hitstun = 20.0 / 60.0
+		moves[id].blockstun = 13.0 / 60.0
 	moves.jab.next_heavy = "kick"
 	moves.cross.next_light = "hook"
 	moves.cross.next_heavy = "back_heavy" if style_id == "muay_thai" else ("kick" if style_id == "mma" else "forward_heavy")
@@ -44,11 +71,14 @@ static func for_style(style_id: String) -> Dictionary:
 static func guide(style_id: String) -> String:
 	var moves := for_style(style_id)
 	var result := "LIGHT: F (P1) / K (P2)     HEAVY: G (P1) / L (P2)\nForward / back are relative to your opponent.\n\n"
-	var commands := ["Light", "Forward + light", "Back + light", "Heavy", "Forward + heavy", "Back + heavy"]
-	var ids := ["jab", "cross", "hook", "kick", "forward_heavy", "back_heavy"]
+	var commands := ["Light", "Forward + light", "Back + light", "Heavy", "Forward + heavy", "Back + heavy", "Down, down-forward, forward + heavy", "Down, down-back, back + heavy"]
+	var ids := ["jab", "cross", "hook", "kick", "forward_heavy", "back_heavy", "drive", "breaker"]
 	for i in ids.size():
-		result += "%s  —  %s\n" % [commands[i], moves[ids[i]].name]
+		var move: Dictionary = moves[ids[i]]
+		var on_block := roundi((float(move.blockstun) - float(move.active) - float(move.recovery)) * 60)
+		result += "%s  —  %s\n    %df startup / %df active / %df recovery / %+d on block*\n" % [commands[i], move.name, roundi(move.startup * 60), roundi(move.active * 60), roundi(move.recovery * 60), on_block]
 	result += "\nPUNCH CHAIN: Light > Light > Light\n%s > %s > %s\n" % [moves.jab.name, moves.cross.name, moves.hook.name]
 	result += "\nMIXED CHAIN: Light > Light > Heavy\n%s > %s > %s\n" % [moves.jab.name, moves.cross.name, moves[moves.cross.next_heavy].name]
-	result += "\nPress each button separately as the previous hit connects.\nOnly landed hits allow an early chain. Guard or whiff breaks the route."
+	result += "\nCOMMAND ENDER: Light > Light > quarter-circle forward + Heavy\nDown is S (P1) / Down arrow (P2). Roll through the diagonal, finish forward, then press Heavy.\nComplete the motion within 0.4 seconds. Directions mirror when you switch sides."
+	result += "\nPress each button separately as the previous hit connects.\nOnly landed hits allow a cancel, within 6 frames after active frames end.\nGuard or whiff denies the cancel. Command enders have long, punishable recovery.\nCounter hit: catch startup for +20% damage and 6 extra stun frames.\nPunish: catch recovery. True combos scale to a 40% damage floor.\n*On-block figures assume earliest contact, rounded to 60 Hz; later contact changes advantage."
 	return result
