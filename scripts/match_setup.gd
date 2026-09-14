@@ -6,6 +6,10 @@ var vs_ai: bool = false
 var arcade: bool = false
 var arcade_opponents: Array[int] = []
 var arcade_index: int = 0
+## Story Mode is Arcade's same matchup order with dialogue layered around
+## each fight (see story_director.gd); this only marks that the dialogue
+## layer is active, all progression state above still drives it.
+var story: bool = false
 
 ## Builds the run's opponent order: every regular roster fighter (indices
 ## 0-5) except the one the player picked, in roster order, with Anant

@@ -12,6 +12,7 @@ var mode_summary_label: Label
 var mode_two_button: Button
 var mode_ai_button: Button
 var mode_arcade_button: Button
+var mode_story_button: Button
 var arena_name_label: Label
 var arena_tagline_label: Label
 var arena_preview: TextureRect
@@ -79,12 +80,48 @@ func _ready() -> void:
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	play_button.grab_focus()
 	_refresh_mode_summary()
-	UI.enter(self)
+	for reveal in [[eyebrow, 0.0], [title, 0.05], [subtitle, 0.12], [play_button, 0.18],
+			[guide, 0.24], [match_setup, 0.26], [settings, 0.28], [quit_button, 0.06],
+			[styles, 0.3], [footer, 0.32]]:
+		_reveal(reveal[0], reveal[1])
+
+## Staggers each element in on its own delay so the menu builds up piece by
+## piece instead of popping in all at once; works on any control since it
+## animates position/alpha rather than needing a known size for pivoting.
+func _reveal(node: Control, delay: float) -> void:
+	node.modulate.a = 0.0
+	var target := node.position
+	node.position = target + Vector2(0, 16.0)
+	var tween := create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_interval(delay)
+	tween.tween_callback(func():
+		var inner := node.create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		inner.tween_property(node, "modulate:a", 1.0, 0.22)
+		inner.tween_property(node, "position", target, 0.28))
 
 func _start_fight() -> void:
 	if transitioning or is_instance_valid(modal):
 		return
 	transitioning = true
+	# Story always launches through StoryDialogue first (the prologue), which
+	# hands off to Arena itself once the opening lines are read; quitting
+	# mid-run and restarting always begins the story over from here.
+	if MatchSetup.story:
+		MatchSetup.begin_arcade()
+		StoryDirector.start_run()
+		var story_tween := create_tween()
+		story_tween.tween_property(self, "modulate:a", 0.0, 0.16)
+		story_tween.tween_callback(func():
+			# Resolved before opening StoryDialogue so it only ever has to
+			# open on something to actually say — see its _ready() comment.
+			var destination: int = StoryDirector.resolve()
+			if destination == StoryDirector.Destination.ARENA:
+				get_tree().change_scene_to_file("res://scenes/Arena.tscn")
+			elif destination == StoryDirector.Destination.MENU:
+				get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
+			else:
+				get_tree().change_scene_to_file("res://scenes/StoryDialogue.tscn"))
+		return
 	if MatchSetup.arcade:
 		MatchSetup.begin_arcade()
 	var tween := create_tween()
@@ -104,18 +141,25 @@ func _show_match_setup() -> void:
 	modal_content.add_child(arena_preview)
 	UI.label(modal_content, "SEVEN PLACES. ONE WINNER.", Vector2(28, 251), Vector2(230, 20), 10, UI.MUTED)
 	UI.label(modal_content, "MODE", Vector2(280, 96), Vector2(140, 20), 11, UI.MUTED)
-	mode_two_button = UI.button(modal_content, "2 PLAYERS", Vector2(280, 120), Vector2(96, 34))
-	mode_ai_button = UI.button(modal_content, "VS AI", Vector2(386, 120), Vector2(96, 34))
-	mode_arcade_button = UI.button(modal_content, "ARCADE", Vector2(492, 120), Vector2(96, 34))
-	for button in [mode_two_button, mode_ai_button, mode_arcade_button]:
-		button.add_theme_font_size_override("font_size", 12)
+	mode_two_button = UI.button(modal_content, "2P", Vector2(280, 120), Vector2(70, 34))
+	mode_ai_button = UI.button(modal_content, "VS AI", Vector2(354, 120), Vector2(70, 34))
+	mode_arcade_button = UI.button(modal_content, "ARCADE", Vector2(428, 120), Vector2(70, 34))
+	mode_story_button = UI.button(modal_content, "STORY", Vector2(502, 120), Vector2(70, 34))
+	for button in [mode_two_button, mode_ai_button, mode_arcade_button, mode_story_button]:
+		button.add_theme_font_size_override("font_size", 10)
+		button.focus_mode = Control.FOCUS_NONE
 	mode_arcade_button.pressed.connect(func():
+		MatchSetup.arcade = true
+		MatchSetup.vs_ai = true
+		MatchSetup.story = false
+		_refresh_match_setup()
+		_refresh_mode_summary())
+	mode_story_button.pressed.connect(func():
+		MatchSetup.story = true
 		MatchSetup.arcade = true
 		MatchSetup.vs_ai = true
 		_refresh_match_setup()
 		_refresh_mode_summary())
-	mode_two_button.focus_mode = Control.FOCUS_NONE
-	mode_ai_button.focus_mode = Control.FOCUS_NONE
 	mode_two_button.pressed.connect(func(): _set_vs_ai(false))
 	mode_ai_button.pressed.connect(func(): _set_vs_ai(true))
 
@@ -146,6 +190,7 @@ func _show_match_setup() -> void:
 
 func _set_vs_ai(value: bool) -> void:
 	MatchSetup.arcade = false
+	MatchSetup.story = false
 	MatchSetup.vs_ai = value
 	_refresh_match_setup()
 	_refresh_mode_summary()
@@ -160,7 +205,8 @@ func _refresh_match_setup() -> void:
 	arena_tagline_label.text = arena_data.tagline
 	arena_preview.texture = load(arena_data.texture)
 	arena_count_label.text = "ARENA %02d / %02d" % [MatchSetup.selected_arena + 1, ARENA_CATALOG.ARENAS.size()]
-	for pair in [[mode_two_button, not MatchSetup.vs_ai], [mode_ai_button, MatchSetup.vs_ai and not MatchSetup.arcade], [mode_arcade_button, MatchSetup.arcade]]:
+	for pair in [[mode_two_button, not MatchSetup.vs_ai], [mode_ai_button, MatchSetup.vs_ai and not MatchSetup.arcade],
+			[mode_arcade_button, MatchSetup.arcade and not MatchSetup.story], [mode_story_button, MatchSetup.story]]:
 		var button: Button = pair[0]
 		var active: bool = pair[1]
 		button.add_theme_stylebox_override("normal", UI.box(Color("29352b") if active else UI.PANEL, UI.LIME if active else UI.LINE, 2 if active else 1))
@@ -171,6 +217,8 @@ func _refresh_mode_summary() -> void:
 	mode_summary_label.text = "LOCAL VERSUS   /   PLAYER VS AI" if MatchSetup.vs_ai else "LOCAL VERSUS   /   2 PLAYERS"
 	if MatchSetup.arcade:
 		mode_summary_label.text = "ARCADE   /   ROAD TO ANANT"
+	if MatchSetup.story:
+		mode_summary_label.text = "STORY MODE   /   ROAD TO ANANT"
 
 func _show_roster() -> void:
 	_open_modal("CHOOSE YOUR FIGHTERS", "THE ROSTER")
@@ -245,6 +293,13 @@ func _show_settings() -> void:
 		Settings.set_volume(volume)
 		value.text = "%d%%" % roundi(volume * 100))
 	modal_content.add_child(slider)
+	var touch := CheckBox.new()
+	touch.text = "Touch Controls"
+	touch.position = Vector2(287, 210)
+	touch.size = Vector2(304, 42)
+	touch.button_pressed = Settings.touch_controls
+	touch.toggled.connect(Settings.set_touch_controls)
+	modal_content.add_child(touch)
 	UI.label(modal_content, "Changes are saved automatically.", Vector2(28, 251), Vector2(540, 22), 13, UI.MUTED)
 
 func _show_guide() -> void:

@@ -7,6 +7,9 @@ const SAVE_PATH := "user://settings.cfg"
 
 var fullscreen: bool = false
 var volume: float = 0.8   # 0..1 linear, converted to dB for the Master bus
+## Defaults on for an actual touchscreen (mobile export) and off elsewhere,
+## but the player can flip it either way (a touch laptop, testing on desktop).
+var touch_controls: bool = DisplayServer.is_touchscreen_available()
 
 func _ready() -> void:
 	_load()
@@ -20,6 +23,10 @@ func set_fullscreen(value: bool) -> void:
 func set_volume(value: float) -> void:
 	volume = clamp(value, 0.0, 1.0)
 	_apply()
+	_save()
+
+func set_touch_controls(value: bool) -> void:
+	touch_controls = value
 	_save()
 
 func _apply() -> void:
@@ -36,9 +43,11 @@ func _load() -> void:
 	if cfg.load(SAVE_PATH) == OK:
 		fullscreen = cfg.get_value("display", "fullscreen", fullscreen)
 		volume = cfg.get_value("audio", "volume", volume)
+		touch_controls = cfg.get_value("display", "touch_controls", touch_controls)
 
 func _save() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("display", "fullscreen", fullscreen)
 	cfg.set_value("audio", "volume", volume)
+	cfg.set_value("display", "touch_controls", touch_controls)
 	cfg.save(SAVE_PATH)

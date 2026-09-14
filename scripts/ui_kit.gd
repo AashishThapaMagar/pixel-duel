@@ -71,8 +71,13 @@ static func button(parent: Node, text: String, pos: Vector2, dimensions: Vector2
 	node.text = text
 	node.position = pos
 	node.size = dimensions
+	node.pivot_offset = dimensions * 0.5
 	node.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	parent.add_child(node)
+	node.mouse_entered.connect(func(): _pop(node, 1.045, 0.15))
+	node.mouse_exited.connect(func(): _pop(node, 1.0, 0.18))
+	node.button_down.connect(func(): _pop(node, 0.93, 0.06))
+	node.button_up.connect(func(): _pop(node, 1.045 if node.is_hovered() else 1.0, 0.12))
 	if primary:
 		node.add_theme_stylebox_override("normal", box(LIME, LIME))
 		node.add_theme_stylebox_override("hover", box(Color("e5ff8e"), WHITE))
@@ -81,6 +86,22 @@ static func button(parent: Node, text: String, pos: Vector2, dimensions: Vector2
 			node.add_theme_color_override(state, INK)
 	return node
 
+## Springy scale toward target_scale, replacing any pop still in flight on
+## this control so rapid hover in/out doesn't fight itself.
+static func _pop(node: Control, target_scale: float, duration: float) -> void:
+	var existing: Tween = node.get_meta("_pop_tween") if node.has_meta("_pop_tween") else null
+	if existing != null and existing.is_valid():
+		existing.kill()
+	var tween := node.create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(node, "scale", Vector2.ONE * target_scale, duration)
+	node.set_meta("_pop_tween", tween)
+
+## Fade in with a short slide-down, used for pages and modals alike. Works
+## on any control regardless of size since it animates position, not scale.
 static func enter(control: Control) -> void:
 	control.modulate.a = 0.0
-	control.create_tween().tween_property(control, "modulate:a", 1.0, 0.25)
+	var target_position := control.position
+	control.position = target_position + Vector2(0, 14)
+	var tween := control.create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(control, "modulate:a", 1.0, 0.24)
+	tween.tween_property(control, "position", target_position, 0.32)

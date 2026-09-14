@@ -9,6 +9,7 @@ const ACTION := preload("res://resources/styles/action.tres")
 const MOVES := preload("res://scripts/move_catalog.gd")
 const ARENAS := preload("res://scripts/arena_catalog.gd")
 const AI_CONTROLLER := preload("res://scripts/ai_controller.gd")
+const ROSTER := preload("res://scripts/fighter_roster.gd")
 
 @onready var player1: CharacterBody2D = $Player1
 @onready var player2: CharacterBody2D = $Player2
@@ -94,6 +95,10 @@ func _ready() -> void:
 	player2.ko.connect(func(): _end_round(1))
 	_build_move_ui()
 	add_child(preload("res://scripts/match_hud.gd").new())
+	# Only instantiated when the player has opted in (see settings.gd); it
+	# lays itself out for 1 or 2 touch players on its own in _ready().
+	if Settings.touch_controls:
+		add_child(preload("res://scripts/touch_controls.gd").new())
 
 	result_label.visible = false
 	_update_pips()
@@ -182,14 +187,35 @@ func _start_new_match() -> void:
 		# A win advances to the next rival (or restarts the run fresh after
 		# beating Anant); a loss or draw retries the same rival unchanged.
 		# The scene reload re-reads MatchSetup's updated fighters/arena.
-		if round_wins[0] > round_wins[1]:
-			if MatchSetup.is_final_boss():
-				MatchSetup.begin_arcade()
+		var won: bool = round_wins[0] > round_wins[1]
+		var was_final_boss: bool = MatchSetup.is_final_boss()
+		# Captured before selected_fighters[1] advances below, so it still
+		# names the rival this match was actually against.
+		var opponent_id: String = ROSTER.profile(MatchSetup.selected_fighters[1]).id
+		if won:
+			if was_final_boss:
+				# Story mode shows the finale before resetting the run; plain
+				# Arcade just starts a fresh one immediately.
+				if not MatchSetup.story:
+					MatchSetup.begin_arcade()
 			else:
 				MatchSetup.arcade_index += 1
 				MatchSetup.selected_fighters[1] = MatchSetup.arcade_opponents[MatchSetup.arcade_index]
 				MatchSetup.selected_arena = (MatchSetup.selected_arena + 1) % ARENAS.ARENAS.size()
-		get_tree().reload_current_scene()
+		if MatchSetup.story:
+			StoryDirector.report_result(opponent_id, won, was_final_boss)
+			# Resolved here, before ever opening StoryDialogue, so that scene
+			# only ever has to open on something to actually say (see its
+			# _ready() comment for why resolving from inside it is unsafe).
+			var destination: int = StoryDirector.resolve()
+			if destination == StoryDirector.Destination.ARENA:
+				get_tree().reload_current_scene()
+			elif destination == StoryDirector.Destination.MENU:
+				get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
+			else:
+				get_tree().change_scene_to_file("res://scenes/StoryDialogue.tscn")
+		else:
+			get_tree().reload_current_scene()
 		return
 	round_wins = [0, 0]
 	match_over = false

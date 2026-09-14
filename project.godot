@@ -12,7 +12,7 @@ config_version=5
 
 config/name="Who Won?"
 config/description="A 2D fighting game prototype (Tekken/Street-Fighter style) built in Godot."
-run/main_scene="res://scenes/MainMenu.tscn"
+run/main_scene="res://scenes/Splash.tscn"
 config/features=PackedStringArray("4.2", "GL Compatibility")
 config/icon="res://icon.svg"
 
@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 
 Settings="*res://scripts/settings.gd"
 MatchSetup="*res://scripts/match_setup.gd"
+StoryDirector="*res://scripts/story_director.gd"
 
 [display]
 
