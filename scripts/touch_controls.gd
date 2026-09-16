@@ -42,6 +42,7 @@ func _build_player(prefix: String, move_anchor: float, action_anchor: float, tin
 	_button(prefix + "left", move_anchor - 40.0, 470.0, "L", tint)
 	_button(prefix + "right", move_anchor + 40.0, 470.0, "R", tint)
 	_button(prefix + "jump", move_anchor, 400.0, "JUMP", tint)
+	_button(prefix + "run", move_anchor, 330.0, "RUN", tint)
 	_button(prefix + "block", action_anchor - 50.0, 475.0, "GRD", tint)
 	_button(prefix + "punch", action_anchor + 50.0, 475.0, "LT", tint)
 	_button(prefix + "kick", action_anchor, 405.0, "HV", tint)

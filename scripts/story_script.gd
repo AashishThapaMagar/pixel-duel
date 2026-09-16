@@ -20,6 +20,14 @@ extends RefCounted
 ## "ish", "sab", "bib", "abhi", "sup", "anant"), or "" for your own line /
 ## narration. An empty array ([]) skips that beat entirely — e.g. leave
 ## CHAPTERS[id].defeat as [] if you don't want a loss line for that fighter.
+##
+## Dubbing a line is optional and opt-in per line — add a "voice" key with
+## the clip's res:// path (.ogg/.wav/.mp3, imported like any other Godot
+## audio asset) and story_dialogue.gd plays it the instant that line shows:
+##   {"speaker": "ish", "text": "Keep up if you can.", "voice": "res://audio/voice/ish_intro_01.ogg"}
+## Lines with no "voice" key (every line right now) just stay silent — text
+## alone is never blocked on a clip existing, so you can dub incrementally,
+## one character or one chapter at a time, and leave the rest untouched.
 
 const PROLOGUE := [
 	{"speaker": "", "text": "Seven names on the board. One is walking home with the title."},

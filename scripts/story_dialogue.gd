@@ -16,6 +16,7 @@ var name_label: Label
 var text_label: Label
 var accent_bar: ColorRect
 var portrait_dot: Panel
+var voice_player: AudioStreamPlayer
 
 func _ready() -> void:
 	theme = UI.theme()
@@ -52,6 +53,9 @@ func _ready() -> void:
 	var hint := UI.label(self, "CONTINUE / ENTER   ·   SKIP / ESC", Vector2(60, 478), Vector2(840, 18), 10, UI.MUTED)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
+	voice_player = AudioStreamPlayer.new()
+	add_child(voice_player)
+
 	lines = StoryDirector.current_lines()
 	line_index = 0
 	_show_line()
@@ -84,6 +88,21 @@ func _show_line() -> void:
 	tween.tween_property(portrait_dot, "modulate:a", 1.0, 0.15)
 	tween.tween_property(text_label, "modulate:a", 1.0, 0.25).set_delay(0.05)
 	text_label.text = line.get("text", "")
+	_play_voice(line.get("voice", ""))
+
+## Plays this line's dub clip if story_script.gd gave it one and the file is
+## actually there; silently does nothing otherwise (a missing/omitted clip
+## is expected for most lines until they're recorded — never blocks the
+## text from showing). Cuts off any clip still playing from the previous
+## line first, same as _next_line/_advance_flow cutting off its tweens.
+func _play_voice(voice_path: String) -> void:
+	voice_player.stop()
+	if voice_path.is_empty() or not ResourceLoader.exists(voice_path):
+		return
+	var stream: AudioStream = load(voice_path)
+	if stream != null:
+		voice_player.stream = stream
+		voice_player.play()
 
 func _next_line() -> void:
 	line_index += 1
@@ -122,9 +141,13 @@ func _advance_flow() -> void:
 				_show_line()
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Marked handled BEFORE acting: _advance_flow()/_next_line() can call
+	# change_scene_to_file(), which leaves this node outside the tree —
+	# get_viewport() on it afterward returns null and crashes on the very
+	# next line.
 	if event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
 		_advance_flow()
-		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("ui_accept") or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
-		_next_line()
 		get_viewport().set_input_as_handled()
+		_next_line()

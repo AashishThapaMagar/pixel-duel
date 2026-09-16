@@ -92,6 +92,13 @@ static func _pop(node: Control, target_scale: float, duration: float) -> void:
 	var existing: Tween = node.get_meta("_pop_tween") if node.has_meta("_pop_tween") else null
 	if existing != null and existing.is_valid():
 		existing.kill()
+	# A hover/press signal can still fire after the button's scene has
+	# already changed out from under it (e.g. a stray mouse_exited the
+	# instant a menu button's scene unloads); create_tween() on a node
+	# that's left the tree returns null instead of erroring, so guard it
+	# explicitly rather than crashing one line down.
+	if not node.is_inside_tree():
+		return
 	var tween := node.create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(node, "scale", Vector2.ONE * target_scale, duration)
 	node.set_meta("_pop_tween", tween)

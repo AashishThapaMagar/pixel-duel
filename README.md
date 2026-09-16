@@ -1,6 +1,6 @@
 # Who Won?
 
-An original action fighting game prototype in Godot 4.2+, with articulated 3D fighters on a 2D combat plane and seven animated Himalayan arenas. Every match lasts **four rounds**. Each fighter keeps their own moves throughout; the most round wins takes the match.
+An original action fighting game prototype in Godot 4.2+, with illustrated Nepali-inspired fighter sprites on a 2D combat plane and seven animated Himalayan arenas. Every match lasts **four rounds**. Each fighter keeps their own moves throughout; the most round wins takes the match.
 
 Choose **Match Setup > Fighters** to select Anug, Ish, Sab, Bib, Abhi, Sup, or Anant. Start Game uses your selected fighters. The home screen remains free of character previews.
 
@@ -216,3 +216,15 @@ Action roster, actual hitbox contact, stamina, special abilities, selection and 
 godot --headless --path . -s res://tests/action_roster_test.gd
 
 Omit --headless and append -- --capture to save roster and signature-pose screenshots under .godot/action-*.png.
+
+## Nepali-inspired fighter sprites
+
+The home screen now exposes Story, Arcade, Versus AI and Local Versus as selectable mode cards. Fighters, Arena/Setup, Fight Options, Move Guide and Settings have direct shortcuts. Fight Options sets AI difficulty (reaction and decision speed), a 60/99/120-second timer, and impact camera shake; matches retain four rounds.
+
+Normal movement walks at 65% of movement speed. Hold Shift (P1), Ctrl (P2), or touch RUN while moving forward to run. Backward movement stays opponent-facing at 72% of walking speed; holding back guards grounded strikes, but throws beat guard. Locomotion animates the original illustrated trousers and shoes using a textured 2D mesh fitted separately to all seven fighters. Upper and lower bodies share the same artwork, with a joined pelvis seam, alternating planted contacts and lifted swing feet driven by actual distance. Run has a higher knee lift and faster stride. Stationary collision and teleports do not advance the gait. Run tests/locomotion_test.gd for all seven fighters, planted-foot checks, retreat guard and held run input; tests/menu_walk_test.gd covers menu options and speed changes.
+
+The playable fighters now use seven individual illustrated PNG atlases in `assets/sprites/fighter/nepali/`, rendered by `scripts/fighter_sprite_visual.gd`. Sab and Abhi are large, Ish is skinny, Bib is small, and Anug, Sup and Anant have distinct athletic silhouettes and Nepali-inspired outfits. All are original adult characters, with 16 frames each for movement, guard, attacks, signature action, hit reaction and KO. Some advanced moves share an animation family in this initial art pass.
+
+The original PNG pixels are preserved. Alpha-derived frame regions prevent clipping extended limbs, and grounded frames align to the fighting floor. Attack frames follow the combat clock and hit-stop. Character display height varies; collision and gameplay traits remain controlled by the combat system. The previous mesh renderer remains available on disk.
+
+Asset validation: `python tools/index_fighter_atlases.py` (Pillow, numpy and scipy). Runtime checks: `godot --headless --path . -s res://tests/fighter_sprite_test.gd`. See `docs/nepali-fighter-art.md` for art direction and `assets/sprites/fighter/nepali/README.md` for frame mapping.

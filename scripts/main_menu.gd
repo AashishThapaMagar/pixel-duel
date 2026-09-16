@@ -3,6 +3,26 @@ const UI := preload("res://scripts/ui_kit.gd")
 const BACKDROP := preload("res://scripts/menu_backdrop.gd")
 const ARENA_CATALOG := preload("res://scripts/arena_catalog.gd")
 const ROSTER := preload("res://scripts/fighter_roster.gd")
+## Warm "title screen" palette — reserved for the hero wordmark, the primary
+## CTA and the currently-selected mode row. Everything else (secondary
+## buttons, modals, in-fight HUD) keeps the app-wide lime interaction accent
+## from ui_kit's default theme, so FIRE reads as this screen's own emphasis
+## rather than replacing the game's established accent language everywhere.
+const FIRE := Color("ff9966")
+const FIRE_DEEP := Color("7a2c1c")
+const CREAM := Color("fff2e0")
+## A warm stand-in for ui_kit's UI.MUTED (a cool blue-grey) on this screen
+## only — modals keep the app-wide MUTED since they're not part of the
+## title-screen palette. Using MUTED here left the tagline and inactive
+## list items visibly the wrong temperature against the firelit backdrop.
+const NEUTRAL := Color("8f8175")
+## Keyed by mode id -> the row's Button, same contract as before this
+## screen's redesign (menu_walk_test.gd drives these directly by button,
+## e.g. `home_modes[mode].pressed.emit()`) — each row's y position and
+## description text live in mode_rows instead, for _style_row's use.
+var home_modes: Dictionary = {}
+var mode_rows: Dictionary = {}
+var mode_desc_label: Label
 var modal: Control
 var modal_content: Control
 var play_button: Button
@@ -18,72 +38,215 @@ var arena_tagline_label: Label
 var arena_preview: TextureRect
 var arena_count_label: Label
 
+## Deliberately no panels, no boxed cards, no bordered buttons on this
+## screen — the backdrop supplies all the visual weight (see
+## menu_backdrop.gd) and everything here is plain text laid directly over
+## it, the way an arcade fighting game's own title screen reads: a wordmark,
+## a short stacked list of modes, and small print. _flat_button below is
+## what keeps every interactive element on the list looking like text
+## instead of a UI control.
 func _ready() -> void:
 	theme = UI.theme()
 	add_child(BACKDROP.new())
-	var display_font := SystemFont.new()
-	display_font.font_names = PackedStringArray(["Bahnschrift", "Arial", "sans-serif"])
-	display_font.font_weight = 800
-	display_font.font_stretch = 80
-	var accent := Color("ff9966")
-	UI.label(self, "W / W", Vector2(36, 23), Vector2(90, 25), 19, accent).add_theme_font_override("font", display_font)
-	UI.label(self, "WHO WON?", Vector2(116, 27), Vector2(145, 22), 12, Color("b2bccb"))
-	mode_summary_label = UI.label(self, "LOCAL VERSUS   /   2 PLAYERS", Vector2(644, 27), Vector2(245, 22), 11, UI.MUTED)
-	var quit_button := UI.button(self, "EXIT", Vector2(873, 20), Vector2(58, 32))
-	quit_button.add_theme_font_size_override("font_size", 11)
+
+	UI.label(self, "W / W", Vector2(24, 18), Vector2(90, 22), 15, FIRE)
+	mode_summary_label = UI.label(self, "", Vector2(0, 18), Vector2(960, 22), 12, NEUTRAL)
+	mode_summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var quit_button := _flat_button("EXIT", Vector2(872, 14), Vector2(64, 28), 13)
 	quit_button.pressed.connect(func(): get_tree().quit())
-	var eyebrow := UI.label(self, "NO EXCUSES. JUST THE SCORE.", Vector2(200, 113), Vector2(560, 24), 12, accent)
+
+	var eyebrow := UI.label(self, "NEPAL. YOUR ARENA.", Vector2(0, 62), Vector2(960, 22), 13, FIRE)
 	eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var title := UI.label(self, "WHO WON?", Vector2(95, 141), Vector2(770, 116), 100, Color("e2e8f0"))
+	var title := _logo("WHO WON?", Vector2(0, 84), Vector2(960, 92), 64)
 	title.name = "GameTitle"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_override("font", display_font)
-	title.add_theme_color_override("font_shadow_color", Color("573223"))
-	title.add_theme_constant_override("shadow_offset_x", 3)
-	title.add_theme_constant_override("shadow_offset_y", 5)
-	var subtitle := UI.label(self, "Seven fighters. Four rounds. Your style. Your fight.", Vector2(130, 269), Vector2(700, 28), 15, Color("a6b1c3"))
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	play_button = UI.button(self, "START GAME    /    ENTER", Vector2(322, 322), Vector2(316, 54))
+	# A tiered pagoda roofline stands in for a plain underline — three
+	# narrowing eaves and a finial, echoing the temple architecture already
+	# throughout this game's own arenas (Lakeside Temple, Prayer Flag Pass),
+	# instead of a generic UI divider bar.
+	_pagoda_emblem(Vector2(480, 178))
+	var tagline := UI.label(self, "Seven rivals. Four rounds. Make every opening count.", Vector2(0, 200), Vector2(960, 22), 14, NEUTRAL)
+	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# The mode list: plain centered text, big and widely spaced, exactly the
+	# way an arcade cabinet's own mode list reads — no boxes, no per-row
+	# borders. Selection shows as brightness plus a small leading marker,
+	# and only the selected (or hovered) row's description shows at all,
+	# in one label shared between rows, so the list stays uncluttered.
+	mode_desc_label = UI.label(self, "", Vector2(0, 0), Vector2(960, 18), 12, NEUTRAL)
+	mode_desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var modes := [["story", "STORY", "Follow the road to Anant"], ["arcade", "ARCADE", "Fight the roster. Defeat the boss."], ["ai", "VERSUS AI", "Pick a rival and test your skill"], ["local", "LOCAL VERSUS", "Two players. One keyboard."]]
+	const ROW_TOP := 246.0
+	const ROW_GAP := 44.0
+	for i in modes.size():
+		var data: Array = modes[i]
+		var row_y: float = ROW_TOP + i * ROW_GAP
+		var row := _mode_row(data[0], data[1], data[2], row_y)
+		row.button.pressed.connect(_choose_home_mode.bind(data[0]))
+		home_modes[data[0]] = row.button
+		mode_rows[data[0]] = row
+		_reveal(row.button, i * 0.05)
+
+	play_button = _flat_button("ENTER TO FIGHT", Vector2(0, 456), Vector2(960, 28), 17)
 	play_button.name = "StartGame"
-	play_button.add_theme_font_size_override("font_size", 16)
-	play_button.add_theme_font_override("font", display_font)
-	play_button.add_theme_stylebox_override("normal", UI.box(accent, accent, 0))
-	play_button.add_theme_stylebox_override("hover", UI.box(Color("ffb48c"), Color("ffb48c"), 0))
-	play_button.add_theme_stylebox_override("pressed", UI.box(Color("e78455"), Color("e78455"), 0))
-	var focus := UI.box(Color(0, 0, 0, 0), Color("ffe0cf"), 1)
-	focus.expand_margin_left = 4
-	focus.expand_margin_right = 4
-	focus.expand_margin_top = 4
-	focus.expand_margin_bottom = 4
-	play_button.add_theme_stylebox_override("focus", focus)
-	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
-		play_button.add_theme_color_override(state, Color("16100d"))
+	play_button.add_theme_color_override("font_color", FIRE)
+	play_button.add_theme_color_override("font_focus_color", FIRE)
+	# A slow "press start" blink instead of a filled button draws the eye
+	# without adding another box to the screen.
+	var pulse := play_button.create_tween().set_loops()
+	pulse.tween_property(play_button, "modulate:a", 0.5, 0.9).set_trans(Tween.TRANS_SINE)
+	pulse.tween_property(play_button, "modulate:a", 1.0, 0.9).set_trans(Tween.TRANS_SINE)
 	play_button.pressed.connect(_start_fight)
-	var guide := UI.button(self, "HOW TO PLAY", Vector2(250, 393), Vector2(146, 33))
-	guide.add_theme_font_size_override("font_size", 11)
-	guide.pressed.connect(_show_guide)
-	var match_setup := UI.button(self, "MATCH SETUP", Vector2(407, 393), Vector2(146, 33))
-	match_setup.add_theme_font_size_override("font_size", 11)
-	match_setup.pressed.connect(_show_match_setup)
-	var settings := UI.button(self, "SETTINGS", Vector2(564, 393), Vector2(146, 33))
-	settings.add_theme_font_size_override("font_size", 11)
-	settings.pressed.connect(_show_settings)
-	for button in [guide, match_setup, settings, quit_button]:
-		button.add_theme_stylebox_override("normal", UI.box(Color("101722"), Color("303b49")))
-		button.add_theme_stylebox_override("hover", UI.box(Color("232a33"), accent))
-		button.add_theme_stylebox_override("focus", UI.box(Color(0, 0, 0, 0), accent, 1))
-		button.add_theme_color_override("font_hover_color", accent)
-	var styles := UI.label(self, "ANUG   /   ISH   /   SAB   /   BIB   /   ABHI   /   SUP   /   ANANT", Vector2(120, 461), Vector2(720, 24), 11, Color("798799"))
-	styles.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	UI.label(self, "ONE KEYBOARD. TWO RIVALS.", Vector2(36, 507), Vector2(330, 20), 10, Color("7e8a9b"))
-	var footer := UI.label(self, "READY WHEN YOU ARE.", Vector2(654, 507), Vector2(270, 20), 10, accent)
-	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	play_button.grab_focus()
+
+	var divider := ColorRect.new()
+	divider.position = Vector2(260, 494)
+	divider.size = Vector2(440, 1)
+	divider.color = Color("2a231d")
+	add_child(divider)
+	var actions := [["FIGHTERS", _show_roster], ["ARENA", _show_match_setup], ["OPTIONS", _show_fight_options], ["MOVES", _show_guide], ["SETTINGS", _show_settings]]
+	var action_x := 480.0 - actions.size() * 90.0 * 0.5
+	for i in actions.size():
+		var action: Array = actions[i]
+		var button := _flat_button(action[0], Vector2(action_x + i * 90.0, 502), Vector2(90, 22), 11)
+		button.pressed.connect(action[1])
+	var footer_left := UI.label(self, "7 FIGHTERS  /  7 ARENAS  /  4 ROUNDS", Vector2(0, 522), Vector2(400, 18), 10, Color("5c5349"))
+	var footer_right := UI.label(self, "TAB SELECT   ·   ENTER CONFIRM", Vector2(560, 522), Vector2(400, 18), 10, Color("5c5349"))
+	footer_right.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_refresh_mode_summary()
-	for reveal in [[eyebrow, 0.0], [title, 0.05], [subtitle, 0.12], [play_button, 0.18],
-			[guide, 0.24], [match_setup, 0.26], [settings, 0.28], [quit_button, 0.06],
-			[styles, 0.3], [footer, 0.32]]:
-		_reveal(reveal[0], reveal[1])
+	play_button.grab_focus()
+
+## A plain-text interactive control: same click/hover/focus/keyboard
+## behaviour as ui_kit's button(), but with every stylebox emptied out so
+## nothing box-shaped ever draws — just the label brightening on hover or
+## focus. This is what keeps every clickable word on this screen looking
+## like part of a menu list instead of a UI widget.
+func _flat_button(text: String, pos: Vector2, dimensions: Vector2, font_size: int) -> Button:
+	var btn := UI.button(self, text, pos, dimensions)
+	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	btn.add_theme_font_size_override("font_size", font_size)
+	var empty := StyleBoxEmpty.new()
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		btn.add_theme_stylebox_override(state, empty)
+	btn.add_theme_color_override("font_color", NEUTRAL)
+	btn.add_theme_color_override("font_hover_color", FIRE)
+	btn.add_theme_color_override("font_focus_color", FIRE)
+	btn.add_theme_color_override("font_pressed_color", FIRE)
+	return btn
+
+## Layers a drop shadow behind an outlined, heavier-weight label to fake a
+## chiseled arcade wordmark without a custom font or shader.
+func _logo(text: String, pos: Vector2, dimensions: Vector2, font_size: int) -> Label:
+	var font := SystemFont.new()
+	font.font_names = PackedStringArray(["Bahnschrift", "Arial"])
+	font.font_weight = 800
+	font.font_stretch = 80
+	var shadow := UI.label(self, text, pos + Vector2(5, 6), dimensions, font_size, Color(0, 0, 0, 0.55))
+	shadow.add_theme_font_override("font", font)
+	shadow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var main := UI.label(self, text, pos, dimensions, font_size, CREAM)
+	main.add_theme_font_override("font", font)
+	main.add_theme_color_override("font_outline_color", FIRE_DEEP)
+	main.add_theme_constant_override("outline_size", 7)
+	main.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	return main
+
+## A small stacked-roof silhouette — three tiers narrowing upward, upturned
+## eaves at each corner, a stem and a finial on top — built from plain
+## Polygon2D/ColorRect primitives (no art asset needed). base_pos is where
+## the bottom (widest) tier's underside sits, centered horizontally on it.
+func _pagoda_emblem(base_pos: Vector2) -> void:
+	var tiers := [[132.0, 5.0], [92.0, 4.0], [58.0, 4.0]]
+	var y := base_pos.y
+	for tier in tiers:
+		var w: float = tier[0]
+		var h: float = tier[1]
+		var poly := Polygon2D.new()
+		poly.polygon = PackedVector2Array([
+			Vector2(-w * 0.5, h), Vector2(-w * 0.5, h * 0.35), Vector2(-w * 0.32, 0.0),
+			Vector2(w * 0.32, 0.0), Vector2(w * 0.5, h * 0.35), Vector2(w * 0.5, h)])
+		poly.color = FIRE if tier == tiers[0] else Color(FIRE, 0.85 if tier == tiers[1] else 0.6)
+		poly.position = Vector2(base_pos.x, y)
+		add_child(poly)
+		y -= h + 3.0
+	var stem := ColorRect.new()
+	stem.position = Vector2(base_pos.x - 1, y - 10.0)
+	stem.size = Vector2(2, 10)
+	stem.color = FIRE
+	add_child(stem)
+	var finial := ColorRect.new()
+	finial.position = Vector2(base_pos.x - 3, y - 15.0)
+	finial.size = Vector2(6, 6)
+	finial.color = FIRE
+	add_child(finial)
+
+## One entry in the mode list: a single centered, flat-text button (see
+## _flat_button) — no separate tick/number/description controls. Active
+## and hover states are both just "brighter text plus a leading marker,"
+## handled by _style_row, and both flow through the same function so
+## hovering previews exactly what selecting would look like.
+func _mode_row(mode_key: String, title: String, desc: String, y: float) -> Dictionary:
+	var btn := _flat_button(title, Vector2(0, y), Vector2(960, 32), 26)
+	# Hover feedback comes free from _flat_button's font_hover_color — no
+	# extra connections needed here. An earlier version also previewed the
+	# "›" marker and description on hover, but that let a hovered row and
+	# the actually-selected row show a marker at the same time, which read
+	# as "which one is really selected?" rather than simple. The marker and
+	# description now only ever follow the real selection (_refresh_mode_summary).
+	return {"button": btn, "title": title, "desc": desc, "y": y}
+
+## Selected-state look for a mode row: brighter text and a leading "›"
+## marker; unselected rows are just their plain name, dim. Also doubles as
+## the hover preview (see _mode_row), and either way it's the only place
+## that shows/moves the single shared description label under this row.
+func _style_row(row: Dictionary, active: bool) -> void:
+	var btn: Button = row.button
+	btn.text = ("›  " + row.title) if active else row.title
+	btn.add_theme_color_override("font_color", CREAM if active else NEUTRAL)
+	if active:
+		mode_desc_label.text = row.desc
+		mode_desc_label.position.y = row.y + 34.0
+
+func _choose_home_mode(mode: String) -> void:
+	MatchSetup.story = mode == "story"
+	MatchSetup.arcade = mode in ["story", "arcade"]
+	MatchSetup.vs_ai = mode != "local"
+	_refresh_mode_summary()
+
+## The mode the current MatchSetup state maps to — shared by
+## _refresh_mode_summary (styling every row after a change) and each row's
+## own hover handler (restoring its real state once the pointer leaves).
+func _selected_mode() -> String:
+	return "story" if MatchSetup.story else ("arcade" if MatchSetup.arcade else ("ai" if MatchSetup.vs_ai else "local"))
+
+func _show_fight_options() -> void:
+	if transitioning or is_instance_valid(modal):
+		return
+	_open_modal("TUNE YOUR FIGHT", "FIGHT OPTIONS")
+	UI.label(modal_content, "AI DIFFICULTY", Vector2(28, 112), Vector2(265, 24), 13, UI.MUTED)
+	var difficulty := OptionButton.new()
+	for name in ["RELAXED", "STANDARD", "CHALLENGING"]:
+		difficulty.add_item(name)
+	difficulty.select(MatchSetup.ai_difficulty)
+	difficulty.position = Vector2(306, 108)
+	difficulty.size = Vector2(282, 36)
+	difficulty.item_selected.connect(func(index: int): MatchSetup.ai_difficulty = index)
+	modal_content.add_child(difficulty)
+	UI.label(modal_content, "ROUND TIMER", Vector2(28, 165), Vector2(265, 24), 13, UI.MUTED)
+	var timer := OptionButton.new()
+	for seconds in [60, 99, 120]:
+		timer.add_item("%d SECONDS" % seconds, seconds)
+	timer.select([60, 99, 120].find(MatchSetup.round_seconds))
+	timer.position = Vector2(306, 159)
+	timer.size = Vector2(282, 36)
+	timer.item_selected.connect(func(index: int): MatchSetup.round_seconds = [60, 99, 120][index])
+	modal_content.add_child(timer)
+	var shake := CheckBox.new()
+	shake.text = "Impact camera shake"
+	shake.position = Vector2(28, 212)
+	shake.size = Vector2(550, 36)
+	shake.button_pressed = MatchSetup.camera_shake
+	shake.toggled.connect(func(enabled: bool): MatchSetup.camera_shake = enabled)
+	modal_content.add_child(shake)
+	UI.label(modal_content, "Four rounds per match. Options apply to your next fight.", Vector2(28, 267), Vector2(566, 26), 12, UI.MUTED)
 
 ## Staggers each element in on its own delay so the menu builds up piece by
 ## piece instead of popping in all at once; works on any control since it
@@ -214,6 +377,9 @@ func _refresh_match_setup() -> void:
 		button.add_theme_color_override("font_hover_color", UI.LIME)
 
 func _refresh_mode_summary() -> void:
+	var selected := _selected_mode()
+	for mode in mode_rows:
+		_style_row(mode_rows[mode], mode == selected)
 	mode_summary_label.text = "LOCAL VERSUS   /   PLAYER VS AI" if MatchSetup.vs_ai else "LOCAL VERSUS   /   2 PLAYERS"
 	if MatchSetup.arcade:
 		mode_summary_label.text = "ARCADE   /   ROAD TO ANANT"
@@ -310,7 +476,7 @@ func _show_guide() -> void:
 		var x := 28.0 + player * 294
 		UI.label(modal_content, "PLAYER %d" % (player + 1), Vector2(x, 108), Vector2(255, 24), 15, UI.LIME if player == 0 else UI.VIOLET)
 		UI.label(modal_content, "A / D   Move    W   Jump\nS   Guard    F   Light    G   Heavy" if player == 0 else "Arrows   Move / Jump\nDown   Guard    K   Light    L   Heavy", Vector2(x, 143), Vector2(270, 59), 14)
-	UI.label(modal_content, "Double-tap to dash. Confirm hits to chain attacks. Manage stamina.\nKeep your fighter's moves across four rounds. Most wins takes it.\nF1: moves, throws, weaknesses and signature commands.", Vector2(28, 224), Vector2(566, 75), 13, UI.MUTED)
+	UI.label(modal_content, "Move to walk. Hold Shift (P1) / Ctrl (P2) to run. Double-tap to dash.\nKeep your fighter's moves across four rounds. Most wins takes it.\nF1: moves, throws, weaknesses and signature commands.", Vector2(28, 224), Vector2(566, 75), 13, UI.MUTED)
 
 func _close_modal() -> void:
 	if not is_instance_valid(modal):

@@ -54,7 +54,7 @@ func _ready() -> void:
 	sprite.scale = Vector2.ONE * (176.0 / 320.0)
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	add_child(sprite)
-	for key in ["skin", "cloth", "dark", "accent", "hair", "wrap", "team"]:
+	for key in ["skin", "cloth", "dark", "accent", "hair", "wrap", "team", "mouth", "eye_white"]:
 		var surface_material := StandardMaterial3D.new()
 		surface_material.roughness = 0.55
 		# A cheap rim light along every edge gives the low-poly rig a lit,
@@ -65,6 +65,20 @@ func _ready() -> void:
 		materials[key] = surface_material
 	materials.dark.albedo_color = Color("1c2331")
 	materials.wrap.albedo_color = Color("e6e2d8")
+	materials.eye_white.albedo_color = Color("f2ede4")
+	materials.eye_white.rim_enabled = false
+	# Skin reads as a glossy, rim-glowing "action figure" at this roughness;
+	# knocking the shine down and quieting its rim is what separates a face
+	# from a plastic mannequin head. Hair keeps a touch more shine (healthier
+	# look); everything else keeps the punchier stylized default above.
+	materials.skin.roughness = 0.85
+	materials.skin.rim = 0.14
+	materials.skin.rim_tint = 0.25
+	materials.hair.roughness = 0.4
+	# Mouths tinted from the character's own skin (see _update_profile) read
+	# as a closed, human mouth line; a flat black bar reads as a gash.
+	materials.mouth.roughness = 0.75
+	materials.mouth.rim_enabled = false
 	_build_model()
 	if fighter != null:
 		_update_profile()
@@ -128,17 +142,28 @@ func _build_model() -> void:
 	_mesh("torso", torso, "cloth").scale.z = 0.62
 	_sphere("hips", Vector3(13, 9, 8), "cloth")
 	_bone("neck", 4.5, "skin")
-	_sphere("head", Vector3(9.0, 11.5, 8.5), "skin")
-	_sphere("jaw", Vector3(7.1, 6, 7.0), "skin")
+	# Rounder and a touch shorter than before: the previous head/jaw pairing
+	# (tall egg-shaped skull + narrow chin) read as an alien mannequin more
+	# than a stylized human. A fuller jaw under a rounder skull is a more
+	# forgiving base for a face to sit on.
+	_sphere("head", Vector3(9.0, 10.7, 8.7), "skin")
+	_sphere("jaw", Vector3(7.4, 6.6, 7.3), "skin")
 	_sphere("ear", Vector3(2.2, 3.1, 2), "skin")
 	_sphere("nose", Vector3(2.7, 2.4, 2.7), "skin")
-	_sphere("hair", Vector3(9.7, 5.3, 9), "hair")
+	# More coverage (was leaving a lot of bare, shiny scalp exposed) and
+	# hangs a bit lower over the forehead.
+	_sphere("hair", Vector3(10.1, 6.0, 9.4), "hair")
 	_bone("braid", 3.0, "hair")
 	_box("crest", Vector3(5, 8, 13), "hair")
 	_box("headband", Vector3(18, 3.0, 16.6), "accent")
-	_box("eye", Vector3(2.8, 1.3, 1), "dark")
-	_box("brow", Vector3(4.0, 1.2, 1), "hair")
-	_box("mouth", Vector3(3.5, 0.8, 1), "dark")
+	# A pale sclera sitting just behind the pupil is what reads as an eye
+	# instead of a flat dark slit; see _update_model for how they're paired.
+	_sphere("eye_white", Vector3(3.4, 2.2, 1.6), "eye_white")
+	_box("eye", Vector3(2.6, 1.6, 1), "dark")
+	_box("brow", Vector3(4.6, 1.5, 1), "hair")
+	# Tinted from the fighter's own skin in _update_profile, not flat black —
+	# a solid black bar reads as a gash rather than a closed mouth.
+	_box("mouth", Vector3(3.6, 1.0, 1), "mouth")
 	_box("belt", Vector3(25, 4, 17), "dark")
 	_box("belt_tail", Vector3(3, 16, 1.5), "accent")
 	_box("lapel_a", Vector3(3, 31, 1.5), "wrap")
@@ -181,6 +206,7 @@ func _update_profile() -> void:
 	materials.cloth.albedo_color = profile.color
 	materials.accent.albedo_color = profile.accent
 	materials.hair.albedo_color = profile.hair
+	materials.mouth.albedo_color = profile.skin.darkened(0.45)
 	materials.team.albedo_color = Color("58a9ff") if fighter.player_id == 1 else Color("ff6868")
 	parts.braid.visible = _hair_style == "braid"
 	parts.crest.visible = _hair_style == "crest"
@@ -259,22 +285,23 @@ func _update_model() -> void:
 	parts.head.position = _point(head)
 	parts.jaw.position = _point(head + Vector2(1, 5), 1)
 	parts.ear.position = _point(head + Vector2(-5, 1), 8)
-	parts.nose.position = _point(head + Vector2(9, 1), 3.5)
+	parts.nose.position = _point(head + Vector2(9, 1), 4.5)
 	parts.hair.position = _point(head + Vector2(-1, -9))
 	parts.hair.scale.y = 3.0 if _hair_style == "crop" else 5.3
 	parts.crest.position = _point(head + Vector2(0, -14))
 	_place_bone("braid", _point(head + Vector2(-7, -6), -4), _point(head + Vector2(-13, 20), -4))
 	parts.headband.position = _point(head + Vector2(0, -5))
-	parts.eye.position = _point(head + Vector2(5, -1), 7.7)
-	parts.brow.position = _point(head + Vector2(5, -3), 7.8)
+	parts.eye_white.position = _point(head + Vector2(5, -1), 7.3)
+	parts.eye.position = _point(head + Vector2(5, -1), 7.9)
+	parts.brow.position = _point(head + Vector2(5, -3), 8.0)
 	parts.brow.rotation.z = -0.12
-	parts.mouth.position = _point(head + Vector2(6, 6), 6.8)
+	parts.mouth.position = _point(head + Vector2(6, 6), 8.0)
 	parts.shades.position = _point(head + Vector2(5, -2), 8.2)
 	# Head details follow the neck during dives and inverted cartwheel poses.
 	var head_angle := -(head - chest).angle() - PI * 0.5
 	var pivot := _point(head)
 	var head_basis := Basis(Vector3.BACK, head_angle)
-	for key in ["head", "jaw", "ear", "nose", "hair", "crest", "headband", "eye", "brow", "mouth", "shades"]:
+	for key in ["head", "jaw", "ear", "nose", "hair", "crest", "headband", "eye_white", "eye", "brow", "mouth", "shades"]:
 		parts[key].position = pivot + head_basis * (parts[key].position - pivot)
 		parts[key].rotation.z = head_angle + (-0.12 if key == "brow" else 0.0)
 	parts.belt.position = _point(hip + Vector2(0, -1))

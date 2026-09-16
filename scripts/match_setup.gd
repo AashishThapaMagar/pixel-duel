@@ -3,6 +3,9 @@ extends Node
 var selected_fighters: Array[int] = [0, 1]
 var selected_arena: int = 0
 var vs_ai: bool = false
+var ai_difficulty: int = 1
+var round_seconds: int = 99
+var camera_shake: bool = true
 var arcade: bool = false
 var arcade_opponents: Array[int] = []
 var arcade_index: int = 0
@@ -28,6 +31,12 @@ func is_final_boss() -> bool:
 	return arcade and arcade_index == arcade_opponents.size() - 1
 
 func _ready() -> void:
+	for binding in [["p1_run", KEY_SHIFT], ["p2_run", KEY_CTRL]]:
+		if not InputMap.has_action(binding[0]):
+			InputMap.add_action(binding[0])
+			var run_key := InputEventKey.new()
+			run_key.physical_keycode = binding[1]
+			InputMap.action_add_event(binding[0], run_key)
 	if not InputMap.has_action("move_list"):
 		InputMap.add_action("move_list")
 		var key := InputEventKey.new()

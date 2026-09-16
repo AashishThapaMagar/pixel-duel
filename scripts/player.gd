@@ -65,6 +65,8 @@ var combo_stacks: int = 0
 var hitstop_remaining: float = 0.0
 var controls_enabled: bool = true
 var combat_paused: bool = false
+var running: bool = false
+const WALK_SPEED_RATIO := 0.65
 var action_timer: float = 0.0
 var combat_time: float = 0.0
 var attack_connected: bool = false
@@ -161,6 +163,7 @@ func apply_character(index: int) -> void:
 		_update_animation()
 
 func _physics_process(delta: float) -> void:
+	running = false
 	# Capture presses during hit-stop, but pause their expiry and the combat clock
 	# so an impact freeze does not swallow the player's follow-up input.
 	if controls_enabled and state != State.KO:
@@ -188,6 +191,7 @@ func _physics_process(delta: float) -> void:
 			State.BLOCK:
 				_process_block(delta)
 			State.DASH:
+				running = _dash_dir == facing
 				action_timer -= delta
 				velocity.x = _dash_dir * move_speed * (1.85 if _dash_dir == facing else 1.45)
 				if action_timer <= 0.0:
@@ -282,7 +286,10 @@ func _process_move_and_actions(delta: float = 1.0 / 60.0) -> void:
 			return
 		if _consume_action():
 			return
-		var speed := move_speed * (backward_speed_ratio if direction * facing < 0.0 else 1.0)
+		running = direction * facing > 0.0 and Input.is_action_pressed(input_prefix + "run")
+		var speed := move_speed * (1.0 if running else WALK_SPEED_RATIO)
+		if not running and direction * facing < 0.0:
+			speed *= backward_speed_ratio
 		velocity.x = move_toward(velocity.x, direction * speed, (braking if direction == 0.0 else acceleration) * delta)
 		state = State.WALK if absf(velocity.x) > 8.0 else State.IDLE
 	else:
@@ -494,6 +501,11 @@ func take_hit(damage: int, knockback: float, attacker_facing: int, attacker: Nod
 			velocity.x = attacker_facing * 140.0
 			return false
 	var blocked: bool = state in [State.BLOCK, State.BLOCKSTUN] and attacker_facing != facing
+	# Holding away from the rival guards grounded strikes without turning
+	# the fighter around. Retreat still loses to throws and guard breaks.
+	var back_held := Input.get_axis(input_prefix + "left", input_prefix + "right") * facing < 0.0
+	if is_action_fight() and is_on_floor() and state in [State.IDLE, State.WALK] and back_held and attacker_facing != facing:
+		blocked = true
 	blocked = blocked and not grapple
 	var attacking := state in [State.PUNCH, State.KICK]
 	var counter: bool = not blocked and attacking and attack_timer < attack_startup()
@@ -592,6 +604,7 @@ func _flash(color: Color) -> void:
 	_flash_tween.tween_property(visual, "modulate", Color.WHITE, 0.15)
 
 func reset_for_new_round() -> void:
+	running = false
 	stamina = character_profile.stamina
 	stamina_delay = 0.0
 	taunt_ready_at = 0.0

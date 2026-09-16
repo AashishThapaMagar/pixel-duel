@@ -54,17 +54,18 @@ func _physics_process(delta: float) -> void:
 	# attacks sooner, decides more often, and follows a landed hit into the
 	# command ender rather than only jabbing — but with no stat or HP edge.
 	var boss: bool = fighter.character_profile.id == "anant"
+	var reaction_scale: float = [1.55, 1.0, 0.8][MatchSetup.ai_difficulty]
 	# After a landed hit, wait a beat (matching a human's reaction) then
 	# continue the chain, same as a buffered player input would.
 	if fighter.attack_connected and fighter.state in [fighter.State.PUNCH, fighter.State.KICK]:
 		_combo_reaction += delta
-		if _combo_reaction > 0.07 and fighter.chain_step < 2 and fighter._buffered_action.is_empty():
+		if _combo_reaction > 0.07 * reaction_scale and fighter.chain_step < 2 and fighter._buffered_action.is_empty():
 			_request_move("drive" if boss and fighter.chain_step == 1 and fighter.stamina > 24 else "jab")
 			_combo_reaction = -0.3
 	else:
 		_combo_reaction = 0.0
 	var can_engage_guard: bool = fighter.state in [fighter.State.IDLE, fighter.State.WALK, fighter.State.BLOCK]
-	if opponent_attacking and _attack_seen_time >= (0.12 if boss else 0.18) and abs_distance < ATTACK_RANGE + 24.0 and can_engage_guard:
+	if opponent_attacking and _attack_seen_time >= (0.12 if boss else 0.18) * reaction_scale and abs_distance < ATTACK_RANGE + 24.0 and can_engage_guard:
 		if not _held_block and _reaction_cooldown <= 0.0:
 			if randf() < 0.7:
 				_set_block(true)
@@ -79,6 +80,7 @@ func _physics_process(delta: float) -> void:
 	if _decision_timer > 0.0:
 		return
 	_decision_timer = DECISION_INTERVAL + randf() * 0.25
+	_decision_timer *= reaction_scale
 	if boss:
 		_decision_timer *= 0.7
 	# Low on stamina: retreat instead of attacking into a possible guard break.

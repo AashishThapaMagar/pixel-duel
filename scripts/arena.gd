@@ -238,8 +238,8 @@ func _begin_round(index: int) -> void:
 	player1.reset_for_new_round()
 	player2.reset_for_new_round()
 
-	time_remaining = ROUND_TIME
-	timer_label.text = str(int(ROUND_TIME))
+	time_remaining = float(MatchSetup.round_seconds)
+	timer_label.text = str(MatchSetup.round_seconds)
 	round_label.text = "ROUND %d / %d" % [index + 1, round_styles.size()]
 	result_label.visible = false
 	round_active = false
@@ -251,7 +251,7 @@ func _begin_round(index: int) -> void:
 
 	_show_banner(index, fight_style)
 	var p2_hint := "P2 is AI-controlled" if MatchSetup.vs_ai else "P2   Arrows move/jump   Down guard   K/L attack"
-	$UI/ControlsHint.text = "P1   A/D move   W jump   S guard   F/G attack        |        %s\nF1  MOVES & COMBOS     /     DOUBLE-TAP TO DASH     /     ESC  MENU" % p2_hint
+	$UI/ControlsHint.text = "P1   A/D move   W jump   S guard   F/G attack        |        %s\nHOLD SHIFT (P1) / CTRL (P2) TO RUN    /    DOUBLE-TAP DASH    /    F1 MOVES    /    ESC MENU" % p2_hint
 
 func _build_move_ui() -> void:
 	for player in 2:

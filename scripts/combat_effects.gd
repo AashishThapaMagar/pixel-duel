@@ -24,7 +24,7 @@ func _process(delta: float) -> void:
 	sparks = sparks.filter(func(spark): return spark.age < 0.2)
 	shake = move_toward(shake, 0.0, delta * 22.0)
 	if camera != null:
-		camera.offset = Vector2(sin(clock * 110.0), cos(clock * 93.0) * 0.5) * shake
+		camera.offset = Vector2(sin(clock * 110.0), cos(clock * 93.0) * 0.5) * shake if MatchSetup.camera_shake else Vector2.ZERO
 	queue_redraw()
 
 func _draw() -> void:
