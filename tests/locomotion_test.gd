@@ -36,38 +36,55 @@ func run() -> void:
 	p2.position.x = 650
 	for i in 7:
 		p1.apply_character(i)
-		var gait: Node = p1.visual.gait
-		check(gait.meshes.size() == 3, "Character changes replace the rig without leaving old body parts")
-		for mesh in gait.meshes:
-			check(mesh.texture == p1.visual.sheet, "Every moving body part uses the same fighter's illustrated artwork")
-		var stride: float = gait.cycle_length(false)
-		gait.sample(0.1, false, stride)
-		var planted: Vector2 = gait.feet[0]
-		var shoulder_before: Vector2 = gait.meshes[2].polygon[0]
-		gait.sample(0.1 + 1.0 / stride, false, stride)
-		check(absf(gait.feet[0].x + 1 - planted.x) < 0.01 and gait.feet[0].y == planted.y, "Support foot remains planted as the body moves")
-		check(gait.meshes[2].polygon[0].distance_to(shoulder_before) > 0.001, "Shoulders shift with each step while the support foot stays planted")
-		gait.sample(0.3, false, stride)
-		check(gait.feet[1].y < gait.ankles[1].y and gait.feet[0].y == gait.ankles[0].y, "Front foot recovers while rear foot supports the body")
-		gait.sample(0.8, false, stride)
-		check(gait.feet[0].y < gait.ankles[0].y and gait.feet[1].y == gait.ankles[1].y, "Rear foot recovers while front foot supports the body")
-		for phase in [0.0, 0.25, 0.5, 0.75]:
-			p1.state = p1.State.WALK
-			p1.visual.walk_phase = phase
+		p1.reset_for_new_round()
+		var visual: Node = p1.visual
+		check(visual.get_child_count() == 1, "A fighter renders one complete sprite without deforming body meshes")
+		p1.state = p1.State.WALK
+		p1.velocity.x = 169
+		p1.position.x += 2
+		p1.combat_time += 1.0 / 60.0
+		p1._update_animation()
+		check(visual.current_frame < 6, "The first movement update immediately selects a walk pose")
+		var seen := {}
+		for tick in 60:
+			p1.position.x += 2
+			p1.combat_time += 1.0 / 60.0
 			p1._update_animation()
-			gait.sample(phase, false, stride)
-			check(p1.visual.gait.visible and not p1.visual.sprite.visible, "Walking uses articulated legs rather than a standing sprite")
-			check(gait.feet[0].x < gait.feet[1].x, "Walking retains combat stance instead of crossing the legs")
-			var seam := Vector2(gait.split_x, lerpf(gait.waist,gait.crotch,0.7))
-			check(gait.deform(seam,0).distance_to(gait.deform(seam,1)) < 0.01, "Pelvis seam stays closed through the stride")
-			for side in 2:
-				var shoe: Vector2 = gait.ankles[side] + Vector2(0,5)
-				var expected_shoe: Vector2 = gait.feet[side] + Vector2(0,5).rotated(gait.foot_angles[side])
-				check(gait.deform(shoe,side).distance_to(expected_shoe) < 0.01, "Illustrated shoe follows the foot through its recovery roll")
-			if "--capture" in OS.get_cmdline_user_args() and DisplayServer.get_name() != "headless" and i in [0, 2]:
-				await RenderingServer.frame_post_draw
-				root.get_texture().get_image().save_png("res://.godot/legs-%d-%d.png" % [i, roundi(phase * 4)])
+			seen[visual.current_frame] = true
+			var before: float = visual.walk_phase
+			visual._process(1.0 / 144.0)
+			p1._update_animation()
+			check(visual.walk_phase == before, "Extra rendering or sync calls cannot advance the combat animation clock")
+		check(seen.size() == 6, "Movement visits all six complete walking drawings")
+		var phase_before_duplicate: float = visual.walk_phase
+		p1.position.x += 2
+		p1._update_animation()
+		check(visual.walk_phase == phase_before_duplicate, "Same-clock movement waits for the authoritative sample")
+		p1.combat_time += 1.0 / 60.0
+		p1._update_animation()
+		check(visual.walk_phase != phase_before_duplicate, "A duplicate sync cannot discard unsampled displacement")
+		var held_phase: float = visual.walk_phase
+		p1.combat_time += 0.1
+		p1._update_animation()
+		check(visual.walk_phase == held_phase, "A blocked body cannot keep cycling its feet")
+		p1.state = p1.State.IDLE
+		p1._update_animation()
+		check(visual.current_frame == 12, "Stopping returns to guard without waiting for a fade")
+		p1.state = p1.State.WALK
+		p1.velocity.x = -122
+		p1.position.x -= 15
+		p1.combat_time += 1.0 / 60.0
+		p1._update_animation()
+		check(visual.current_frame == 0 and visual.walk_phase == 0.0, "Retreat starts on contact without consuming earlier displacement")
+		p1.state = p1.State.WALK
+		p1.running = true
+		p1.position.x += 4
+		p1.combat_time += 1.0 / 60.0
+		p1._update_animation()
+		check(visual.current_frame in visual.RUN_FRAMES, "Held run uses its own full-body drawings")
 	# Real retreat input: stay facing rival, don't run backwards even with run held.
+	p1.position.x = 300
+	p2.position.x = 650
 	p1.apply_character(0)
 	p1.reset_for_new_round()
 	p1.facing = 1

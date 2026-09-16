@@ -134,7 +134,7 @@ The included `.gitignore` already excludes Godot's local cache folder (`.godot/`
 - Light impacts freeze both fighters for 45 ms; kicks freeze them for 75 ms. Inputs remain buffered during the freeze, while combat clocks pause. Contact sparks and subtle camera shake distinguish hits from guard impacts.
 - Round end locks combat while allowing the KO animation to settle. Restart clears buffered inputs, hit-stop, stale attacks, combo history, and animation state.
 
-The controller lives in `scripts/player.gd`. The visual rig in `scripts/fighter_visual.gd` uses fixed-length two-bone limbs and blends neutral, locomotion, jump, and reaction poses. Attack poses sample the combat clock directly to avoid animation lag. `scripts/combat_effects.gd` draws ground shadows and contact sparks.
+The controller lives in `scripts/player.gd`. The live sprite renderer in `scripts/fighter_sprite_visual.gd` selects full-body arcade poses. Attack poses sample the combat clock directly. `scripts/combat_effects.gd` draws ground shadows and contact sparks.
 
 ## Action roster
 
@@ -160,7 +160,7 @@ Character stats live in `scripts/fighter_roster.gd`, attacks in `scripts/action_
 
 ## Art and animation
 
-`Player.tscn` uses the code-native 2D fighter rig in `scripts/fighter_visual.gd`. Skin, clothing, wraps, and style accents are colored separately. Karate, Boxing, Muay Thai, and MMA use different guard poses. The footwork cycle follows distance traveled, so walking into an obstacle does not keep the walk cycle running.
+`Player.tscn` uses the arcade sprite renderer in `scripts/fighter_sprite_visual.gd`. Each fighter has a distinct atlas. The footwork cycle follows distance traveled, so walking into an obstacle does not keep the walk cycle running.
 
 The original PNG fighter frames and their Pillow generator remain in `assets/sprites/fighter/` as legacy assets; they are no longer the default character visuals. The preserved legacy skyline backdrop uses `assets/backgrounds/arena_bg.png`.
 
@@ -221,10 +221,10 @@ Omit --headless and append -- --capture to save roster and signature-pose screen
 
 The home screen now exposes Story, Arcade, Versus AI and Local Versus as selectable mode cards. Fighters, Arena/Setup, Fight Options, Move Guide and Settings have direct shortcuts. Fight Options sets AI difficulty (reaction and decision speed), a 60/99/120-second timer, and impact camera shake; matches retain four rounds.
 
-Normal movement walks at 65% of movement speed. Hold Shift (P1), Ctrl (P2), or touch RUN while moving forward to run. Backward movement stays opponent-facing at 72% of walking speed; holding back guards grounded strikes, but throws beat guard. Locomotion animates the original illustrated trousers and shoes using a textured 2D mesh fitted separately to all seven fighters. Upper and lower bodies share the same artwork, with a joined pelvis seam, alternating planted contacts and lifted swing feet driven by actual distance. Run has a higher knee lift and faster stride. Stationary collision and teleports do not advance the gait. Run tests/locomotion_test.gd for all seven fighters, planted-foot checks, retreat guard and held run input; tests/menu_walk_test.gd covers menu options and speed changes.
+Normal movement walks at 65% of movement speed. Hold Shift (P1), Ctrl (P2), or touch RUN while moving forward to run. Backward movement stays opponent-facing at 72% of walking speed; holding back guards grounded strikes, but throws beat guard. Complete arcade sprites replace the old guard-image deformation. Six walk drawings and six run drawings play from actual distance traveled, with intermediate poses bridging the cycle. Input changes select movement, guard, or idle immediately; rendering does not run a second animation clock. Run tests/locomotion_test.gd for roster playback, clock consistency, retreat guard and held run.
 
-The playable fighters now use seven individual illustrated PNG atlases in `assets/sprites/fighter/nepali/`, rendered by `scripts/fighter_sprite_visual.gd`. Sab and Abhi are large, Ish is skinny, Bib is small, and Anug, Sup and Anant have distinct athletic silhouettes and Nepali-inspired outfits. All are original adult characters, with 16 frames each for movement, guard, attacks, signature action, hit reaction and KO. Some advanced moves share an animation family in this initial art pass.
+The playable fighters use seven KOF XIII-inspired arcade PNG atlases in `assets/sprites/fighter/arcade/`, rendered by `scripts/fighter_sprite_visual.gd`. Sab and Abhi are large, Ish is skinny, Bib is small, and Anug, Sup and Anant retain distinct original Nepali-inspired outfits. Each fighter has 24 full-body poses for walking, running, guard, jump, attacks, signature action, hit reaction and KO. Advanced moves still share animation families.
 
-The original PNG pixels are preserved. Alpha-derived frame regions prevent clipping extended limbs, and grounded frames align to the fighting floor. Attack frames follow the combat clock and hit-stop. Character display height varies; collision and gameplay traits remain controlled by the combat system. The previous mesh renderer remains available on disk.
+The original PNG pixels are preserved. Silhouette-derived frame regions and shader exclusions isolate extended limbs from neighboring poses, and grounded frames align to the fighting floor. Attack frames follow the combat clock and hit-stop. Character display height varies; collision and gameplay traits remain controlled by the combat system. The previous mesh renderer remains available on disk.
 
-Asset validation: `python tools/index_fighter_atlases.py` (Pillow, numpy and scipy). Runtime checks: `godot --headless --path . -s res://tests/fighter_sprite_test.gd`. See `docs/nepali-fighter-art.md` for art direction and `assets/sprites/fighter/nepali/README.md` for frame mapping.
+Asset validation: `python tools/index_arcade_atlases.py` (Pillow, numpy and scipy; reads artwork without modifying it). Runtime checks: `godot --headless --path . -s res://tests/fighter_sprite_test.gd`. See `assets/sprites/fighter/arcade/README.md` for frame mapping, prompts and benchmarks. The older `nepali/` atlases and mesh experiments are retained as reference assets.

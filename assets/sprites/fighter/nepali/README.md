@@ -1,3 +1,5 @@
+Archived renderer documentation: live matches now use the [arcade sprites](../arcade/README.md). The descriptions below refer to the previous implementation.
+
 # Nepali-inspired action fighters
 
 Original illustrated sprite atlases for Who Won?, generated with the built-in image tool. Each PNG contains a 4 x 4 layout, with transparent space around the sprites. Full original atlases are preserved. JSON sidecars index actual silhouette bounds so extended kicks are not clipped at nominal cell boundaries. The game selects these regions using AtlasTexture.

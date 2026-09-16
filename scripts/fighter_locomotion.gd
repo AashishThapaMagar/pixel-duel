@@ -11,6 +11,7 @@ var knees: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 var hips: Array[Vector2] = []
 var rest_knees: Array[Vector2] = []
 var ankles: Array[Vector2] = []
+var knee_bends: Array[float] = []
 var meshes: Array[Polygon2D] = []
 var rest_vertices: Array[PackedVector2Array] = []
 var origin := Vector2.ZERO
@@ -48,6 +49,7 @@ func configure(texture: Texture2D, data: Dictionary, character: String, display_
 	hips.clear()
 	rest_knees.clear()
 	ankles.clear()
+	knee_bends.clear()
 	var r: Array = data.region
 	var art_scale := height / standing_height
 	dimensions = Vector2(r[2],r[3]) * art_scale
@@ -61,6 +63,9 @@ func configure(texture: Texture2D, data: Dictionary, character: String, display_
 		hips.append(origin + Vector2(points[0],points[1])*dimensions)
 		rest_knees.append(origin + Vector2(points[2],points[3])*dimensions)
 		ankles.append(origin + Vector2(points[4],points[5])*dimensions)
+		var axis := (ankles[side] - hips[side]).normalized()
+		var bend := (rest_knees[side] - hips[side]).dot(Vector2(axis.y, -axis.x))
+		knee_bends.append(-1.0 if bend < 0.0 else 1.0)
 		var mesh := Polygon2D.new()
 		mesh.texture = texture
 		mesh.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
@@ -110,13 +115,13 @@ func configure(texture: Texture2D, data: Dictionary, character: String, display_
 
 func cycle_length(running: bool) -> float:
 	var stance_width := absf(ankles[1].x-ankles[0].x)
-	return clampf(stance_width*(1.65 if running else 1.2),42.0,112.0)
+	return clampf(stance_width*(1.65 if running else 0.85),32.0,112.0)
 
 func sample(gait_phase: float, running: bool, cycle_stride: float, movement_amount: float = 1.0, backward: bool = false, run_mix: float = -1.0) -> void:
 	phase = gait_phase
 	sprint = running
 	stride = cycle_stride
-	amount = clampf(movement_amount,0.0,1.0)
+	amount = smoothstep(0.0,1.0,movement_amount)
 	retreating = backward
 	run_amount = (1.0 if running else 0.0) if run_mix < 0.0 else clampf(run_mix,0.0,1.0)
 	if hips.is_empty():
@@ -151,19 +156,31 @@ func sample(gait_phase: float, running: bool, cycle_stride: float, movement_amou
 			lift = pow(sin(swing*PI),2.0)*lerpf(5.0,19.0,run_amount)*height/130.0
 			foot_angles[side] = sin(swing*TAU)*sin(swing*PI)*lerpf(0.08,0.22,run_amount)*amount
 		# Guarded steps retain front/rear foot order. Run brings the lanes in.
-		var lane := lerpf(ankles[side].x,pelvis_center,lerpf(0.12,0.7,run_amount))
+		var lane := lerpf(ankles[side].x,pelvis_center,lerpf(0.27,0.7,run_amount))
 		var target := Vector2(lane+direction*foot_x,ankles[side].y-lift)
 		feet[side] = ankles[side].lerp(target,amount)
 	var weight := 0.7 if id in ["sab","abhi"] else 1.0
 	var support_wave := (1.0+cos(phase*TAU*2.0))*0.5
 	body_shift = Vector2(sin(phase*TAU)*1.2*direction,support_wave*lerpf(1.6,3.0,run_amount))*weight*amount
 	body_lean = (lerpf(-0.012 if retreating else 0.015,0.075,run_amount)+sin(phase*TAU)*0.009*weight)*amount
+	# Transfer weight sideways before lowering the pelvis. Keeping the hips
+	# fixed between widely spaced feet turned each step into a deep squat.
+	var minimum_shift := -INF
+	var maximum_shift := INF
+	for side in 2:
+		var hip := body_point(hips[side])
+		var reach_limit := hips[side].distance_to(rest_knees[side])+rest_knees[side].distance_to(ankles[side])-0.2*amount
+		var dy := feet[side].y-hip.y
+		var horizontal_reach := sqrt(maxf(0.0,reach_limit*reach_limit-dy*dy))
+		minimum_shift = maxf(minimum_shift,feet[side].x-horizontal_reach-hip.x)
+		maximum_shift = minf(maximum_shift,feet[side].x+horizontal_reach-hip.x)
+	body_shift.x += clampf(0.0,minimum_shift,maximum_shift) if minimum_shift <= maximum_shift else (minimum_shift+maximum_shift)*0.5
 	# Put hips within BOTH reach circles before solving knees. Never leave
 	# the shoe beyond the shin by clamping only the solver's distance.
 	for iteration in 4:
 		for side in 2:
 			var hip := body_point(hips[side])
-			var reach_limit := hips[side].distance_to(rest_knees[side])+rest_knees[side].distance_to(ankles[side])-0.2
+			var reach_limit := hips[side].distance_to(rest_knees[side])+rest_knees[side].distance_to(ankles[side])-0.2*amount
 			var dx := feet[side].x-hip.x
 			if absf(dx) > reach_limit*0.93:
 				body_shift.x += dx-signf(dx)*reach_limit*0.93
@@ -175,7 +192,7 @@ func sample(gait_phase: float, running: bool, cycle_stride: float, movement_amou
 		var thigh := hips[side].distance_to(rest_knees[side])
 		var shin := rest_knees[side].distance_to(ankles[side])
 		posed_hips[side] = body_point(hips[side])
-		knees[side] = joint(posed_hips[side],feet[side],thigh,shin)
+		knees[side] = joint(posed_hips[side],feet[side],thigh,shin,knee_bends[side])
 		var verts := PackedVector2Array()
 		for p in rest_vertices[side]:
 			verts.append(deform(p,side))
@@ -192,12 +209,12 @@ func body_point(p: Vector2) -> Vector2:
 	var angle := body_lean*(1.0-height_weight*0.4)
 	return pivot+(p-pivot).rotated(angle)+body_shift
 
-func joint(hip: Vector2, foot: Vector2, thigh: float, shin: float) -> Vector2:
+func joint(hip: Vector2, foot: Vector2, thigh: float, shin: float, bend: float = 1.0) -> Vector2:
 	var offset := foot-hip
-	var distance := clampf(offset.length(),absf(thigh-shin)+0.01,thigh+shin-0.01)
+	var distance := clampf(offset.length(),absf(thigh-shin)+0.00001,thigh+shin-0.00001)
 	var axis := offset.normalized()
 	var along := (thigh*thigh-shin*shin+distance*distance)/(2.0*distance)
-	return hip+axis*along+Vector2(axis.y,-axis.x)*sqrt(maxf(0.0,thigh*thigh-along*along))
+	return hip+axis*along+Vector2(axis.y,-axis.x)*sqrt(maxf(0.0,thigh*thigh-along*along))*bend
 
 func deform(p: Vector2, side: int) -> Vector2:
 	if amount < 0.0001:

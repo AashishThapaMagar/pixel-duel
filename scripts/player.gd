@@ -216,6 +216,7 @@ func _physics_process(delta: float) -> void:
 				_process_move_and_actions(delta)
 	move_and_slide()
 	global_position.x = clampf(global_position.x, 34.0, 926.0)
+	_resolve_body_overlap()
 	if not was_grounded and is_on_floor() and state == State.JUMP:
 		state = State.LAND
 		action_timer = LAND_TIME
@@ -225,6 +226,29 @@ func _physics_process(delta: float) -> void:
 		_buffered_action = ""
 		_buffered_move = ""
 	_update_animation()
+
+func _resolve_body_overlap() -> void:
+	# Rivals are horizontal pushboxes, never floors or moving platforms.
+	# Leave room to jump over them, then separate sideways while landing.
+	if not is_instance_valid(opponent):
+		return
+	if absf(global_position.y - opponent.global_position.y) >= 100.0:
+		return
+	var distance: float = opponent.global_position.x - global_position.x
+	var overlap := 38.0 - absf(distance)
+	if overlap <= 0.0:
+		return
+	var side := signf(distance) if absf(distance) > 0.01 else float(facing)
+	var own_x := global_position.x
+	var other_x: float = opponent.global_position.x
+	global_position.x = clampf(own_x - side * overlap * 0.5, 34.0, 926.0)
+	var moved := absf(global_position.x - own_x)
+	opponent.global_position.x = clampf(other_x + side * (overlap - moved), 34.0, 926.0)
+	var remaining: float = 38.0 - absf(opponent.global_position.x - global_position.x)
+	if remaining > 0.0:
+		global_position.x = clampf(global_position.x - side * remaining, 34.0, 926.0)
+	if velocity.x * side > 0.0:
+		velocity.x = 0.0
 
 func _capture_input() -> void:
 	# Throw tech: tapping Light + Heavy together opens a 0.16s window (checked

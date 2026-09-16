@@ -20,9 +20,9 @@ func run() -> void:
 	for i in 7:
 		fighter.apply_character(i)
 		check(visual.loaded_id == ROSTER.profile(i).id, "Selecting a fighter changes the sprite sheet")
-		check(visual.frame_data.frames.size() == 16, "Every fighter has 16 indexed frames")
-		check(visual.sheet.get_image().detect_alpha() != Image.ALPHA_NONE, "Character sheet retains transparency")
-		for frame in 16:
+		check(visual.frame_data.frames.size() == 24, "Every fighter has 24 complete arcade poses")
+		check(visual.sprite.material is ShaderMaterial, "Source backdrop is keyed by the sprite material")
+		for frame in 24:
 			visual._set_frame(frame)
 			check(Rect2(Vector2.ZERO, visual.sheet.get_size()).encloses(visual.atlas.region), "Every frame stays within the atlas")
 		fighter._start_style_move("drive")
