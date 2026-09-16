@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Who Won? Movement preview</title>
+<style>
+body{margin:0;background:#111c26;color:#edf2f7;font:16px system-ui,sans-serif;padding:24px}
+h1{font-size:24px;margin:0 0 8px}p{color:#aebdca;max-width:800px}
+.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:24px 0}
+button,select{font:inherit;color:inherit;background:#253a4b;border:1px solid #526979;border-radius:6px;padding:9px 14px;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #d5ff46}
+#roster{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+article{background:#192733;border:1px solid #354857;border-radius:8px;overflow:hidden}
+h2{font-size:15px;letter-spacing:1px;padding:16px;margin:0}canvas{width:100%;display:block;image-rendering:pixelated}
+.phase{display:block;text-align:center;padding:12px;color:#c1d0db;font-size:13px}
+a{color:#d5ff46}label{display:flex;align-items:center;gap:8px}
+</style>
+<h1>Walk and run cycles</h1>
+<p>New movement artwork for all seven fighters. Pause and step through the alternating legs, or slow playback to inspect passing poses and running flight.</p>
+<div class="controls">
+<label>Movement <select id="mode"><option value="walk">Walk</option><option value="run">Run</option><option value="retreat">Retreat</option></select></label>
+<button id="pause">Pause</button><button id="step">Next pose</button>
+<label>Speed <input id="speed" type="range" min="0.25" max="1.5" value="1" step="0.25"><output id="rate">1×</output></label>
+</div>
+<div id="roster"></div>
+<p>The preview uses the same frame regions, scale, floor offsets, and distance-based cadence as the game. Combat transitions and collisions are checked in Godot. Reference: <a href="https://www.slynyrd.com/blog/2024/5/24/pixelblog-50-human-walk-cycle">SLYNYRD's walk-cycle study</a> and <a href="https://docs.godotengine.org/en/stable/tutorials/2d/2d_sprite_animation.html">Godot sprite animation</a>.</p>
+<script src="../assets/sprites/fighter/motion/preview-data.js"></script>
+<script>
+const heights={anug:130,ish:134,sab:143,bib:113,abhi:140,sup:128,anant:146};
+const names=['Contact','Down','Passing','Swing','Opposite contact','Opposite down','Opposite passing','Opposite swing'];
+const runNames=['Touchdown','Compression','Toe-off','Flight','Opposite touchdown','Opposite compression','Opposite toe-off','Opposite flight'];
+let paused=false,last=0,travel=0;
+const mode=document.querySelector('#mode'),speed=document.querySelector('#speed'),pause=document.querySelector('#pause');
+const roster=Object.entries(heights).map(([id,height])=>{
+ const card=document.createElement('article'),title=document.createElement('h2'),canvas=document.createElement('canvas'),caption=document.createElement('span');
+ title.textContent=id.toUpperCase();canvas.width=240;canvas.height=260;caption.className='phase';card.append(title,canvas,caption);document.querySelector('#roster').append(card);
+ const img=new Image();img.src='../assets/sprites/fighter/motion/'+id+'.png';
+ return {id,height,img,canvas,caption,phase:0};
+});
+pause.onclick=()=>{paused=!paused;pause.textContent=paused?'Play':'Pause'};
+document.querySelector('#step').onclick=()=>{paused=true;pause.textContent='Play';roster.forEach(f=>f.phase=(Math.floor(f.phase*8+0.00001)+1)%8/8)};
+speed.oninput=()=>document.querySelector('#rate').textContent=speed.value+'×';
+function draw(now){
+ const dt=last?Math.min((now-last)/1000,0.05):0;last=now;
+ const running=mode.value==='run',direction=mode.value==='retreat'?-1:1,velocity=running?260:(direction<0?122:169),stride=running?184:128;
+ if(!paused)travel+=velocity*dt*Number(speed.value)*direction;
+ roster.forEach(f=>{
+  if(!paused)f.phase=((f.phase+velocity*dt*Number(speed.value)/(stride*f.height/130)*direction)%1+1)%1;
+  const index=Math.min(7,Math.floor(f.phase*8)),data=window.MOTION_DATA[f.id],frame=data.frames[index+(running?8:0)];
+  const ctx=f.canvas.getContext('2d'),scale=f.height/data.standing_height*1.3,[x,y,w,h]=frame.region;
+  ctx.clearRect(0,0,240,260);ctx.imageSmoothingEnabled=false;ctx.strokeStyle='#718795';ctx.beginPath();ctx.moveTo(0,230);ctx.lineTo(240,230);ctx.stroke();
+  ctx.strokeStyle='#354857';for(let tick=-40;tick<280;tick+=40){let px=tick-((travel*1.3)%40);ctx.beginPath();ctx.moveTo(px,232);ctx.lineTo(px-10,245);ctx.stroke()}
+  if(f.img.complete&&f.img.naturalWidth)ctx.drawImage(f.img,x,y,w,h,120-frame.pivot_x*scale,230-frame.floor_y*scale,w*scale,h*scale);
+  f.caption.textContent=`${index+1}/8 · ${(running?runNames:names)[index]}`;
+ });requestAnimationFrame(draw);
+}requestAnimationFrame(draw);
+</script>
+</html>

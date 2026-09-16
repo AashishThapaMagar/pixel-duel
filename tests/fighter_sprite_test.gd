@@ -20,11 +20,20 @@ func run() -> void:
 	for i in 7:
 		fighter.apply_character(i)
 		check(visual.loaded_id == ROSTER.profile(i).id, "Selecting a fighter changes the sprite sheet")
-		check(visual.frame_data.frames.size() == 24, "Every fighter has 24 complete arcade poses")
+		check(visual.frame_data.frames.size() == 40, "Every fighter has combat poses and sixteen replacement movement poses")
+		check(visual.sprite is AnimatedSprite2D, "Standard Godot sprite animations render the fighter")
+		check(visual.sprite.sprite_frames.get_frame_count("walk") == 8, "Eight distinct frames in the walk clip")
+		check(visual.sprite.sprite_frames.get_frame_count("run") == 8, "Eight distinct frames in the run clip")
 		check(visual.sprite.material is ShaderMaterial, "Source backdrop is keyed by the sprite material")
-		for frame in 24:
+		for frame in 40:
 			visual._set_frame(frame)
 			check(Rect2(Vector2.ZERO, visual.sheet.get_size()).encloses(visual.atlas.region), "Every frame stays within the atlas")
+			if frame >= 24:
+				var foot_y: float = visual.sprite.position.y + visual.atlas.region.size.y * visual.art_scale * 0.5
+				if frame in [35, 39]:
+					check(foot_y < -4.0, "Both running flight poses retain visible floor clearance")
+				else:
+					check(absf(foot_y) < 0.01, "Movement contact poses align to the same floor")
 		fighter._start_style_move("drive")
 		fighter.attack_timer = fighter.attack_startup()
 		fighter._update_animation()

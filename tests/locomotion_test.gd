@@ -44,9 +44,9 @@ func run() -> void:
 		p1.position.x += 2
 		p1.combat_time += 1.0 / 60.0
 		p1._update_animation()
-		check(visual.current_frame < 6, "The first movement update immediately selects a walk pose")
+		check(visual.current_frame in visual.WALK_FRAMES, "The first movement update immediately selects a walk pose")
 		var seen := {}
-		for tick in 60:
+		for tick in 90:
 			p1.position.x += 2
 			p1.combat_time += 1.0 / 60.0
 			p1._update_animation()
@@ -55,7 +55,7 @@ func run() -> void:
 			visual._process(1.0 / 144.0)
 			p1._update_animation()
 			check(visual.walk_phase == before, "Extra rendering or sync calls cannot advance the combat animation clock")
-		check(seen.size() == 6, "Movement visits all six complete walking drawings")
+		check(seen.size() == 8, "Movement visits all eight chronological walking drawings")
 		var phase_before_duplicate: float = visual.walk_phase
 		p1.position.x += 2
 		p1._update_animation()
@@ -75,13 +75,34 @@ func run() -> void:
 		p1.position.x -= 15
 		p1.combat_time += 1.0 / 60.0
 		p1._update_animation()
-		check(visual.current_frame == 0 and visual.walk_phase == 0.0, "Retreat starts on contact without consuming earlier displacement")
+		check(visual.current_frame == visual.WALK_FRAMES[0] and visual.walk_phase == 0.0, "Retreat starts on contact without consuming earlier displacement")
 		p1.state = p1.State.WALK
 		p1.running = true
 		p1.position.x += 4
 		p1.combat_time += 1.0 / 60.0
 		p1._update_animation()
 		check(visual.current_frame in visual.RUN_FRAMES, "Held run uses its own full-body drawings")
+		# Sample one full stride at exact frame intervals: the old ping-pong
+		# ordering passed distinct-frame counts but reversed the leg mid-step.
+		for running in [false, true]:
+			p1.state = p1.State.IDLE
+			p1._update_animation()
+			p1.state = p1.State.WALK
+			p1.running = running
+			p1.velocity.x = 260 if running else 169
+			p1._update_animation()
+			var stride: float = (visual.RUN_STRIDE if running else visual.WALK_STRIDE) * visual.render_height / 130.0
+			var first: int = 32 if running else 24
+			for step in 9:
+				check(visual.current_frame == first + step % 8, "Chronological cycle %s run=%s step=%d frame=%d phase=%f facing=%d" % [visual.loaded_id, running, step, visual.current_frame, visual.walk_phase, p1.facing])
+				p1.position.x += stride / 8.0 + 0.00001
+				p1.combat_time += 1.0 / 60.0
+				p1._update_animation()
+		var phase_before_switch: float = visual.walk_phase
+		p1.running = false
+		p1._update_animation()
+		check(visual.walk_phase == phase_before_switch, "Changing run to walk preserves the supporting leg phase")
+		check(not visual.sprite.is_playing(), "Render-time autoplay cannot advance combat-driven SpriteFrames")
 	# Real retreat input: stay facing rival, don't run backwards even with run held.
 	p1.position.x = 300
 	p2.position.x = 650
