@@ -178,7 +178,7 @@ func _physics_process(delta: float) -> void:
 	if combat_time - _last_land_time > (current_style.combo_window if current_style != null else 0.6):
 		combo_stacks = 0
 	_update_facing()
-	var was_grounded := is_on_floor()
+	var was_grounded := _is_grounded()
 	velocity.y += GRAVITY * delta
 	if not controls_enabled or state == State.KO:
 		velocity.x = move_toward(velocity.x, 0.0, braking * delta)
@@ -214,10 +214,8 @@ func _physics_process(delta: float) -> void:
 					_process_move_and_actions(delta)
 			_:
 				_process_move_and_actions(delta)
-	move_and_slide()
-	global_position.x = clampf(global_position.x, 34.0, 926.0)
-	_resolve_body_overlap()
-	if not was_grounded and is_on_floor() and state == State.JUMP:
+	_move_combat_body(delta)
+	if not was_grounded and _is_grounded() and state == State.JUMP:
 		state = State.LAND
 		action_timer = LAND_TIME
 	# Consume before aging: a queued action remains valid on the recovery tick.
@@ -226,6 +224,21 @@ func _physics_process(delta: float) -> void:
 		_buffered_action = ""
 		_buffered_move = ""
 	_update_animation()
+
+# Spatial hooks let the 3D body share the same combat rules and timing.
+func _is_grounded() -> bool:
+	return is_on_floor()
+
+func _movement_axis() -> float:
+	return Input.get_axis(input_prefix + "left", input_prefix + "right")
+
+func _opponent_distance(other: Node) -> float:
+	return absf(global_position.x - other.global_position.x)
+
+func _move_combat_body(_delta: float) -> void:
+	move_and_slide()
+	global_position.x = clampf(global_position.x, 34.0, 926.0)
+	_resolve_body_overlap()
 
 func _resolve_body_overlap() -> void:
 	# Rivals are horizontal pushboxes, never floors or moving platforms.
@@ -259,20 +272,20 @@ func _capture_input() -> void:
 	if facing != _motion_facing:
 		motion_input.reset()
 		_motion_facing = facing
-	var horizontal := int(Input.get_axis(input_prefix + "left", input_prefix + "right")) * facing
+	var horizontal := int(_movement_axis()) * facing
 	var down := Input.is_action_pressed(input_prefix + "block")
 	motion_input.record((2 + horizontal) if down else (5 + horizontal), combat_time)
 	for action in ["jump", "punch", "kick"]:
 		if Input.is_action_just_pressed(input_prefix + action):
 			_buffered_action = action
 			_buffer_remaining = input_buffer_time
-			_buffered_direction = int(Input.get_axis(input_prefix + "left", input_prefix + "right")) * facing
+			_buffered_direction = int(_movement_axis()) * facing
 			_buffered_move = motion_input.consume(combat_time) if action == "kick" else ""
 	for direction in [-1, 1]:
 		var action: String = "left" if direction < 0 else "right"
 		if Input.is_action_just_pressed(input_prefix + action):
 			if direction == _last_tap_dir and combat_time - _last_tap_time <= 0.22:
-				if state in [State.IDLE, State.WALK] and is_on_floor() and spend_stamina(7.0):
+				if state in [State.IDLE, State.WALK] and _is_grounded() and spend_stamina(7.0):
 					state = State.DASH
 					_dash_dir = direction
 					action_timer = DASH_DURATION
@@ -303,8 +316,8 @@ func _update_animation() -> void:
 			visual.frame = 0 if attack_timer < attack_startup() else (1 if attack_timer < attack_startup() + attack_active_time() else 2)
 
 func _process_move_and_actions(delta: float = 1.0 / 60.0) -> void:
-	var direction := Input.get_axis(input_prefix + "left", input_prefix + "right")
-	if is_on_floor():
+	var direction := _movement_axis()
+	if _is_grounded():
 		if Input.is_action_pressed(input_prefix + "block"):
 			_enter_block()
 			return
@@ -322,7 +335,7 @@ func _process_move_and_actions(delta: float = 1.0 / 60.0) -> void:
 		state = State.JUMP
 
 func _consume_action() -> bool:
-	if _buffered_action.is_empty() or not is_on_floor():
+	if _buffered_action.is_empty() or not _is_grounded():
 		return false
 	var action := _buffered_action
 	var direction := _buffered_direction
@@ -336,7 +349,7 @@ func _consume_action() -> bool:
 	if action == "jump":
 		state = State.JUMP_START
 		action_timer = JUMP_START_TIME
-		_jump_direction = Input.get_axis(input_prefix + "left", input_prefix + "right")
+		_jump_direction = _movement_axis()
 	else:
 		if not command.is_empty():
 			_start_style_move(command, chain_step + 1 if state in [State.PUNCH, State.KICK] else 0)
@@ -500,11 +513,11 @@ func _process_hitstun(delta: float) -> void:
 	if state == State.BLOCKSTUN:
 		block_hold_time += delta
 	if stun_timer <= 0.0:
-		if state == State.BLOCKSTUN and Input.is_action_pressed(input_prefix + "block") and is_on_floor():
+		if state == State.BLOCKSTUN and Input.is_action_pressed(input_prefix + "block") and _is_grounded():
 			# Holding guard through blockstun must not re-arm Karate's parry.
 			state = State.BLOCK
 			return
-		state = State.IDLE if is_on_floor() else State.JUMP
+		state = State.IDLE if _is_grounded() else State.JUMP
 		_process_move_and_actions(delta)
 
 ## Returns true only for an unblocked hit; chip and parries cannot grant a cancel.
@@ -515,7 +528,7 @@ func take_hit(damage: int, knockback: float, attacker_facing: int, attacker: Nod
 	var grapple: bool = move.get("kind", "") == "grapple"
 	if grapple:
 		# Throws lose to jumps, active hitstun, spacing, or a timed two-button tech.
-		if not is_on_floor() or state in [State.HITSTUN, State.BLOCKSTUN] or absf(global_position.x - attacker.global_position.x) > 64.0:
+		if not _is_grounded() or state in [State.HITSTUN, State.BLOCKSTUN] or _opponent_distance(attacker) > 64.0:
 			return false
 		if combat_time <= throw_tech_until:
 			combat_notice = "THROW ESCAPE"
@@ -527,8 +540,8 @@ func take_hit(damage: int, knockback: float, attacker_facing: int, attacker: Nod
 	var blocked: bool = state in [State.BLOCK, State.BLOCKSTUN] and attacker_facing != facing
 	# Holding away from the rival guards grounded strikes without turning
 	# the fighter around. Retreat still loses to throws and guard breaks.
-	var back_held := Input.get_axis(input_prefix + "left", input_prefix + "right") * facing < 0.0
-	if is_action_fight() and is_on_floor() and state in [State.IDLE, State.WALK] and back_held and attacker_facing != facing:
+	var back_held := _movement_axis() * facing < 0.0
+	if is_action_fight() and _is_grounded() and state in [State.IDLE, State.WALK] and back_held and attacker_facing != facing:
 		blocked = true
 	blocked = blocked and not grapple
 	var attacking := state in [State.PUNCH, State.KICK]

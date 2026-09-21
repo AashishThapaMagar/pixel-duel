@@ -26,6 +26,13 @@ var retreating := false
 var run_amount := 0.0
 var foot_angles: Array[float] = [0.0,0.0]
 var posed_hips: Array[Vector2] = [Vector2.ZERO,Vector2.ZERO]
+var shoulders: Array[Vector2] = []
+var wrists: Array[Vector2] = []
+var arm_angle: Array[float] = [0.0,0.0]
+var arm_box: Array[Vector4] = []
+# Raw sheet-pixel (x0,y0,x1,y1) box per arm, for the caller to hide the same
+# region on the standing sprite/upper mesh — this script stays shader-free.
+var arm_clip_regions: Array[Vector4] = []
 # Normalized guard-frame landmarks: waist, crotch, split x, rear/front joints.
 const FIT := {
  "anug": [0.46,0.61,0.39,[0.28,0.54,0.15,0.76,0.065,0.905],[0.45,0.55,0.64,0.69,0.66,0.91]],
@@ -37,7 +44,7 @@ const FIT := {
  "anant": [0.46,0.67,0.48,[0.30,0.54,0.19,0.78,0.09,0.93],[0.57,0.58,0.77,0.75,0.84,0.94]]
 }
 
-func configure(texture: Texture2D, data: Dictionary, character: String, display_height: float, standing_height: float) -> void:
+func configure(texture: Texture2D, data: Dictionary, character: String, display_height: float, standing_height: float, fit_override: Array = [], arm_fit: Array = []) -> void:
 	body_texture = texture
 	id = character
 	height = display_height
@@ -50,11 +57,15 @@ func configure(texture: Texture2D, data: Dictionary, character: String, display_
 	rest_knees.clear()
 	ankles.clear()
 	knee_bends.clear()
+	shoulders.clear()
+	wrists.clear()
+	arm_box.clear()
+	arm_clip_regions.clear()
 	var r: Array = data.region
 	var art_scale := height / standing_height
 	dimensions = Vector2(r[2],r[3]) * art_scale
 	origin = -Vector2(data.pivot_x,data.floor_y) * art_scale
-	var fit: Array = FIT[id]
+	var fit: Array = fit_override if not fit_override.is_empty() else FIT[id]
 	waist = origin.y + dimensions.y * float(fit[0])
 	crotch = origin.y + dimensions.y * float(fit[1])
 	split_x = origin.x + dimensions.x * float(fit[2])
@@ -111,6 +122,44 @@ func configure(texture: Texture2D, data: Dictionary, character: String, display_
 	add_child(upper)
 	meshes.append(upper)
 	rest_vertices.append(upper.polygon)
+	if not arm_fit.is_empty():
+		for side in 2:
+			var points: Array = arm_fit[side]
+			var shoulder := Vector2(points[0],points[1])
+			var wrist := Vector2(points[4],points[5])
+			shoulders.append(origin + shoulder*dimensions)
+			wrists.append(origin + wrist*dimensions)
+			var min_x: float = minf(points[0],minf(points[2],points[4])) - 0.045
+			var max_x: float = maxf(points[0],maxf(points[2],points[4])) + 0.045
+			var min_y: float = minf(points[1],minf(points[3],points[5])) - 0.045
+			var max_y: float = maxf(points[1],maxf(points[3],points[5])) + 0.045
+			arm_clip_regions.append(Vector4(r[0]+min_x*r[2],r[1]+min_y*r[3],r[0]+max_x*r[2],r[1]+max_y*r[3]))
+			arm_box.append(Vector4(origin.x+min_x*dimensions.x,origin.y+min_y*dimensions.y,origin.x+max_x*dimensions.x,origin.y+max_y*dimensions.y))
+			var mesh := Polygon2D.new()
+			mesh.texture = texture
+			mesh.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+			var verts := PackedVector2Array()
+			var uv := PackedVector2Array()
+			var triangles: Array[PackedInt32Array] = []
+			const COLS := 6
+			const ROWS := 10
+			for row in ROWS + 1:
+				var y := lerpf(min_y,max_y,row/float(ROWS))
+				for col in COLS + 1:
+					var x := lerpf(min_x,max_x,col/float(COLS))
+					verts.append(origin+Vector2(x,y)*dimensions)
+					uv.append(Vector2(r[0],r[1])+Vector2(x*r[2],y*r[3]))
+			for row in ROWS:
+				for col in COLS:
+					var a := row*(COLS+1)+col
+					triangles.append(PackedInt32Array([a,a+1,a+COLS+1]))
+					triangles.append(PackedInt32Array([a+1,a+COLS+2,a+COLS+1]))
+			mesh.polygon = verts
+			mesh.uv = uv
+			mesh.polygons = triangles
+			add_child(mesh)
+			meshes.append(mesh)
+			rest_vertices.append(verts)
 	sample(0.0,false,115.0)
 
 func cycle_length(running: bool) -> float:
@@ -134,7 +183,8 @@ func sample(gait_phase: float, running: bool, cycle_stride: float, movement_amou
 			knees[side] = rest_knees[side]
 			posed_hips[side] = hips[side]
 			foot_angles[side] = 0.0
-		for part in 3:
+			arm_angle[side] = 0.0
+		for part in meshes.size():
 			meshes[part].polygon = rest_vertices[part]
 		return
 	var direction := -1.0 if retreating else 1.0
@@ -158,6 +208,18 @@ func sample(gait_phase: float, running: bool, cycle_stride: float, movement_amou
 		# Guarded steps retain front/rear foot order. Run brings the lanes in.
 		var lane := lerpf(ankles[side].x,pelvis_center,lerpf(0.27,0.7,run_amount))
 		var target := Vector2(lane+direction*foot_x,ankles[side].y-lift)
+		# A stockier leg (thigh+shin) can be too short to reach this
+		# stride's horizontal excursion at this vertical offset even while
+		# just PLANTED, let alone mid-swing -- the hip-position solver
+		# below then has no position satisfying both feet at once, and
+		# snaps between its fallback strategies as that flips frame to
+		# frame, a visible mid-stride lurch. Clamping the target itself to
+		# this leg's reach circle keeps a solvable position available at
+		# every phase, for every character's proportions.
+		var reach_limit := hips[side].distance_to(rest_knees[side])+rest_knees[side].distance_to(ankles[side])
+		var from_hip := target-hips[side]
+		if from_hip.length() > reach_limit*0.92:
+			target = hips[side]+from_hip.normalized()*reach_limit*0.92
 		feet[side] = ankles[side].lerp(target,amount)
 	var weight := 0.7 if id in ["sab","abhi"] else 1.0
 	var support_wave := (1.0+cos(phase*TAU*2.0))*0.5
@@ -174,7 +236,16 @@ func sample(gait_phase: float, running: bool, cycle_stride: float, movement_amou
 		var horizontal_reach := sqrt(maxf(0.0,reach_limit*reach_limit-dy*dy))
 		minimum_shift = maxf(minimum_shift,feet[side].x-horizontal_reach-hip.x)
 		maximum_shift = minf(maximum_shift,feet[side].x+horizontal_reach-hip.x)
-	body_shift.x += clampf(0.0,minimum_shift,maximum_shift) if minimum_shift <= maximum_shift else (minimum_shift+maximum_shift)*0.5
+	# On a wide stance with a lot of vertical foot lift, both feet's reach
+	# circles can stop overlapping (minimum_shift crosses past maximum_shift)
+	# — not a rare edge case, it hits stockier characters like abhi
+	# mid-swing. The previous code jumped to an unrelated fallback formula
+	# there, discontinuous with the clamp used every other frame, and
+	# produced a visible mid-stride body lurch. Right at the crossing
+	# minimum_shift == maximum_shift, so both formulas already agree;
+	# sorting the bounds before clamping (instead of switching formulas) is
+	# what carries that agreement smoothly through to either side.
+	body_shift.x += clampf(0.0,minf(minimum_shift,maximum_shift),maxf(minimum_shift,maximum_shift))
 	# Put hips within BOTH reach circles before solving knees. Never leave
 	# the shoe beyond the shin by clamping only the solver's distance.
 	for iteration in 4:
@@ -201,6 +272,16 @@ func sample(gait_phase: float, running: bool, cycle_stride: float, movement_amou
 	for p in rest_vertices[2]:
 		upper_vertices.append(body_point(p))
 	meshes[2].polygon = upper_vertices
+	if shoulders.size() == 2:
+		# Counter-swing: each arm follows the OPPOSITE leg's phase, the same
+		# contralateral timing a real stride uses.
+		for side in 2:
+			var swing_phase := fposmod(phase+(1-side)*0.5+(0.5 if retreating else 0.0),1.0)
+			arm_angle[side] = sin(swing_phase*TAU)*deg_to_rad(lerpf(14.0,26.0,run_amount))*direction*amount
+			var verts := PackedVector2Array()
+			for p in rest_vertices[3+side]:
+				verts.append(deform_arm(p,side))
+			meshes[3+side].polygon = verts
 
 func body_point(p: Vector2) -> Vector2:
 	var pivot := Vector2(split_x,waist)
@@ -215,6 +296,25 @@ func joint(hip: Vector2, foot: Vector2, thigh: float, shin: float, bend: float =
 	var axis := offset.normalized()
 	var along := (thigh*thigh-shin*shin+distance*distance)/(2.0*distance)
 	return hip+axis*along+Vector2(axis.y,-axis.x)*sqrt(maxf(0.0,thigh*thigh-along*along))*bend
+
+func deform_arm(p: Vector2, side: int) -> Vector2:
+	var base := body_point(p)
+	if amount < 0.0001:
+		return base
+	# Fade the rotation to exactly zero at all four edges of the mesh's own
+	# rectangle (matching the torso's clipped-out hole, which never rotates)
+	# and full strength only well inside it. Blending by distance from the
+	# shoulder instead left corners far from the shoulder point — but still
+	# right at the clip boundary — swinging at near-full strength, tearing
+	# a gap open between the two meshes.
+	var box: Vector4 = arm_box[side]
+	var margin: float = (box.z-box.x)*0.22
+	var edge_distance: float = minf(minf(p.x-box.x,box.z-p.x),minf(p.y-box.y,box.w-p.y))
+	var blend := smoothstep(0.0,margin,edge_distance)
+	if blend < 0.0001:
+		return base
+	var pivot := body_point(shoulders[side])
+	return pivot+(base-pivot).rotated(arm_angle[side]*blend)
 
 func deform(p: Vector2, side: int) -> Vector2:
 	if amount < 0.0001:

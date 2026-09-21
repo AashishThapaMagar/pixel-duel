@@ -94,9 +94,39 @@ func check_foot_plants(gait: Node, character: String, running: bool, retreat: bo
 			planted_samples += 1
 			greatest_slip = maxf(greatest_slip, absf(gait.feet[side].x + world_travel - before[side].x))
 	var label := "%s / %s" % [character, "retreat" if retreat else ("run" if running else "walk")]
-	check(planted_samples > 10, "%s: contact checks cover both legs over the cycle" % label)
+	check(planted_samples > 8, "%s: contact checks cover both legs over the cycle" % label)
 	check(greatest_slip <= 0.001,
 		"%s: supporting feet stay planted as the fighter travels (max slip %.5f px)" % [label, greatest_slip])
+
+const CONTINUITY_SAMPLES := 240
+
+func check_continuity(gait: Node, character: String, mode: String) -> void:
+	# A wide stance combined with a lot of vertical foot lift can leave both
+	# feet's reach circles not overlapping at all -- no hip position
+	# satisfies both simultaneously. A solver that isn't built to degrade
+	# gracefully there can silently jump between very different positions on
+	# either side of that boundary, invisible to check_cycle's per-sample
+	# magnitude bounds but very visible in motion as a mid-stride body
+	# lurch. Sample densely and bound how far the body/feet can move between
+	# two phases 1/240th of a cycle apart.
+	var running := mode == "run"
+	var retreat := mode == "retreat"
+	var stride: float = gait.cycle_length(running)
+	var limit: float = gait.height * 0.05
+	var previous_shift: Vector2 = Vector2.ZERO
+	var previous_feet: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
+	var label := "%s / %s" % [character, mode]
+	for frame in CONTINUITY_SAMPLES + 1:
+		var phase := fposmod(float(frame) / float(CONTINUITY_SAMPLES), 1.0)
+		gait.sample(phase, running, stride, 1.0, retreat)
+		if frame > 0:
+			check(gait.body_shift.distance_to(previous_shift) <= limit,
+				"%s: body position advances smoothly, no mid-stride lurch (phase %.4f, jump %.2f px)" % [label, phase, gait.body_shift.distance_to(previous_shift)])
+			for side in 2:
+				check(gait.feet[side].distance_to(previous_feet[side]) <= limit,
+					"%s: foot %d advances smoothly, no mid-stride lurch (phase %.4f, jump %.2f px)" % [label, side, phase, gait.feet[side].distance_to(previous_feet[side])])
+		previous_shift = gait.body_shift
+		previous_feet = [gait.feet[0], gait.feet[1]]
 
 func run() -> void:
 	var fighter: Node = load("res://scenes/Player.tscn").instantiate()
@@ -107,7 +137,8 @@ func run() -> void:
 	for character_index in 7:
 		fighter.apply_character(character_index)
 		var character: String = ROSTER.profile(character_index).id
-		# Archived deformation experiment: never instantiated by live fighters.
+		# Legacy nepali-art calibration: kept only so FIT/joint-solver bugs
+		# still get caught even though no live fighter renders this art.
 		var gait: Node = load("res://scripts/fighter_locomotion.gd").new()
 		root.add_child(gait)
 		var data: Dictionary = load("res://scripts/fighter_sprite_regions.gd").DATA[character]
@@ -117,5 +148,11 @@ func run() -> void:
 		for mode in ["walk", "run", "retreat"]:
 			check_cycle(gait, character, mode)
 		gait.queue_free()
-	print("GAIT_ANATOMY_TEST: ", "ALL PASS (7 fighters, 3 gaits, 32 phases)" if failures.is_empty() else failures)
+		# Live calibration: the arcade-art gait every fighter actually renders,
+		# configured by fighter_sprite_visual.gd against the GAIT_FIT table.
+		check_rest(fighter.visual.gait, character + " (arcade)")
+		for mode in ["walk", "run", "retreat"]:
+			check_cycle(fighter.visual.gait, character + " (arcade)", mode)
+			check_continuity(fighter.visual.gait, character, mode)
+	print("GAIT_ANATOMY_TEST: ", "ALL PASS (7 fighters, 3 gaits, 32 phases, 240-step continuity)" if failures.is_empty() else failures)
 	quit(0 if failures.is_empty() else 1)

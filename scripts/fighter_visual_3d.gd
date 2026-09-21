@@ -1,6 +1,10 @@
 extends "res://scripts/fighter_visual.gd"
 ## Real lit meshes rendered into a transparent viewport. The existing combat
 ## plane and pose clock remain authoritative while character art moves to 3D.
+# Set by a caller that already owns a shared Node3D/viewport/camera (e.g. to
+# put both fighters in one lit scene). Left null, this node builds its own
+# private viewport/camera/lights instead, unchanged from the original setup.
+var world_root: Node3D
 var viewport_3d: SubViewport
 var model: Node3D
 var parts: Dictionary = {}
@@ -16,44 +20,48 @@ var _turn_initialized: bool = false
 func _ready() -> void:
 	# Dedicated/headless simulations need poses and collision, not GPU meshes.
 	# Rendering is exercised separately with a real graphics driver.
-	if DisplayServer.get_name() == "headless":
+	if DisplayServer.get_name() == "headless" and world_root == null:
 		return
-	viewport_3d = SubViewport.new()
-	viewport_3d.size = Vector2i(320, 320)
-	viewport_3d.transparent_bg = true
-	viewport_3d.own_world_3d = true
-	viewport_3d.msaa_3d = Viewport.MSAA_4X
-	viewport_3d.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
-	add_child(viewport_3d)
-	model = Node3D.new()
-	viewport_3d.add_child(model)
-	# A fixed 3/4, slightly elevated angle (still orthogonal, so scale stays
-	# constant regardless of depth) reads as real 3D instead of a flat front
-	# elevation. Facing is turned by rotating the model (see sync_pose/
-	# _process), so this same camera covers both directions correctly.
-	var camera := Camera3D.new()
-	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 176.0
-	var cam_angle := deg_to_rad(17.0)
-	var cam_height := 20.0
-	camera.position = Vector3(sin(cam_angle) * 240.0, cam_height, cos(cam_angle) * 240.0)
-	camera.far = 500.0
-	viewport_3d.add_child(camera)
-	camera.look_at(Vector3(0, cam_height * 0.35, 0), Vector3.UP)
-	var environment := WorldEnvironment.new()
-	environment.environment = Environment.new()
-	environment.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.environment.ambient_light_color = Color("bdc9e5")
-	environment.environment.ambient_light_energy = 0.45
-	viewport_3d.add_child(environment)
-	_light(Vector3(-30, -35, 0), Color("fff0da"), 1.15)
-	_light(Vector3(-15, 140, 0), Color("83bdfc"), 0.8)
-	var sprite := Sprite2D.new()
-	sprite.texture = viewport_3d.get_texture()
-	sprite.position = Vector2(0, -64)
-	sprite.scale = Vector2.ONE * (176.0 / 320.0)
-	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	add_child(sprite)
+	if world_root != null:
+		model = Node3D.new()
+		world_root.add_child(model)
+	else:
+		viewport_3d = SubViewport.new()
+		viewport_3d.size = Vector2i(320, 320)
+		viewport_3d.transparent_bg = true
+		viewport_3d.own_world_3d = true
+		viewport_3d.msaa_3d = Viewport.MSAA_4X
+		viewport_3d.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+		add_child(viewport_3d)
+		model = Node3D.new()
+		viewport_3d.add_child(model)
+		# A fixed 3/4, slightly elevated angle (still orthogonal, so scale stays
+		# constant regardless of depth) reads as real 3D instead of a flat front
+		# elevation. Facing is turned by rotating the model (see sync_pose/
+		# _process), so this same camera covers both directions correctly.
+		var camera := Camera3D.new()
+		camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+		camera.size = 176.0
+		var cam_angle := deg_to_rad(17.0)
+		var cam_height := 20.0
+		camera.position = Vector3(sin(cam_angle) * 240.0, cam_height, cos(cam_angle) * 240.0)
+		camera.far = 500.0
+		viewport_3d.add_child(camera)
+		camera.look_at(Vector3(0, cam_height * 0.35, 0), Vector3.UP)
+		var environment := WorldEnvironment.new()
+		environment.environment = Environment.new()
+		environment.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		environment.environment.ambient_light_color = Color("bdc9e5")
+		environment.environment.ambient_light_energy = 0.45
+		viewport_3d.add_child(environment)
+		_light(Vector3(-30, -35, 0), Color("fff0da"), 1.15)
+		_light(Vector3(-15, 140, 0), Color("83bdfc"), 0.8)
+		var sprite := Sprite2D.new()
+		sprite.texture = viewport_3d.get_texture()
+		sprite.position = Vector2(0, -64)
+		sprite.scale = Vector2.ONE * (176.0 / 320.0)
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		add_child(sprite)
 	for key in ["skin", "cloth", "dark", "accent", "hair", "wrap", "team", "mouth", "eye_white"]:
 		var surface_material := StandardMaterial3D.new()
 		surface_material.roughness = 0.55
@@ -226,16 +234,21 @@ func _update_profile() -> void:
 
 func _process(delta: float) -> void:
 	super._process(delta)
-	if model == null or fighter == null:
+	if model == null or fighter == null or fighter.combat_paused or fighter.hitstop_remaining > 0.0:
 		return
 	scale.x = 1.0
 	var target_turn := 0.0 if fighter.facing >= 0 else PI
 	_turn_rotation = lerp_angle(_turn_rotation, target_turn, 1.0 - exp(-16.0 * delta))
-	model.rotation.y = _turn_rotation
+	model.rotation.y = _turn_rotation if world_root == null else 0.0
+	if world_root != null:
+		# In a shared world the model sits flat in that scene's own facing
+		# convention (turning is handled by the caller); this node's 2D
+		# `rotation` (hit reactions, etc.) is carried over as a Z-spin instead.
+		model.rotation.z = -rotation
 	_update_model()
 
 func _point(point: Vector2, depth: float = 0.0) -> Vector3:
-	return Vector3(point.x, -point.y - 64.0, depth)
+	return Vector3(point.x, -point.y - (64.0 if world_root == null else 0.0), depth)
 
 func _place_bone(key: String, a: Vector3, b: Vector3, thickness: float = 1.0) -> void:
 	var part: MeshInstance3D = parts[key]
