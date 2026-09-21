@@ -123,7 +123,7 @@ func _next_line() -> void:
 func _advance_flow() -> void:
 	match StoryDirector.phase:
 		StoryDirector.Phase.INTRO, StoryDirector.Phase.DEFEAT:
-			get_tree().change_scene_to_file("res://scenes/Arena.tscn")
+			get_tree().change_scene_to_file("res://scenes/Arena3D.tscn")
 		StoryDirector.Phase.FINALE:
 			MatchSetup.story = false
 			MatchSetup.arcade = false
@@ -132,7 +132,7 @@ func _advance_flow() -> void:
 			StoryDirector.begin_intro(ROSTER.profile(MatchSetup.selected_fighters[1]).id)
 			var destination: int = StoryDirector.resolve()
 			if destination == StoryDirector.Destination.ARENA:
-				get_tree().change_scene_to_file("res://scenes/Arena.tscn")
+				get_tree().change_scene_to_file("res://scenes/Arena3D.tscn")
 			elif destination == StoryDirector.Destination.MENU:
 				get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
 			else:

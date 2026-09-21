@@ -40,7 +40,7 @@ func _physics_process(delta: float) -> void:
 	_reaction_cooldown = maxf(0.0, _reaction_cooldown - delta)
 	_decision_timer -= delta
 
-	var distance: float = opponent.global_position.x - fighter.global_position.x
+	var distance: float = _opponent_distance()
 	var abs_distance: float = absf(distance)
 	var toward: int = 1 if distance > 0.0 else -1
 
@@ -113,6 +113,9 @@ func _physics_process(delta: float) -> void:
 			elif randf() < 0.4:
 				move_id = "kick"
 			_request_move(move_id)
+
+func _opponent_distance() -> float:
+	return opponent.global_position.x - fighter.global_position.x
 
 func _request_move(id: String) -> void:
 	# AI decisions enter the same expiring buffer and hit-confirm rules as input.

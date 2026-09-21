@@ -114,7 +114,7 @@ func _run() -> void:
 		guard += 1
 		await process_frame
 	check(guard < 40, "Clicking through the prologue and first intro reaches the fight within 40 lines")
-	await _wait_for_scene("arena.gd")
+	await _wait_for_scene("arena_3d.gd")
 	check(ROSTER.profile(setup.selected_fighters[1]).id == ROSTER.profile(setup.arcade_opponents[0]).id, "The fight that starts is against the first arcade opponent")
 
 	print("STORY_MODE_TEST: ", "ALL PASS" if failures.is_empty() else failures)

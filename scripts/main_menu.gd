@@ -36,6 +36,8 @@ var mode_story_button: Button
 var arena_name_label: Label
 var arena_tagline_label: Label
 var arena_preview: TextureRect
+var preview_stage: Node3D
+var preview_round_index := 0
 var arena_count_label: Label
 
 ## Deliberately no panels, no boxed cards, no bordered buttons on this
@@ -108,7 +110,7 @@ func _ready() -> void:
 		var action: Array = actions[i]
 		var button := _flat_button(action[0], Vector2(action_x + i * 90.0, 502), Vector2(90, 22), 11)
 		button.pressed.connect(action[1])
-	var footer_left := UI.label(self, "7 FIGHTERS  /  7 ARENAS  /  4 ROUNDS", Vector2(0, 522), Vector2(400, 18), 10, Color("5c5349"))
+	var footer_left := UI.label(self, "7 FIGHTERS  /  4 NEPAL ARENAS  /  2 DAYS + 2 NIGHTS", Vector2(0, 522), Vector2(400, 18), 10, Color("5c5349"))
 	var footer_right := UI.label(self, "TAB SELECT   ·   ENTER CONFIRM", Vector2(560, 522), Vector2(400, 18), 10, Color("5c5349"))
 	footer_right.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_refresh_mode_summary()
@@ -279,7 +281,7 @@ func _start_fight() -> void:
 			# open on something to actually say — see its _ready() comment.
 			var destination: int = StoryDirector.resolve()
 			if destination == StoryDirector.Destination.ARENA:
-				get_tree().change_scene_to_file("res://scenes/Arena.tscn")
+				get_tree().change_scene_to_file("res://scenes/Arena3D.tscn")
 			elif destination == StoryDirector.Destination.MENU:
 				get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
 			else:
@@ -289,7 +291,7 @@ func _start_fight() -> void:
 		MatchSetup.begin_arcade()
 	var tween := create_tween()
 	tween.tween_property(self, "modulate:a", 0.0, 0.16)
-	tween.tween_callback(func(): get_tree().change_scene_to_file("res://scenes/Arena.tscn"))
+	tween.tween_callback(func(): get_tree().change_scene_to_file("res://scenes/Arena3D.tscn"))
 
 func _show_match_setup() -> void:
 	if transitioning or is_instance_valid(modal):
@@ -302,6 +304,17 @@ func _show_match_setup() -> void:
 	arena_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	arena_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	modal_content.add_child(arena_preview)
+	var preview_viewport := SubViewport.new()
+	preview_viewport.size = Vector2i(460, 260)
+	preview_viewport.own_world_3d = true
+	arena_preview.add_child(preview_viewport)
+	preview_stage = preload("res://scripts/nepal_stage_3d.gd").new()
+	preview_viewport.add_child(preview_stage)
+	var preview_camera := Camera3D.new()
+	preview_viewport.add_child(preview_camera)
+	preview_camera.position = Vector3(0, 5, 17)
+	preview_camera.look_at(Vector3(0, 2, -4))
+	arena_preview.texture = preview_viewport.get_texture()
 	UI.label(modal_content, "SEVEN PLACES. ONE WINNER.", Vector2(28, 251), Vector2(230, 20), 10, UI.MUTED)
 	UI.label(modal_content, "MODE", Vector2(280, 96), Vector2(140, 20), 11, UI.MUTED)
 	mode_two_button = UI.button(modal_content, "2P", Vector2(280, 120), Vector2(70, 34))
@@ -359,15 +372,15 @@ func _set_vs_ai(value: bool) -> void:
 	_refresh_mode_summary()
 
 func _cycle_arena(step: int) -> void:
-	MatchSetup.selected_arena = posmod(MatchSetup.selected_arena + step, ARENA_CATALOG.ARENAS.size())
+	preview_round_index = posmod(preview_round_index + step, 4)
 	_refresh_match_setup()
 
 func _refresh_match_setup() -> void:
-	var arena_data: Dictionary = ARENA_CATALOG.arena(MatchSetup.selected_arena)
-	arena_name_label.text = arena_data.name
-	arena_tagline_label.text = arena_data.tagline
-	arena_preview.texture = load(arena_data.texture)
-	arena_count_label.text = "ARENA %02d / %02d" % [MatchSetup.selected_arena + 1, ARENA_CATALOG.ARENAS.size()]
+	preview_stage.show_round(preview_round_index)
+	var stage_data: Dictionary = preview_stage.ROUNDS[preview_round_index]
+	arena_name_label.text = stage_data.name
+	arena_tagline_label.text = stage_data.detail
+	arena_count_label.text = "ROUND %d / 4 PREVIEW - FINAL AT NIGHT" % [preview_round_index + 1]
 	for pair in [[mode_two_button, not MatchSetup.vs_ai], [mode_ai_button, MatchSetup.vs_ai and not MatchSetup.arcade],
 			[mode_arcade_button, MatchSetup.arcade and not MatchSetup.story], [mode_story_button, MatchSetup.story]]:
 		var button: Button = pair[0]
@@ -475,7 +488,7 @@ func _show_guide() -> void:
 	for player in 2:
 		var x := 28.0 + player * 294
 		UI.label(modal_content, "PLAYER %d" % (player + 1), Vector2(x, 108), Vector2(255, 24), 15, UI.LIME if player == 0 else UI.VIOLET)
-		UI.label(modal_content, "A / D   Move    W   Jump\nS   Guard    F   Light    G   Heavy" if player == 0 else "Arrows   Move / Jump\nDown   Guard    K   Light    L   Heavy", Vector2(x, 143), Vector2(270, 59), 14)
+		UI.label(modal_content, "WASD   Move    Space   Jump\nE   Guard    F   Light    G   Heavy" if player == 0 else "Arrows   Move    Enter   Jump\nO   Guard    K   Light    L   Heavy", Vector2(x, 143), Vector2(270, 59), 14)
 	UI.label(modal_content, "Move to walk. Hold Shift (P1) / Ctrl (P2) to run. Double-tap to dash.\nKeep your fighter's moves across four rounds. Most wins takes it.\nF1: moves, throws, weaknesses and signature commands.", Vector2(28, 224), Vector2(566, 75), 13, UI.MUTED)
 
 func _close_modal() -> void:

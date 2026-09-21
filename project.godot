@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Who Won?"
-config/description="A 2D fighting game prototype (Tekken/Street-Fighter style) built in Godot."
+config/description="A 3D arena fighting game with free movement and physics-driven characters."
 run/main_scene="res://scenes/Splash.tscn"
 config/features=PackedStringArray("4.2", "GL Compatibility")
 config/icon="res://icon.svg"

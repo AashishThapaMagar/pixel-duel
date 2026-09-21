@@ -1,17 +1,24 @@
 # Who Won?
 
-An original action fighting game prototype in Godot 4.2+, with illustrated Nepali-inspired fighter sprites on a 2D combat plane and seven animated Himalayan arenas. Every match lasts **four rounds**. Each fighter keeps their own moves throughout; the most round wins takes the match.
+An original action fighting game prototype in Godot 4.2+, with articulated 3D fighters and free movement across a solid Himalayan courtyard. Every match lasts **four rounds**. Each fighter keeps their own moves throughout; the most round wins takes the match.
 
 Choose **Match Setup > Fighters** to select Anug, Ish, Sab, Bib, Abhi, Sup, or Anant. Start Game uses your selected fighters. The home screen remains free of character previews.
+
+## 3D arena
+
+Start Game now opens `scenes/Arena3D.tscn`. All seven fighters use lit meshes in the same 3D world, with shadows, a following perspective camera, gravity, capsule collision against the floor and walls, and circular fighter pushboxes. Move across both floor axes to circle opponents or dodge committed attacks. Every match follows a four-arena Nepal-inspired journey: Himalayan Lakeside (day), Lantern Courtyard (night), Terrace Valley (day), and Moonlit Heritage (final night). The ARENA menu previews this fixed sequence using live 3D views. These fictional settings celebrate Nepal's landscapes and heritage rather than recreate specific monuments. The opening Himalayan Lakeside arena uses vivid illustrated mountains, cobalt lake water, a pagoda and red rhododendrons, with ink outlines inspired by the supplied reference. All four stages pair illustrated image backdrops with a textured 3D stone court, fighter shadows and subtle camera parallax. Distant scenery is painted imagery; the fighting floor, characters and collisions remain fully 3D. The closer, low camera follows combat and pulls back when fighters separate. The same solid arena boundaries keep combat consistent across rounds. Artwork and generation prompts are saved in [assets/backgrounds/nepal_illustrated/](assets/backgrounds/nepal_illustrated/), generated with the built-in image_gen tool.
+
+Combat keeps the existing move tables, stamina, hit confirms, throws, guard breaks, AI, four-round matches, and story/arcade progression. Strikes query oriented 3D volumes, so depth separation matters. Models are procedural stylized rigs, with fixed-length limbs and poses driven by the combat state; they are not ragdolls or imported motion-capture characters.
 
 ## Controls
 
 | Action | Player 1 | Player 2 |
 |---|---|---|
-| Move | A / D | Left / Right arrows |
+| Move across the floor | W / A / S / D | Arrow keys |
+| Run | Hold Shift | Hold Ctrl |
 | Dash / backdash | Double-tap A / D | Double-tap Left / Right |
-| Jump | W | Up arrow |
-| Block | S (hold) | Down arrow (hold) |
+| Jump | Space | Enter |
+| Block | E (hold) | O (hold) |
 | Punch (light) | F | K |
 | Kick (heavy) | G | L |
 | Restart after round ends | R | R |
@@ -23,9 +30,9 @@ Pressing an attack shortly before recovery ends queues it for the first availabl
 
 Every fighter has six directional normals and two original motion-command enders. Forward/back always mean toward/away from the opponent. For P1 facing right:
 
-- **Driving ender:** S, S+D, D+G (down, down-forward, forward + heavy).
-- **Breaking ender:** S, S+A, A+G (down, down-back, back + heavy).
-- Finish the three-direction motion within 0.4 seconds. Mirror left/right when facing left; P2 uses Down/Left/Right and L.
+- **Driving ender:** E, E+D, D+G (down, down-forward, forward + heavy).
+- **Breaking ender:** E, E+A, A+G (down, down-back, back + heavy).
+- Finish the three-direction motion within 0.4 seconds. Use movement toward/away from the opponent as they circle you; P2 uses O for guard and L for heavy. The guard button supplies the command input formerly called down.
 - Land **F → F → quarter-circle forward + G** for the command combo. Each button needs a fresh press; holding an attack does not continue a string.
 
 Only a confirmed jab or cross can cancel into a command ender. Cancels open after active frames and close six frames later. Misses and blocked hits must recover. Enders cannot cancel again and are vulnerable on block or whiff.
@@ -37,13 +44,15 @@ Press **F1** for all commands, combos, startup/active/recovery timings, and esti
 ## Main menu
 
 - **Start Game** enters a four-round match using your saved-in-session setup.
-- **Match Setup** selects 2 Players, vs AI, or Arcade, plus one of seven arenas. **Fighters** opens compact name selectors and trait descriptions for both players.
+- **Match Setup** selects 2 Players, vs AI, or Arcade, plus previews of the four-stage Nepal journey. **Fighters** opens compact name selectors and trait descriptions for both players.
 - **Arcade** fights the other regular roster members before **Anant**, the final boss. Each rival is a four-round match. Win to advance; losses and draws retry the same rival. Defeating Anant completes the run. Starting Arcade with Anant also ends in an Anant mirror match.
 - **How to Play**, **Settings**, and **Exit** remain available. Fullscreen and volume settings persist between launches.
 
 The AI uses movement/guard inputs and the same expiring attack buffer, stamina costs, hit confirms, startup and recovery as players. It reacts to visible attacks after a delay. Anant decides more frequently, but has no immunity, automatic damage, or extra health.
 
-### Arenas
+### Legacy illustrated arenas
+
+The following artwork and ambience describe `Arena.tscn`, retained for the 2D reference and regression tests. Live matches use the 3D courtyard described above.
 
 Seven selectable Himalayan backdrops live in assets/backgrounds/himalayan/: **Himalayan Lake**, **Prayer Flag Pass**, **Lakeside Temple**, **Rhododendron Grove**, **Terrace Village**, **Moonlit Monastery**, and **Sunrise Summit**. Match Setup previews each scene and shows its position in the seven-arena collection. The illustrated terraces replace the visible legacy floor while keeping the same collision floor, fighter positions, and stage bounds. Original background assets remain on disk.
 
@@ -200,7 +209,7 @@ godot --headless --path . -s res://tests/fighting_system_test.gd
 
 ## Story mode later
 
-Story mode is planned after the core game is finished, using the user's script for dialogue, scenes, and fight progression. No story content or story menu is included yet.
+Story mode layers dialogue around the arcade matchup order and enters the same 3D match scene.
 
 
 Seven-arena selection and render check:
@@ -217,7 +226,9 @@ godot --headless --path . -s res://tests/action_roster_test.gd
 
 Omit --headless and append -- --capture to save roster and signature-pose screenshots under .godot/action-*.png.
 
-## Nepali-inspired fighter sprites
+## Archived Nepali-inspired fighter sprites
+
+This section describes the previous sprite renderer. Live 3D matches use `fighter_visual_3d.gd`.
 
 The home screen now exposes Story, Arcade, Versus AI and Local Versus as selectable mode cards. Fighters, Arena/Setup, Fight Options, Move Guide and Settings have direct shortcuts. Fight Options sets AI difficulty (reaction and decision speed), a 60/99/120-second timer, and impact camera shake; matches retain four rounds.
 
@@ -228,3 +239,25 @@ The playable fighters use seven KOF XIII-inspired arcade PNG atlases in `assets/
 The original PNG pixels are preserved. Silhouette-derived frame regions and shader exclusions isolate extended limbs from neighboring poses, and grounded frames align to the fighting floor. Attack frames follow the combat clock and hit-stop. Character display height varies; collision and gameplay traits remain controlled by the combat system. The previous mesh renderer remains available on disk.
 
 Asset validation: `python tools/index_arcade_atlases.py` (Pillow, numpy and scipy; reads artwork without modifying it). Runtime checks: `godot --headless --path . -s res://tests/fighter_sprite_test.gd`. See `assets/sprites/fighter/arcade/README.md` for frame mapping, prompts and benchmarks. The older `nepali/` atlases and mesh experiments are retained as reference assets.
+
+## 3D verification and architecture
+
+```sh
+godot --headless --path . --fixed-fps 60 -s res://tests/arena_3d_test.gd
+godot --path . --fixed-fps 60 -s res://tests/arena_3d_test.gd -- --capture
+```
+
+The integration test covers depth movement, diagonal speed, jumping/landing, walls, pushboxes, 3D hits and misses, guard, pause, AI depth tracking, roster changes and round resets. The rendered check writes `.godot/arena-3d-review.png`.
+
+Validated with Godot 4.5.1 using the Compatibility renderer.
+
+`arena_3d.gd` builds the world and reuses the existing round/HUD manager. `player_3d.gd` adapts shared `player.gd` combat rules to a `CharacterBody3D` at 64 combat units per metre. Its inherited 2D collision is disabled; `hit_detection_3d.gd` resolves actual 3D strike volumes. `fighter_visual_3d.gd` places articulated meshes directly under the fighter's world rig. `ai_controller_3d.gd` measures 3D separation while retaining the original AI decisions. The HUD remains a canvas overlay.
+
+Nepal journey regression and four rendered previews:
+
+```sh
+godot --headless --path . --fixed-fps 60 -s res://tests/nepal_journey_test.gd
+godot --path . --fixed-fps 60 -s res://tests/nepal_journey_test.gd -- --capture
+```
+
+Screenshots are written to `.godot/nepal-round-1.png` through `nepal-round-4.png`. `scripts/nepal_stage_3d.gd` owns the round scenery and lighting. The original painted arenas remain archived for the legacy 2D scene.

@@ -184,6 +184,11 @@ func _build_model() -> void:
 	# Wider than the torso so its edges peek out past the shoulders instead
 	# of hiding fully behind the body from the 3/4 camera angle.
 	_box("cape", Vector3(40, 54, 1.8), "cloth")
+	# A free camera can see either side of the fighter's head and uniform.
+	for key in ["eye_white", "eye", "brow", "mouth", "ear", "lapel_a", "lapel_b", "chest_mark", "player_mark", "shades"]:
+		var far_part: MeshInstance3D = parts[key].duplicate()
+		model.add_child(far_part)
+		parts[key + "_far"] = far_part
 
 func sync_pose(owner_fighter: Node) -> void:
 	super.sync_pose(owner_fighter)
@@ -280,7 +285,7 @@ func _update_model() -> void:
 			# Turn the rear shoulder into the foreground for rear-hand strikes.
 			depth = 9.0 if i == 0 else -5.0
 		var hand := shoulder + (pose[3 + i] - shoulder).limit_length(49.9)
-		var elbow := _joint(shoulder, hand, 25.0, 1.0)
+		var elbow := _joint(shoulder, hand, 25.0, -1.0 if hand.x < shoulder.x else 1.0)
 		_place_bone(side + "_upper", _point(shoulder, depth), _point(elbow, depth), _build)
 		_place_bone(side + "_forearm", _point(elbow, depth), _point(hand, depth), _build)
 		_place_bone(side + "_wrap", _point(hand.lerp(elbow, 0.26), depth), _point(hand, depth), _build * (1.55 if _signature == "wraps" else 1.0))
@@ -298,7 +303,7 @@ func _update_model() -> void:
 	parts.head.position = _point(head)
 	parts.jaw.position = _point(head + Vector2(1, 5), 1)
 	parts.ear.position = _point(head + Vector2(-5, 1), 8)
-	parts.nose.position = _point(head + Vector2(9, 1), 4.5)
+	parts.nose.position = _point(head + Vector2(9, 1), 0)
 	parts.hair.position = _point(head + Vector2(-1, -9))
 	parts.hair.scale.y = 3.0 if _hair_style == "crop" else 5.3
 	parts.crest.position = _point(head + Vector2(0, -14))
@@ -329,6 +334,12 @@ func _update_model() -> void:
 	parts.cape.position = _point((chest + hip) * 0.5 + Vector2(0, -4), -9.0)
 	parts.cape.rotation.z = parts.torso.rotation.z
 	parts.cape.scale = Vector3(_build, 1.0, 1.0)
+	for key in ["eye_white", "eye", "brow", "mouth", "ear", "lapel_a", "lapel_b", "chest_mark", "player_mark", "shades"]:
+		var near_part: MeshInstance3D = parts[key]
+		var far_part: MeshInstance3D = parts[key + "_far"]
+		far_part.transform = near_part.transform
+		far_part.position.z = -near_part.position.z
+		far_part.visible = near_part.visible
 
 func _draw() -> void:
 	# The inherited 2D drawing is replaced by the viewport's 3D render.

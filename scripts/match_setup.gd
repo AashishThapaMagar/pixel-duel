@@ -31,6 +31,20 @@ func is_final_boss() -> bool:
 	return arcade and arcade_index == arcade_opponents.size() - 1
 
 func _ready() -> void:
+	var bindings_3d := [
+		["left", KEY_A, KEY_LEFT], ["right", KEY_D, KEY_RIGHT],
+		["far", KEY_W, KEY_UP], ["near", KEY_S, KEY_DOWN],
+		["jump", KEY_SPACE, KEY_ENTER], ["block", KEY_E, KEY_O],
+		["punch", KEY_F, KEY_K], ["kick", KEY_G, KEY_L],
+		["run", KEY_SHIFT, KEY_CTRL]]
+	for binding in bindings_3d:
+		for player in 2:
+			var action := "p%d_3d_%s" % [player + 1, binding[0]]
+			if not InputMap.has_action(action):
+				InputMap.add_action(action)
+				var event := InputEventKey.new()
+				event.physical_keycode = binding[player + 1]
+				InputMap.action_add_event(action, event)
 	for binding in [["p1_run", KEY_SHIFT], ["p2_run", KEY_CTRL]]:
 		if not InputMap.has_action(binding[0]):
 			InputMap.add_action(binding[0])

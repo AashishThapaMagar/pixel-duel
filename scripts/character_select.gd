@@ -158,4 +158,4 @@ func _start_match() -> void:
 	MatchSetup.selected_fighters.assign(selections)
 	var tween := create_tween()
 	tween.tween_property(self, "modulate:a", 0.0, 0.18)
-	tween.tween_callback(func(): get_tree().change_scene_to_file("res://scenes/Arena.tscn"))
+	tween.tween_callback(func(): get_tree().change_scene_to_file("res://scenes/Arena3D.tscn"))
