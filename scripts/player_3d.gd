@@ -2,6 +2,9 @@ extends "res://scripts/player.gd"
 ## Combat controller in legacy pose units; CharacterBody3D owns all movement.
 ## Keeping combat in one implementation preserves hit confirms and frame data.
 const UNITS := 64.0
+const LANE_HALF_DEPTH := 0.65
+const LANE_HALF_WIDTH := 4.25
+const SIDESTEP_RATIO := 0.35
 var body: CharacterBody3D
 var pivot: Node3D
 var forward := Vector3.RIGHT
@@ -27,9 +30,11 @@ func _ready() -> void:
 
 func world_input() -> Vector3:
 	if ai_controlled:
-		return forward * Input.get_axis(input_prefix + "left", input_prefix + "right")
+		var direction := forward * Input.get_axis(input_prefix + "left", input_prefix + "right")
+		direction.z *= SIDESTEP_RATIO
+		return direction
 	var axes := Input.get_vector(input_prefix + "left", input_prefix + "right", input_prefix + "far", input_prefix + "near")
-	return Vector3(axes.x, 0.0, axes.y)
+	return Vector3(axes.x, 0.0, axes.y * SIDESTEP_RATIO)
 
 func _movement_axis() -> float:
 	var projection := world_input().dot(forward)
@@ -56,6 +61,13 @@ func _capture_input() -> void:
 	# button as their down input. A/D double taps dash along the input vector.
 	var before := state
 	super._capture_input()
+	if Input.is_action_just_pressed(input_prefix + "grapple"):
+		throw_tech_until = combat_time + 0.16
+		if state in [State.IDLE, State.WALK, State.BLOCK] and _is_grounded():
+			_buffered_action = "grapple"
+			_buffered_move = ""
+			_buffered_direction = 0
+			_buffer_remaining = input_buffer_time
 	if before != State.DASH and state == State.DASH:
 		dash_vector = world_input().normalized()
 		if dash_vector.length_squared() < 0.01:
@@ -93,6 +105,12 @@ func _move_combat_body(delta: float) -> void:
 	_separate_bodies()
 	body.move_and_slide()
 	_separate_bodies()
+	# Keep sidesteps on the fighting strip, including pushback and jumps.
+	body.position.x = clampf(body.position.x, -LANE_HALF_WIDTH, LANE_HALF_WIDTH)
+	body.position.z = clampf(body.position.z, -LANE_HALF_DEPTH, LANE_HALF_DEPTH)
+	if absf(body.position.z) >= LANE_HALF_DEPTH:
+		body.velocity.z = 0.0
+		lateral_speed = 0.0
 	velocity.y = -body.velocity.y * UNITS
 	var displacement := body.position - previous
 	var signed_distance := Vector2(displacement.x, displacement.z).length() * (-1.0 if planar.dot(forward) < -0.1 else 1.0)

@@ -15,11 +15,26 @@ func frames(count: int) -> void:
 		await process_frame
 
 func run() -> void:
-	root.get_node("Settings").touch_controls = false
+	root.get_node("Settings").touch_controls = true
 	root.get_node("MatchSetup").vs_ai = false
 	var arena: Node = load("res://scenes/Arena3D.tscn").instantiate()
 	root.add_child(arena)
 	current_scene = arena
+	var touch: Control
+	for child in arena.get_children():
+		if child.get_script() == load("res://scripts/touch_controls_3d.gd"):
+			touch = child
+	check(touch != null, "Touch input remains available when enabled")
+	var tap := InputEventScreenTouch.new()
+	tap.pressed = true
+	touch._input(tap)
+	check(touch.using_touch, "Touch activates on-screen controls")
+	Input.action_press("p1_3d_punch")
+	var keyboard := InputEventKey.new()
+	keyboard.pressed = true
+	keyboard.physical_keycode = KEY_A
+	touch._input(keyboard)
+	check(not touch.using_touch and not Input.is_action_pressed("p1_3d_punch"), "Keyboard hides touch controls and releases held actions")
 	var nights := 0
 	for index in 4:
 		arena._begin_round(index)

@@ -79,6 +79,11 @@ static func guide(style_id: String, custom_moves: Dictionary = {}) -> String:
 		result += "%s  —  %s\n    %df startup / %df active / %df recovery / %+d on block*\n" % [commands[i], move.name, roundi(move.startup * 60), roundi(move.active * 60), roundi(move.recovery * 60), on_block]
 	result += "\nPUNCH CHAIN: Light > Light > Light\n%s > %s > %s\n" % [moves.jab.name, moves.cross.name, moves.hook.name]
 	result += "\nMIXED CHAIN: Light > Light > Heavy\n%s > %s > %s\n" % [moves.jab.name, moves.cross.name, moves[moves.cross.next_heavy].name]
+	if moves.has("grapple"):
+		result += "\nGRAPPLE: H (P1) / J (P2), or Light + Heavy together\n%s / close range / %df startup\n" % [moves.grapple.name, roundi(moves.grapple.startup * 60)]
+		result += "Beats guard; loses to jumping, spacing and interruption. Tap grapple or Light + Heavy just before contact to escape. Throws cannot combo from hitstun.\n"
+		result += "\nKICK ROUTE: Heavy > Light > Heavy\n%s > %s > %s\n" % [moves.kick.name, moves.chain_bridge.name, moves.chain_finish.name]
+		result += "P1: F F G or G F G. P2: K K L or L K L. Release directions and tap each button as the previous strike connects.\n"
 	result += "\nCOMMAND ENDER: Light > Light > quarter-circle forward + Heavy\nDown is S (P1) / Down arrow (P2). Roll through the diagonal, finish forward, then press Heavy.\nComplete the motion within 0.4 seconds. Directions mirror when you switch sides."
 	result += "\nPress each button separately as the previous hit connects.\nOnly landed hits allow a cancel, within 6 frames after active frames end.\nGuard or whiff denies the cancel. Command enders have long, punishable recovery.\nCounter hit: catch startup for +20% damage and 6 extra stun frames.\nPunish: catch recovery. True combos scale to a 40% damage floor.\n*On-block figures assume earliest contact, rounded to 60 Hz; later contact changes advantage."
 	return result

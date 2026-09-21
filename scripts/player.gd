@@ -268,6 +268,11 @@ func _capture_input() -> void:
 	# in take_hit) during which an incoming grapple is escaped instead of landing.
 	if Input.is_action_pressed(input_prefix + "punch") and Input.is_action_pressed(input_prefix + "kick") and (Input.is_action_just_pressed(input_prefix + "punch") or Input.is_action_just_pressed(input_prefix + "kick")):
 		throw_tech_until = combat_time + 0.16
+		if is_action_fight() and state in [State.IDLE, State.WALK, State.BLOCK] and _is_grounded():
+			_buffered_action = "grapple"
+			_buffered_move = ""
+			_buffered_direction = 0
+			_buffer_remaining = input_buffer_time
 		return
 	if facing != _motion_facing:
 		motion_input.reset()
@@ -346,7 +351,9 @@ func _consume_action() -> bool:
 	_buffered_action = ""
 	_buffered_move = ""
 	_buffer_remaining = 0.0
-	if action == "jump":
+	if action == "grapple":
+		_start_style_move("grapple")
+	elif action == "jump":
 		state = State.JUMP_START
 		action_timer = JUMP_START_TIME
 		_jump_direction = _movement_axis()

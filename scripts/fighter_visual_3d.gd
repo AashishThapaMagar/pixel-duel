@@ -64,10 +64,10 @@ func _ready() -> void:
 		add_child(sprite)
 	for key in ["skin", "cloth", "dark", "accent", "hair", "wrap", "team", "mouth", "eye_white"]:
 		var surface_material := StandardMaterial3D.new()
-		surface_material.roughness = 0.55
+		surface_material.roughness = 0.92
 		# A cheap rim light along every edge gives the low-poly rig a lit,
 		# "real 3D game" silhouette instead of looking like a flat cutout.
-		surface_material.rim_enabled = true
+		surface_material.rim_enabled = false
 		surface_material.rim = 0.32
 		surface_material.rim_tint = 0.45
 		materials[key] = surface_material
@@ -82,7 +82,7 @@ func _ready() -> void:
 	materials.skin.roughness = 0.85
 	materials.skin.rim = 0.14
 	materials.skin.rim_tint = 0.25
-	materials.hair.roughness = 0.4
+	materials.hair.roughness = 0.9
 	# Mouths tinted from the character's own skin (see _update_profile) read
 	# as a closed, human mouth line; a flat black bar reads as a gash.
 	materials.mouth.roughness = 0.75
@@ -121,11 +121,11 @@ func _box(key: String, size: Vector3, surface_material: String) -> void:
 	_mesh(key, mesh, surface_material)
 
 func _bone(key: String, radius: float, surface_material: String) -> void:
-	var mesh := CapsuleMesh.new()
-	mesh.radius = radius
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius * 0.82
+	mesh.bottom_radius = radius
 	mesh.height = 30.0
-	mesh.radial_segments = 18
-	mesh.rings = 6
+	mesh.radial_segments = 10
 	_mesh(key, mesh, surface_material)
 
 func _build_model() -> void:
@@ -137,7 +137,7 @@ func _build_model() -> void:
 		_box(side + "_sole", Vector3(18, 2, 12), "wrap")
 		_bone(side + "_upper", 5.5, "skin")
 		_bone(side + "_forearm", 4.4, "skin")
-		_sphere(side + "_shoulder", Vector3(7, 7, 7), "skin")
+		_sphere(side + "_shoulder", Vector3(5.8, 5.8, 5.8), "skin")
 		_sphere(side + "_elbow", Vector3(4.8, 4.8, 4.8), "skin")
 		_sphere(side + "_hand", Vector3(6, 6.7, 6), "skin")
 		_bone(side + "_wrap", 4.9, "wrap")
@@ -160,14 +160,14 @@ func _build_model() -> void:
 	_sphere("nose", Vector3(2.7, 2.4, 2.7), "skin")
 	# More coverage (was leaving a lot of bare, shiny scalp exposed) and
 	# hangs a bit lower over the forehead.
-	_sphere("hair", Vector3(10.1, 6.0, 9.4), "hair")
+	_sphere("hair", Vector3(9.2, 5.0, 8.8), "hair")
 	_bone("braid", 3.0, "hair")
 	_box("crest", Vector3(5, 8, 13), "hair")
 	_box("headband", Vector3(18, 3.0, 16.6), "accent")
 	# A pale sclera sitting just behind the pupil is what reads as an eye
 	# instead of a flat dark slit; see _update_model for how they're paired.
-	_sphere("eye_white", Vector3(3.4, 2.2, 1.6), "eye_white")
-	_box("eye", Vector3(2.6, 1.6, 1), "dark")
+	_sphere("eye_white", Vector3(2.4, 1.1, 0.35), "eye_white")
+	_box("eye", Vector3(1.4, 1.4, 0.8), "dark")
 	_box("brow", Vector3(4.6, 1.5, 1), "hair")
 	# Tinted from the fighter's own skin in _update_profile, not flat black —
 	# a solid black bar reads as a gash rather than a closed mouth.
@@ -216,8 +216,8 @@ func _update_profile() -> void:
 	_build = profile.build
 	_signature = profile.get("signature", "")
 	materials.skin.albedo_color = profile.skin
-	materials.cloth.albedo_color = profile.color
-	materials.accent.albedo_color = profile.accent
+	materials.cloth.albedo_color = profile.color.darkened(0.16)
+	materials.accent.albedo_color = profile.accent.darkened(0.12)
 	materials.hair.albedo_color = profile.hair
 	materials.mouth.albedo_color = profile.skin.darkened(0.45)
 	materials.team.albedo_color = Color("58a9ff") if fighter.player_id == 1 else Color("ff6868")
@@ -231,6 +231,7 @@ func _update_profile() -> void:
 	parts.shades.visible = _signature == "shades"
 	parts.cape.visible = _signature == "cape"
 	for side in ["rear", "lead"]:
+		parts[side + "_shoulder"].material_override = materials.cloth if _outfit in ["suit", "keeper", "gi"] else materials.skin
 		parts[side + "_shin"].material_override = materials.skin if _outfit == "shorts" else materials.cloth
 		parts[side + "_knee"].material_override = materials.skin if _outfit == "shorts" else materials.cloth
 		parts[side + "_upper"].material_override = materials.cloth if _outfit in ["suit", "keeper"] else materials.skin
@@ -267,7 +268,7 @@ func _update_model() -> void:
 		return
 	var hip := pose[0]
 	var chest := pose[1]
-	var head := pose[2]
+	var head: Vector2 = chest + (pose[2] - chest) * 0.84
 	for i in 2:
 		var side := "rear" if i == 0 else "lead"
 		var depth := -6.0 if i == 0 else 7.0
@@ -293,7 +294,7 @@ func _update_model() -> void:
 		parts[side + "_elbow"].position = _point(elbow, depth)
 		parts[side + "_hand"].position = _point(hand, depth)
 		var gloves: bool = _outfit == "keeper" or (fighter != null and fighter.current_style != null and fighter.current_style.kicks_disabled)
-		parts[side + "_hand"].scale = Vector3(7.5, 8.2, 7.2) if gloves else Vector3(5.8, 6.7, 5.8)
+		parts[side + "_hand"].scale = Vector3(6.0, 6.7, 5.5) if gloves else Vector3(4.8, 5.6, 4.5)
 		parts[side + "_hand"].material_override = materials.accent if gloves else materials.skin
 	parts.torso.position = _point((chest + hip) * 0.5)
 	parts.torso.rotation.z = -(chest - hip).angle() - PI * 0.5

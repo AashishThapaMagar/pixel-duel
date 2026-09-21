@@ -36,6 +36,7 @@ func _ready() -> void:
 		["far", KEY_W, KEY_UP], ["near", KEY_S, KEY_DOWN],
 		["jump", KEY_SPACE, KEY_ENTER], ["block", KEY_E, KEY_O],
 		["punch", KEY_F, KEY_K], ["kick", KEY_G, KEY_L],
+		["grapple", KEY_H, KEY_J],
 		["run", KEY_SHIFT, KEY_CTRL]]
 	for binding in bindings_3d:
 		for player in 2:

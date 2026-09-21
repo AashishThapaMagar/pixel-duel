@@ -42,11 +42,21 @@ func run() -> void:
 	await frames(10)
 	check(p1.body is CharacterBody3D and p1._is_grounded(), "Fighter uses a grounded 3D physics body")
 	check(p1.visual.world_root == p1.pivot and p1.visual.viewport_3d == null, "Characters render in the shared 3D world")
+	var steady_camera: Transform3D = arena.camera_3d.transform
+	p1.body.position += Vector3(0.25, 1.0, 0.2)
+	p2.body.position += Vector3(0.25, 0.0, 0.2)
+	arena._update_fight_camera(1.0)
+	check(arena.camera_3d.transform.is_equal_approx(steady_camera), "Close footwork and jumps do not pan, tilt or zoom the camera")
+	p1.body.position = p1.spawn_position
+	p2.body.position = p2.spawn_position
 	var start: Vector3 = p1.body.position
 	Input.action_press("p1_3d_far")
 	await frames(25)
 	Input.action_release("p1_3d_far")
-	check(p1.body.position.z < start.z - 0.5, "Depth movement travels across the arena")
+	check(p1.body.position.z < start.z - 0.15, "Sidestep moves a short distance along the fighting strip")
+	Input.action_press("p1_3d_far")
+	await frames(120)
+	check(absf(p1.body.position.z) <= 0.651 and p1._is_grounded(), "Holding sidestep stays grounded inside the narrow lane")
 	await reset_fighters(Vector3(-3, 0.02, 0), Vector3(3, 0.02, 0))
 	Input.action_press("p1_3d_right")
 	await frames(30)
@@ -56,7 +66,7 @@ func run() -> void:
 	Input.action_press("p1_3d_near")
 	await frames(30)
 	var diagonal: float = Vector2(p1.body.position.x + 3, p1.body.position.z).length()
-	check(absf(straight - diagonal) < 0.08, "Diagonal movement has the same speed as straight movement")
+	check(diagonal <= straight + 0.08, "Sidestepping diagonally cannot accelerate forward movement")
 	await reset_fighters()
 	Input.action_press("p1_3d_jump")
 	await frames(1)
@@ -72,7 +82,7 @@ func run() -> void:
 	var first_health: int = p2.health
 	await frames(6)
 	check(p2.health == first_health, "Active frames cannot hit the same rival twice")
-	await reset_fighters(Vector3(-0.44, 0.02, 0), Vector3(0.44, 0.02, 1.3))
+	await reset_fighters(Vector3(-0.44, 0.02, -0.65), Vector3(0.44, 0.02, 0.65))
 	# Commit the strike to +X while the rival is offset along Z.
 	p1.forward = Vector3.RIGHT
 	p1._start_style_move("jab")
@@ -90,11 +100,11 @@ func run() -> void:
 	await reset_fighters(Vector3(0, 2.5, 0), Vector3(0, 0.02, 0))
 	await frames(85)
 	check(p1._is_grounded() and p1.body.position.y < 0.03, "Landing above a rival returns to the floor instead of standing on their head")
-	await reset_fighters(Vector3(6.6, 0.02, 0), Vector3(0, 0.02, 0))
+	await reset_fighters(Vector3(4.2, 0.02, 0), Vector3(0, 0.02, 0))
 	Input.action_press("p1_3d_right")
 	Input.action_press("p1_3d_run")
 	await frames(50)
-	check(p1.body.position.x < 6.8, "Solid 3D arena walls stop running fighters")
+	check(p1.body.position.x <= 4.25, "Solid 3D arena walls stop running fighters")
 	await reset_fighters()
 	arena._toggle_move_guide()
 	var paused_position: Vector3 = p1.body.position
@@ -102,7 +112,7 @@ func run() -> void:
 	await frames(15)
 	check(p1.body.position.is_equal_approx(paused_position), "Move guide pauses the 3D simulation")
 	arena._toggle_move_guide()
-	await reset_fighters(Vector3(-2, 0.02, 1), Vector3(2, 0.02, -1))
+	await reset_fighters(Vector3(-2, 0.02, 0.6), Vector3(2, 0.02, -0.6))
 	var ai: Node = load("res://scripts/ai_controller_3d.gd").new()
 	ai.fighter = p2
 	ai.opponent = p1
@@ -111,7 +121,7 @@ func run() -> void:
 	var initial_distance: float = p1._opponent_distance(p2)
 	await frames(180)
 	check(p1._opponent_distance(p2) < initial_distance - 50, "AI approaches a rival across both floor axes")
-	check(p2.body.position.z > -0.8, "AI tracks depth instead of walking along a 2D line")
+	check(p2.body.position.z > -0.5, "AI tracks depth instead of walking along a 2D line")
 	ai.queue_free()
 	await frames(1)
 	p2.ai_controlled = false
@@ -123,7 +133,7 @@ func run() -> void:
 	await frames(6)
 	check(p1.health == 100 and p2.health == 100 and arena.round_index == 1, "Round transition resets health and 3D positions")
 	check(p1.body.position.distance_to(p1.spawn_position) < 0.04, "New round restores the 3D spawn")
-	await reset_fighters(Vector3(-6.5, 0.02, -4.5), Vector3(6.5, 0.02, 4.5))
+	await reset_fighters(Vector3(-4.2, 0.02, -0.65), Vector3(4.2, 0.02, 0.65))
 	await frames(90)
 	var screen_size := root.get_visible_rect().size
 	for fighter in [p1, p2]:

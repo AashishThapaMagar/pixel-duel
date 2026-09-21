@@ -238,13 +238,27 @@ func _attack_pose(guard: Array[Vector2]) -> Array[Vector2]:
 			contact = [Vector2(-8, -43), Vector2(22, -61), Vector2(40, -76), Vector2(59, -66), Vector2(68, -72), Vector2(-47, -20), Vector2(-18, -6)]
 		"save":
 			contact = [Vector2(-8, -34), Vector2(13, -59), Vector2(27, -80), Vector2(42, -48), Vector2(49, -52), Vector2(-36, -6), Vector2(29, -6)]
-		"grapple":
+		"grapple", "clinch_shove", "shoulder_throw", "hip_throw", "trip_throw":
 			windup[3] = Vector2(10, -82)
 			windup[4] = Vector2(22, -79)
 			contact[1] += Vector2(14, 7)
 			contact[2] += Vector2(13, 6)
 			contact[3] = Vector2(43, -78)
 			contact[4] = Vector2(49, -69)
+			if variant == "shoulder_throw":
+				contact[0].y += 9
+				contact[3] = Vector2(25, -109)
+				contact[4] = Vector2(36, -102)
+			elif variant == "hip_throw":
+				contact[0].x += 17
+				contact[1] += Vector2(-10, 8)
+				contact[3] = Vector2(22, -69)
+				contact[4] = Vector2(30, -64)
+			elif variant == "trip_throw":
+				contact[6] = Vector2(45, -14)
+				contact[1].y += 10
+				contact[3] = Vector2(38, -84)
+
 		"sweep":
 			contact = [Vector2(-6, -27), Vector2(-17, -58), Vector2(-20, -79), Vector2(-40, -33), Vector2(11, -65), Vector2(-30, -5), Vector2(58, -26)]
 		"cartwheel":

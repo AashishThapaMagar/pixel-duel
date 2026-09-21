@@ -2,7 +2,10 @@ extends "res://scripts/arena.gd"
 ## Canvas HUD and shared round rules around one real 3D world.
 var world: Node3D
 var camera_3d: Camera3D
-var camera_target := Vector3(0, 0.8, 0)
+var camera_target := Vector3(0, 0.85, 0)
+var camera_distance := 6.5
+var camera_zoom_hold := 0.0
+const CAMERA_BACK := Vector3(0, 0.229, 0.973)
 var impact_meshes: Array[Dictionary] = []
 var shake_3d := 0.0
 var nepal_stage: Node3D
@@ -47,7 +50,7 @@ func _enter_tree() -> void:
 		body.add_child(pivot)
 		fighter.body = body
 		fighter.pivot = pivot
-		fighter.spawn_position = Vector3(-2.2 if i == 0 else 2.2, 0.02, 0)
+		fighter.spawn_position = Vector3(-1.3 if i == 0 else 1.3, 0.02, 0)
 		body.position = fighter.spawn_position
 		fighter.get_node("Visual").world_root = pivot
 
@@ -95,9 +98,13 @@ func _begin_round(index: int) -> void:
 	super._begin_round(index)
 	banner_round.text = "ROUND %d / %s" % [index + 1, nepal_stage.ROUNDS[index].name]
 	banner_tagline.text = nepal_stage.ROUNDS[index].detail
-	$UI/ControlsHint.text = "P1  WASD move / Space jump / E guard / F G attack     |     P2  Arrows move / Enter jump / O guard / K L attack\nSHIFT / CTRL run    /    DOUBLE-TAP A D dash    /    F1 MOVES    /    ESC MENU"
+	$UI/ControlsHint.text = "P1  A/D move  W/S sidestep  |  F punch  G kick  E guard     |     P2  Left/Right move  Up/Down sidestep  |  K punch  L kick  O guard\nH / J grapple   |   Space / Enter jump   |   F1 combos     |     Esc menu"
 	guide_text.text = guide_text.text.replace("Down is S (P1) / Down arrow (P2).", "Hold E (P1) / O (P2) for the command's down input.")
-	guide_text.text = "3D MOVEMENT: WASD / arrows move across the floor. Space / Enter jump. E / O guard.\nForward and back are relative to your opponent. Sidestep committed strikes to evade them.\n\n" + guide_text.text
+	guide_text.text = "MOVEMENT: A/D or Left/Right approach and retreat. W/S or Up/Down make short sidesteps. Space / Enter jump. E / O guard.\nForward and back are relative to your opponent. Sidestep committed strikes to evade them.\n\n" + guide_text.text
+	camera_target = Vector3(0, 0.85, 0)
+	camera_distance = 6.5
+	camera_zoom_hold = 0.0
+	_update_fight_camera(0.0)
 	shake_3d = 0
 	for spark in impact_meshes:
 		spark.mesh.queue_free()
@@ -107,19 +114,11 @@ func _process(delta: float) -> void:
 	super._process(delta)
 	if not is_instance_valid(player1) or player1.body == null:
 		return
-	var midpoint: Vector3 = (player1.body.position + player2.body.position) * 0.5
-	var distance: float = player1.body.position.distance_to(player2.body.position)
-	camera_target = camera_target.lerp(midpoint + Vector3.UP * 0.85, 1.0 - exp(-5.0 * delta))
-	# Fixed compass direction makes WASD stable even when rivals circle.
-	var boom := Vector3(0, 2.4, 10.2) * clampf(0.76 + distance * 0.075, 0.88, 1.95)
-	# Bring close combat forward while retaining wide framing at arena edges.
-	boom *= lerpf(0.84, 1.0, smoothstep(3.0, 9.0, distance))
-	camera_3d.position = camera_3d.position.lerp(camera_target + boom, 1.0 - exp(-5.0 * delta))
-	camera_3d.look_at(camera_target)
-	shake_3d = move_toward(shake_3d, 0.0, delta * 0.65)
-	camera_3d.h_offset = sin(Time.get_ticks_msec() * 0.11) * shake_3d if MatchSetup.camera_shake else 0.0
 	if move_guide.visible:
 		return
+	_update_fight_camera(delta)
+	shake_3d = move_toward(shake_3d, 0.0, delta * 0.65)
+	camera_3d.h_offset = sin(Time.get_ticks_msec() * 0.11) * minf(shake_3d, 0.012) if MatchSetup.camera_shake else 0.0
 	nepal_stage.animate(delta)
 	for spark in impact_meshes:
 		spark.age += delta
@@ -128,6 +127,47 @@ func _process(delta: float) -> void:
 		if spark.age >= 0.22:
 			spark.mesh.queue_free()
 	impact_meshes = impact_meshes.filter(func(spark): return spark.age < 0.22)
+
+func _update_fight_camera(delta: float) -> void:
+	# Scene transitions can detach this arena before its last callback runs.
+	if not is_inside_tree() or get_viewport() == null or not is_instance_valid(camera_3d):
+		return
+	var midpoint: Vector3 = (player1.body.position + player2.body.position) * 0.5
+	# Ignore footwork inside this box, and never track jumping vertically.
+	var desired := camera_target
+	for axis in [0]:
+		var margin := 1.0 if axis == 0 else 0.65
+		var offset: float = midpoint[axis] - camera_target[axis]
+		if absf(offset) > margin:
+			desired[axis] += offset - signf(offset) * margin
+	desired.y = 0.85
+	desired.z = 0.0
+	camera_target = camera_target.lerp(desired, 1.0 - exp(-2.5 * delta))
+	var size := get_viewport().get_visible_rect().size
+	var tan_v := tan(deg_to_rad(camera_3d.fov) * 0.5)
+	var tan_h := tan_v * size.x / maxf(size.y, 1.0)
+	var screen_up := Vector3(0, CAMERA_BACK.z, -CAMERA_BACK.y)
+	var required := 6.5
+	# Fit the two standing silhouettes, rather than zooming for every change
+	# in separation. Vertical bounds reserve space for the HUD and jumps.
+	for fighter in [player1, player2]:
+		for height in [0.0, 2.15]:
+			var point: Vector3 = fighter.body.position
+			point.y = height
+			var relative := point - camera_target
+			var depth := relative.dot(CAMERA_BACK)
+			var vertical := relative.dot(screen_up)
+			required = maxf(required, depth + absf(relative.x) / (tan_h * 0.85))
+			required = maxf(required, depth + absf(vertical) / (tan_v * (0.64 if vertical > 0.0 else 0.76)))
+	if required > camera_distance:
+		camera_zoom_hold = 0.8
+		camera_distance = lerpf(camera_distance, required, 1.0 - exp(-7.0 * delta))
+	else:
+		camera_zoom_hold = maxf(0.0, camera_zoom_hold - delta)
+		if camera_zoom_hold == 0.0 and camera_distance - required > 0.6:
+			camera_distance = lerpf(camera_distance, required, 1.0 - exp(-1.0 * delta))
+	camera_3d.position = camera_target + CAMERA_BACK * camera_distance
+	camera_3d.look_at(camera_target)
 
 func _impact_3d(fighter: Node, blocked: bool, heavy: bool) -> void:
 	var material := _material(Color("8bdeff") if blocked else Color("ffd78b"))
@@ -174,8 +214,8 @@ func _box_3d(label: String, size: Vector3, at: Vector3, color: Color, solid: boo
 func _build_stage() -> void:
 	_box_3d("Platform", Vector3(14, 0.65, 10), Vector3(0, -0.325, 0), Color("685c4e"), true).get_child(0).hide()
 	for edge in [-1, 1]:
-		_box_3d("SideWall", Vector3(0.22, 5, 10.4), Vector3(edge * 7.1, 2.0, 0), Color.WHITE, true).get_child(0).hide()
-		_box_3d("EndWall", Vector3(14.4, 5, 0.22), Vector3(0, 2.0, edge * 5.1), Color.WHITE, true).get_child(0).hide()
+		_box_3d("SideWall", Vector3(0.22, 5, 10.4), Vector3(edge * 4.66, 2.0, 0), Color.WHITE, true).get_child(0).hide()
+		_box_3d("EndWall", Vector3(14.4, 5, 0.22), Vector3(0, 2.0, edge * 1.06), Color.WHITE, true).get_child(0).hide()
 	nepal_stage = preload("res://scripts/nepal_stage_3d.gd").new()
 	nepal_stage.name = "NepalJourney"
 	world.add_child(nepal_stage)

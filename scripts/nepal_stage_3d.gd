@@ -2,7 +2,7 @@ extends Node3D
 ## Detailed image scenery with a world-space stone floor and real fighter shadows.
 const ART_ROOT := "res://assets/backgrounds/nepal_illustrated/"
 const ROUNDS := [
-	{"name": "HIMALAYAN LAKESIDE", "night": false, "detail": "DAY / Snow peaks, blue water and a lakeside pagoda", "image": "lakeside-day.png"},
+	{"name": "HERITAGE COURTYARD", "night": false, "detail": "DAY / Weathered brick, carved timber and a mountain pagoda", "image": "../nepal_retro/courtyard-day.png"},
 	{"name": "LANTERN COURTYARD", "night": true, "detail": "NIGHT / Brick temples, carved windows and warm lanterns", "image": "courtyard-night.png"},
 	{"name": "TERRACE VALLEY", "night": false, "detail": "DAY / Green terraces, village homes and rhododendrons", "image": "terrace-day.png"},
 	{"name": "MOONLIT HERITAGE", "night": true, "detail": "FINAL NIGHT / A hilltop stupa beneath the Himalayas", "image": "heritage-night.png"}
@@ -85,8 +85,8 @@ func _process(_delta: float) -> void:
 	backdrop.global_transform = Transform3D(camera.global_basis, camera.global_position - camera.global_basis.z * distance)
 	backdrop.scale = Vector3(top_left.distance_to(top_right) / 2.0, top_left.distance_to(bottom_left) / 2.0, 1)
 	backdrop_material.set_shader_parameter("view_aspect", size.x / maxf(size.y, 1))
-	# Gentle camera translation gives distant scenery a little parallax.
-	backdrop_material.set_shader_parameter("pan", Vector2(camera.global_position.x * 0.0018, camera.global_position.z * 0.0008 - 0.008))
+	# Fixed scenery framing keeps the painted horizon steady during footwork.
+	backdrop_material.set_shader_parameter("pan", Vector2(0, 0.10 if current_round == 0 else 0.0))
 
 func _lighting() -> void:
 	environment.environment.background_mode = Environment.BG_COLOR
@@ -97,6 +97,11 @@ func _lighting() -> void:
 	sun.rotation_degrees = Vector3(-38, -28, 0)
 	sun.light_color = Color("b5c7e8") if night else Color("ffe4c4")
 	sun.light_energy = 0.36 if night else 0.72
+	if current_round == 0:
+		environment.environment.ambient_light_color = Color("c5c8ce")
+		environment.environment.ambient_light_energy = 0.48
+		sun.light_color = Color("f3eee5")
+		sun.light_energy = 0.55
 
 func _backdrop() -> void:
 	backdrop = MeshInstance3D.new()
@@ -117,8 +122,11 @@ void fragment() {
  vec2 uv = UV - vec2(0.5);
  if (view_aspect > image_aspect) { uv.y *= image_aspect / view_aspect; }
  else { uv.x *= view_aspect / image_aspect; }
- // Overscan prevents exposed edges while the camera follows the fighters.
- uv = uv * 0.94 + vec2(0.5) + pan;
+ // Bound the crop before sampling: never stretch an edge texel into a band.
+ vec2 span = vec2(abs(pan.y) > 0.05 ? 0.78 : 0.94);
+ uv *= span;
+ vec2 safe_pan = clamp(pan, -(vec2(1.0) - span) * 0.5, (vec2(1.0) - span) * 0.5);
+ uv += vec2(0.5) + safe_pan;
  ALBEDO = texture(scenery, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
 }"""
 	backdrop_material = ShaderMaterial.new()
@@ -144,19 +152,29 @@ func _floor() -> void:
 render_mode cull_disabled, depth_draw_opaque;
 uniform sampler2D paving : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec3 tint : source_color = vec3(1.0);
+uniform float paving_scale = 3.0;
+uniform float stone_contrast = 1.0;
+uniform vec2 join_depth = vec2(-5.0, -3.0);
 varying vec3 world_point;
 void vertex() { world_point = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
- vec2 stone_uv = world_point.xz / 3.0;
+ vec2 stone_uv = world_point.xz / paving_scale;
  vec3 stone = texture(paving, stone_uv).rgb;
+ // Dust softens the joints to match the distant courtyard's worn paving.
+ stone = mix(vec3(0.36, 0.33, 0.29), stone, stone_contrast);
  ALBEDO = stone * tint;
  ROUGHNESS = 0.9;
  // Softly join the lit 3D foreground to the illustrated distant paving.
- ALPHA = smoothstep(-4.5, -0.5, world_point.z) * (1.0 - smoothstep(6.7, 8.8, abs(world_point.x)));
+ ALPHA = smoothstep(join_depth.x, join_depth.y, world_point.z) * (1.0 - smoothstep(6.7, 8.8, abs(world_point.x)));
 }
 """
 	floor_material = ShaderMaterial.new()
 	floor_material.shader = shader
-	floor_material.set_shader_parameter("paving", _texture("stone-floor.png"))
+	floor_material.set_shader_parameter("paving", _texture("../nepal_realistic/stone-floor.png" if current_round == 0 else "stone-floor.png"))
 	floor_material.set_shader_parameter("tint", Color("827e86") if night else Color("b4a99b"))
+	if current_round == 0:
+		floor_material.set_shader_parameter("tint", Color("cac5c0"))
+		floor_material.set_shader_parameter("paving_scale", 1.65)
+		floor_material.set_shader_parameter("stone_contrast", 0.68)
+		floor_material.set_shader_parameter("join_depth", Vector2(-3.0, -1.5))
 	node.material_override = floor_material

@@ -60,7 +60,7 @@ func _physics_process(delta: float) -> void:
 	if fighter.attack_connected and fighter.state in [fighter.State.PUNCH, fighter.State.KICK]:
 		_combo_reaction += delta
 		if _combo_reaction > 0.07 * reaction_scale and fighter.chain_step < 2 and fighter._buffered_action.is_empty():
-			_request_move("drive" if boss and fighter.chain_step == 1 and fighter.stamina > 24 else "jab")
+			_request_move("chain_finish" if fighter.chain_step == 1 and fighter.available_moves().has("chain_finish") else "jab")
 			_combo_reaction = -0.3
 	else:
 		_combo_reaction = 0.0
@@ -104,8 +104,8 @@ func _physics_process(delta: float) -> void:
 			# Sab's forward_heavy is his grab, so he reaches for it in close
 			# range; Abhi's back_heavy is his taunt, used to bank stamina
 			# only when he's not already flush against the opponent.
-			if fighter.character_profile.id == "sab" and abs_distance < 62 and randf() < 0.5:
-				move_id = "forward_heavy"
+			if fighter.available_moves().has("grapple") and abs_distance < 58 and randf() < (0.5 if fighter.character_profile.id == "sab" else 0.22):
+				move_id = "grapple"
 			elif fighter.character_profile.id == "abhi" and fighter.stamina < 55 and abs_distance > 85:
 				move_id = "back_heavy"
 			elif randf() < 0.35:
@@ -119,7 +119,7 @@ func _opponent_distance() -> float:
 
 func _request_move(id: String) -> void:
 	# AI decisions enter the same expiring buffer and hit-confirm rules as input.
-	fighter._buffered_action = "punch" if id == "jab" else "kick"
+	fighter._buffered_action = "grapple" if id == "grapple" else ("punch" if id == "jab" else "kick")
 	fighter._buffered_direction = 1 if id == "forward_heavy" else (-1 if id == "back_heavy" else 0)
 	fighter._buffered_move = id if id in ["drive", "breaker"] else ""
 	fighter._buffer_remaining = fighter.input_buffer_time

@@ -1,12 +1,12 @@
 # Who Won?
 
-An original action fighting game prototype in Godot 4.2+, with articulated 3D fighters and free movement across a solid Himalayan courtyard. Every match lasts **four rounds**. Each fighter keeps their own moves throughout; the most round wins takes the match.
+An original action fighting game prototype in Godot 4.2+, with articulated 3D fighters and side-on movement and short sidesteps on a solid Nepal courtyard. Every match lasts **four rounds**. Each fighter keeps their own moves throughout; the most round wins takes the match.
 
 Choose **Match Setup > Fighters** to select Anug, Ish, Sab, Bib, Abhi, Sup, or Anant. Start Game uses your selected fighters. The home screen remains free of character previews.
 
 ## 3D arena
 
-Start Game now opens `scenes/Arena3D.tscn`. All seven fighters use lit meshes in the same 3D world, with shadows, a following perspective camera, gravity, capsule collision against the floor and walls, and circular fighter pushboxes. Move across both floor axes to circle opponents or dodge committed attacks. Every match follows a four-arena Nepal-inspired journey: Himalayan Lakeside (day), Lantern Courtyard (night), Terrace Valley (day), and Moonlit Heritage (final night). The ARENA menu previews this fixed sequence using live 3D views. These fictional settings celebrate Nepal's landscapes and heritage rather than recreate specific monuments. The opening Himalayan Lakeside arena uses vivid illustrated mountains, cobalt lake water, a pagoda and red rhododendrons, with ink outlines inspired by the supplied reference. All four stages pair illustrated image backdrops with a textured 3D stone court, fighter shadows and subtle camera parallax. Distant scenery is painted imagery; the fighting floor, characters and collisions remain fully 3D. The closer, low camera follows combat and pulls back when fighters separate. The same solid arena boundaries keep combat consistent across rounds. Artwork and generation prompts are saved in [assets/backgrounds/nepal_illustrated/](assets/backgrounds/nepal_illustrated/), generated with the built-in image_gen tool.
+Start Game now opens `scenes/Arena3D.tscn`. All seven fighters use lit meshes in the same 3D world, with shadows, a following perspective camera, gravity, capsule collision against the floor and walls, and circular fighter pushboxes. A/D and Left/Right control the main approach/retreat movement. W/S and Up/Down give slower sidesteps within a narrow 1.3-metre-deep fighting strip; holding them cannot carry fighters into the distant scenery. Fighters start closer, with a fixed-depth camera and a solid, opaque floor under the playable strip. Every match follows a four-arena Nepal-inspired journey: Heritage Courtyard (day), Lantern Courtyard (night), Terrace Valley (day), and Moonlit Heritage (final night). The ARENA menu previews this fixed sequence using live 3D views. These fictional settings celebrate Nepal's landscapes and heritage rather than recreate specific monuments. The opening Heritage Courtyard uses a muted, late-1990s 3D arcade aesthetic: weathered Nepal brickwork, carved timber windows, tiled eaves and a distant pagoda. A generated background plate is paired with a real textured 3D stone floor and fighter shadows. Neutral daylight and softer stone textures match the enclosed courtyard. Later rounds retain their illustrated scenery, including the nighttime finale. The camera follows combat and pulls back when fighters separate. Artwork and prompts for the opening arena are in [assets/backgrounds/nepal_retro/](assets/backgrounds/nepal_retro/), generated with the built-in image_gen tool; the previous illustrated artwork remains available in `assets/backgrounds/nepal_illustrated/`.
 
 Combat keeps the existing move tables, stamina, hit confirms, throws, guard breaks, AI, four-round matches, and story/arcade progression. Strikes query oriented 3D volumes, so depth separation matters. Models are procedural stylized rigs, with fixed-length limbs and poses driven by the combat state; they are not ragdolls or imported motion-capture characters.
 
@@ -14,7 +14,8 @@ Combat keeps the existing move tables, stamina, hit confirms, throws, guard brea
 
 | Action | Player 1 | Player 2 |
 |---|---|---|
-| Move across the floor | W / A / S / D | Arrow keys |
+| Approach / retreat | A / D | Left / Right |
+| Short sidestep | W / S | Up / Down |
 | Run | Hold Shift | Hold Ctrl |
 | Dash / backdash | Double-tap A / D | Double-tap Left / Right |
 | Jump | Space | Enter |
@@ -25,6 +26,10 @@ Combat keeps the existing move tables, stamina, hit confirms, throws, guard brea
 | Back to main menu | Esc | Esc |
 
 Pressing an attack shortly before recovery ends queues it for the first available frame (a 130 ms input buffer). A **landed light attack into heavy** can cancel its recovery after contact; a blocked or missed light must finish recovery. A forward dash can be interrupted with an attack or guard; a backdash has no invulnerability.
+
+## Character combos and grapples
+
+Every fighter now has an original punch-chain finisher, a kick-led three-hit route, and a close-range grapple. Try **F F G** or **G F G** (P1), **K K L** or **L K L** (P2), tapping as each hit connects with directions released. Grapple with **H / J** or punch + kick together; the same input just before contact escapes a throw. Open **F1** for your selected character's routes and timing. See [character combos and research](docs/character-combos.md) for the roster table, sources, counterplay, and validation.
 
 ## Command moves and combat timing
 

@@ -66,11 +66,53 @@ static func for_fighter(id: String) -> Dictionary:
 			m.breaker.name = "Crown wheel"
 			m.breaker.pose = "spin"
 			m.back_heavy = BASE._move("Sovereign throw", "grapple", "grapple", "hook", 30, -72, 0.30, 0.07, 0.48, 1.5, 1.4, 8)
+	# Original, character-specific strike routes. Finishers use separate slots
+	# so learning an easy chain does not replace directional signature moves.
+	var finishers := {
+		"anug": ["Goal-line clearance", "front_kick", 64, -65, 0.12, 1.10, 1.35],
+		"ish": ["Flash rising fist", "uppercut", 57, -94, 0.10, 1.35, 1.1],
+		"sab": ["Anvil elbow", "elbow", 53, -85, 0.14, 1.45, 1.0],
+		"bib": ["Relay side kick", "side_kick", 70, -66, 0.09, 1.15, 1.2],
+		"abhi": ["Thunder overhand", "overhand", 61, -89, 0.15, 1.55, 1.4],
+		"sup": ["Spiral heel", "spin", 69, -65, 0.13, 1.25, 1.3],
+		"anant": ["Crown knee", "knee", 53, -70, 0.12, 1.35, 1.2]
+	}
+	var f: Array = finishers.get(id, finishers.anug)
+	var kind := "punch" if id in ["ish", "sab", "abhi"] else "kick"
+	m.chain_finish = BASE._move(f[0], f[1], kind, "hook" if kind == "punch" else "kick", f[2], f[3], f[4], 0.07, 0.33, f[5], f[6], 18)
+	m.chain_bridge = m.cross.duplicate(true)
+	m.chain_bridge.name = {"anug":"Keeper palm", "ish":"Flash body shot", "sab":"Iron body hook", "bib":"Relay backfist", "abhi":"Thunder body shot", "sup":"Spiral palm", "anant":"Crown backfist"}.get(id, "Follow-up palm")
+	m.chain_bridge.pose = "body_hook" if id in ["ish", "sab", "abhi"] else "backfist"
+	m.chain_bridge.startup = 0.09
+	m.chain_bridge.reach = 65.0
+	m.chain_bridge.lunge = 16.0
+	m.chain_bridge.next_light = ""
+	m.chain_bridge.next_heavy = "chain_finish"
+	m.chain_bridge.special_cancel = false
+	m.chain_bridge.hitstun = 0.30
+	m.kick.next_light = "chain_bridge"
+	m.kick.hitstun = 0.30
+	m.kick.push = 0.25
+	m.cross.hitstun = 0.30
+	m.cross.next_heavy = "chain_finish"
+	# Every character has a short-range throw, with different commitment/payoff.
+	var throws := {
+		"anug": ["Keeper catch", "clinch_shove", 0.24, 1.15, 1.25],
+		"ish": ["Flash shoulder toss", "shoulder_throw", 0.22, 1.10, 1.05],
+		"sab": ["Iron hip toss", "hip_throw", 0.28, 1.65, 1.45],
+		"bib": ["Relay ankle reap", "trip_throw", 0.23, 1.00, 0.9],
+		"abhi": ["Thunder clinch", "clinch_shove", 0.30, 1.50, 1.5],
+		"sup": ["Spiral reap", "trip_throw", 0.25, 1.20, 1.1],
+		"anant": ["Crown shoulder toss", "shoulder_throw", 0.27, 1.40, 1.3]
+	}
+	var g: Array = throws.get(id, throws.anug)
+	m.grapple = BASE._move(g[0], g[1], "grapple", "hook", 32, -72, g[2], 0.07, 0.42, g[3], g[4], 6)
+	m.grapple.hitstun = 0.48
 	# Stamina costs are assigned by move slot/kind here rather than per-move
 	# above, so every fighter's moves stay priced consistently even though
 	# their reach/damage/timing differ.
 	for key in m:
-		m[key].cost = 5.0 if key in ["jab", "cross", "hook"] else (18.0 if key in ["drive", "breaker"] else 11.0)
+		m[key].cost = 5.0 if key in ["jab", "cross", "hook", "chain_bridge"] else (18.0 if key in ["drive", "breaker"] else 11.0)
 		if m[key].get("utility", "") == "taunt":
 			m[key].cost = 0.0
 		if m[key].kind == "grapple":
@@ -78,5 +120,4 @@ static func for_fighter(id: String) -> Dictionary:
 		if key in ["drive", "breaker"]:
 			m[key].hitstun = 0.34
 	# Chains end in strikes, not unavoidable grabs or utility actions.
-	m.cross.next_heavy = "kick"
 	return m

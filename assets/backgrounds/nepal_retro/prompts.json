@@ -1,0 +1,13 @@
+{
+  "generator": "Built-in image_gen",
+  "assets": [
+    {
+      "id": "courtyard-day",
+      "prompt": "Create a 16:9 environment background image for an original Nepal fighting game, in authentic late 1990s PlayStation 1 3D fighting game style. Believable human-scale architecture, simple low polygon forms, muted photographic texture maps, slightly blurry low resolution texture detail, soft baked shading. NOT ink illustration, comic, bright travel poster, or glossy modern photorealism. Camera almost level at chest height straight across an empty courtyard. A nearby aged Nepal Newar red-brown brick and grey plaster building fills most of scene with dark carved timber lattice windows, recessed double door, broad low veranda and tiled eaves. Partial tiered Nepal pagoda behind, tiny glimpse of hazy mountain and pale sky near upper left. Enclosed intimate retro arcade fighting stage. Building base at 64 percent down image, bottom 36 percent flat dusty grey-brown small stone paving. Muted taupe, brown and charcoal colors, neutral soft daylight upper left, gentle shadows, readable shaded recesses. No people, fighters, text, logos, HUD, frame, or foreground obstructions. Real 3D fighters will be added later. Original environment with the grounded textured game aesthetic of a 1997 arcade fighting stage."
+    },
+    {
+      "id": "stone-floor",
+      "prompt": "Generate a square seamless tileable diffuse texture for the ground of a late 1990s PlayStation 1 Nepal courtyard fighting game. Direct overhead orthographic, no perspective. Worn small irregular grey-brown stone cobbles in subtle offset rows, narrow dusty joints, aged smooth stone, muted neutral taupe grey, low contrast photographic details softened into a low-resolution old videogame texture. No black ink outlines, hatching, comic style, bright colors, gloss, big cracks, vegetation, objects, shadows or directional lighting. Even lighting edge to edge, tile seamlessly on all four sides, no text or border. Natural stone, gamey softness, not a sharp modern PBR texture."
+    }
+  ]
+}

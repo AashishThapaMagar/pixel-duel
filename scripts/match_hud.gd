@@ -13,21 +13,21 @@ var stamina_bars: Array[ProgressBar] = []
 func _ready() -> void:
 	arena = get_parent()
 	var layer: CanvasLayer = arena.get_node("UI")
-	var backdrop := UI.panel(layer, Vector2(20, 12), Vector2(920, 87), Color("0e1320"))
+	var backdrop := UI.panel(layer, Vector2(20, 12), Vector2(920, 64), Color("0e1320dd"))
 	layer.move_child(backdrop, 0)
-	var timer_plate := UI.panel(layer, Vector2(427, 12), Vector2(106, 85), UI.PANEL, UI.LIME)
+	var timer_plate := UI.panel(layer, Vector2(427, 12), Vector2(106, 64), UI.PANEL, UI.LIME)
 	layer.move_child(timer_plate, 1)
-	UI.panel(layer, Vector2(0, 483), Vector2(960, 57), UI.INK).z_index = -1
+	UI.panel(layer, Vector2(0, 504), Vector2(960, 36), UI.INK).z_index = -1
 	for i in 2:
 		var color := UI.LIME if i == 0 else UI.VIOLET
 		var x := 36.0 if i == 0 else 552.0
 		var bar: ProgressBar = arena.health_bar1 if i == 0 else arena.health_bar2
 		var name_label: Label = layer.get_node("P1Label" if i == 0 else "P2Label")
-		name_label.position = Vector2(x, 18)
+		name_label.position = Vector2(x, 13)
 		name_label.size = Vector2(372, 24)
 		name_label.add_theme_font_size_override("font_size", 17)
 		name_label.add_theme_color_override("font_color", color)
-		bar.position = Vector2(x, 46)
+		bar.position = Vector2(x, 36)
 		bar.size = Vector2(372, 18)
 		bar.fill_mode = ProgressBar.FILL_BEGIN_TO_END if i == 0 else ProgressBar.FILL_END_TO_BEGIN
 		bar.add_theme_stylebox_override("background", UI.box(Color("282c36"), UI.LINE, 0))
@@ -50,16 +50,17 @@ func _ready() -> void:
 		damage_bars.append(damage)
 		damage_tweens.append(null)
 		var pips: Label = arena.pips1 if i == 0 else arena.pips2
-		pips.position = Vector2(x, 68)
+		pips.position = Vector2(x, 54)
 		pips.size = Vector2(372, 22)
 		pips.add_theme_color_override("font_color", color)
 		pips.add_theme_font_size_override("font_size", 15)
 		var health := UI.label(layer, "100 / 100", Vector2(x + 245 if i == 0 else x, 70), Vector2(127, 20), 11, UI.MUTED)
 		health.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if i == 0 else HORIZONTAL_ALIGNMENT_LEFT
+		health.hide()
 		health_labels.append(health)
 		var fighter: Node = arena.player1 if i == 0 else arena.player2
 		var stamina_bar := ProgressBar.new()
-		stamina_bar.position = Vector2(x + 90, 76)
+		stamina_bar.position = Vector2(x + 90, 61)
 		stamina_bar.size = Vector2(145, 6)
 		stamina_bar.show_percentage = false
 		stamina_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -68,17 +69,17 @@ func _ready() -> void:
 		layer.add_child(stamina_bar)
 		stamina_bar.set_deferred("size", Vector2(145, 6))
 		stamina_bars.append(stamina_bar)
-		UI.label(layer, "STAMINA", Vector2(x + 90, 83), Vector2(145, 13), 8, UI.MUTED)
+		UI.label(layer, "", Vector2(x + 90, 66), Vector2(145, 13), 8, UI.MUTED)
 		fighter.health_changed.connect(_health_changed.bind(i))
 		arena.combo_labels[i].position.y = 110
 		arena.combo_labels[i].add_theme_font_size_override("font_size", 17)
 		arena.combo_labels[i].add_theme_color_override("font_color", color)
 		arena.combo_labels[i].add_theme_color_override("font_outline_color", UI.INK)
 		arena.combo_labels[i].add_theme_constant_override("outline_size", 5)
-	arena.timer_label.position = Vector2(431, 15)
+	arena.timer_label.position = Vector2(431, 9)
 	arena.timer_label.size = Vector2(98, 49)
 	arena.timer_label.add_theme_font_size_override("font_size", 38)
-	arena.round_label.position = Vector2(431, 69)
+	arena.round_label.position = Vector2(431, 54)
 	arena.round_label.size = Vector2(98, 20)
 	arena.round_label.add_theme_font_size_override("font_size", 11)
 	arena.round_label.add_theme_color_override("font_color", UI.LIME)
@@ -90,7 +91,8 @@ func _ready() -> void:
 	for child in layer.get_children():
 		if child is Button:
 			child.theme = UI.theme()
-			child.position.y = 105
+			child.position = Vector2(815, 81)
+			child.add_theme_font_size_override("font_size", 12)
 	arena.move_guide.theme = UI.theme()
 	arena.move_guide.add_theme_stylebox_override("panel", UI.box(UI.PANEL, UI.LIME))
 	arena.move_guide.z_index = 20
@@ -117,6 +119,10 @@ func _ready() -> void:
 	arena.result_label.z_index = 11
 	result_panel.hide()
 	layer.move_child(arena.move_guide, -1)
+	var hint: Label = layer.get_node("ControlsHint")
+	hint.position = Vector2(12, 505)
+	hint.size = Vector2(936, 34)
+	hint.add_theme_font_size_override("font_size", 11)
 
 func _health_changed(health: int, maximum: int, player: int) -> void:
 	health_labels[player].text = "%d / %d" % [health, maximum]
