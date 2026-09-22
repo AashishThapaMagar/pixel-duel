@@ -47,6 +47,12 @@ func _run() -> void:
 	root.get_node("MatchSetup").selected_fighters.assign([2, 3])
 	menu.play_button.pressed.emit()
 	await settle()
+	# Play now routes through the full roster screen instead of jumping straight to the arena.
+	var selection: Node = current_scene
+	check(selection.cards.size() == 7, "Start opens the complete roster")
+	selection.ready_players.assign([true, true])
+	selection._start_match()
+	await settle()
 	var arena := current_scene
 	check(arena.get_script().resource_path.ends_with("arena_3d.gd"), "Start enters arena")
 	check(arena.player1.character_profile.name == "SAB" and arena.player2.character_profile.name == "BIB", "Direct play preserves selected fighters")
