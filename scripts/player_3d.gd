@@ -13,6 +13,7 @@ var ai_controlled := false
 var lateral_speed := 0.0
 var travel := 0.0
 var dash_vector := Vector3.RIGHT
+var dash_run_held := false
 
 func _ready() -> void:
 	super._ready()
@@ -72,20 +73,27 @@ func _capture_input() -> void:
 		dash_vector = world_input().normalized()
 		if dash_vector.length_squared() < 0.01:
 			dash_vector = forward * _dash_dir
+		dash_run_held = dash_vector.dot(forward) > 0.35
+		_dash_dir = 1 if dash_run_held else -1
 
 func _move_combat_body(delta: float) -> void:
 	if body == null:
 		return
 	var input := world_input() if controls_enabled else Vector3.ZERO
+	# A held second forward tap carries the dash into a sustained run.
+	# Releasing, reversing, guarding or attacking ends that commitment.
+	if input.dot(forward) <= 0.35 or state not in [State.IDLE, State.WALK, State.DASH] or not controls_enabled:
+		dash_run_held = false
 	var lateral := Vector3(-forward.z, 0.0, forward.x)
 	var can_move := controls_enabled and state in [State.IDLE, State.WALK, State.JUMP, State.JUMP_START]
-	var speed := move_speed * (1.0 if Input.is_action_pressed(input_prefix + "run") else WALK_SPEED_RATIO)
+	var wants_run := input.dot(forward) > 0.35 and (dash_run_held or Input.is_action_pressed(input_prefix + "run"))
+	var speed := move_speed * (1.0 if wants_run else WALK_SPEED_RATIO)
 	var lateral_target := input.dot(lateral) * speed if can_move else 0.0
 	lateral_speed = move_toward(lateral_speed, lateral_target, (acceleration if can_move else braking) * delta)
 	var planar := forward * velocity.x + lateral * lateral_speed
 	if can_move and state in [State.IDLE, State.WALK]:
 		# Both axes use one normalized vector, so diagonals never move faster.
-		running = input.length_squared() > 0.01 and Input.is_action_pressed(input_prefix + "run")
+		running = wants_run
 		var target := input * speed
 		if input.dot(forward) < -0.35 and not running:
 			target *= backward_speed_ratio
@@ -165,6 +173,7 @@ func reset_for_new_round() -> void:
 		body.velocity = Vector3.ZERO
 	lateral_speed = 0.0
 	travel = 0.0
+	dash_run_held = false
 	super.reset_for_new_round()
 	if pivot != null:
 		pivot.rotation.y = atan2(-forward.z, forward.x)

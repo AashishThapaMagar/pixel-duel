@@ -1,7 +1,7 @@
 extends Control
 const ROSTER := preload("res://scripts/fighter_roster.gd")
-const PLAYER := preload("res://scenes/Player.tscn")
 const UI := preload("res://scripts/ui_kit.gd")
+const PORTRAIT := preload("res://scripts/roster_portrait.gd")
 var selections: Array[int] = [0, 1]
 var ready_players: Array[bool] = [false, false]
 var previews: Array[Node] = []
@@ -10,77 +10,76 @@ var markers: Array[Label] = []
 var selectors: Array[OptionButton] = []
 var ready_buttons: Array[Button] = []
 var player_tabs: Array[Button] = []
+var portraits: Array[TextureRect] = []
+var names: Array[Label] = []
+var details: Array[Label] = []
 var start_button: Button
 var status_label: Label
-var editing_player: int = 0
-var transitioning: bool = false
+var editing_player := 0
+var transitioning := false
 
 func _ready() -> void:
 	theme = UI.theme()
 	selections.assign(MatchSetup.selected_fighters)
+	if MatchSetup.arcade:
+		selections[1] = 1 if selections[0] == 0 else 0
 	add_child(preload("res://scripts/menu_backdrop.gd").new())
-	UI.label(self, "W / W", Vector2(32, 19), Vector2(70, 28), 22, UI.LIME)
-	UI.label(self, "01  SELECT     /     02  LOCK IN     /     03  FIGHT", Vector2(114, 25), Vector2(630, 22), 12, UI.MUTED)
-	UI.button(self, "BACK / ESC", Vector2(814, 18), Vector2(114, 32)).pressed.connect(_back)
-	UI.label(self, "PICK YOUR SIDE.", Vector2(30, 72), Vector2(660, 45), 34)
-	status_label = UI.label(self, "", Vector2(34, 120), Vector2(890, 22), 12, UI.LIME)
-	for i in ROSTER.PROFILES.size():
-		var profile: Dictionary = ROSTER.profile(i)
-		var x := 32.0 + i * 226.0
-		var card := UI.button(self, "", Vector2(x, 157), Vector2(218, 235))
+	var heading := UI.label(self, "PLAYER SELECT", Vector2(240, 15), Vector2(480, 38), 32, Color("ffe191"))
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UI.button(self, "BACK / ESC", Vector2(24, 12), Vector2(140, 30)).pressed.connect(_back)
+	UI.label(self, "WHO WON?", Vector2(805, 18), Vector2(145, 24), 18, Color("ff9860"))
+	for player in 2:
+		var x := 30.0 if player == 0 else 630.0
+		var color := Color("ff6759") if player == 0 else Color("72b7ff")
+		UI.panel(self, Vector2(x, 65), Vector2(300, 255), Color("111728"), color)
+		var portrait := PORTRAIT.new()
+		portrait.index = selections[player]
+		portrait.facing_left = player == 1
+		portrait.position = Vector2(x, 54)
+		portrait.size = Vector2(300, 265)
+		add_child(portrait)
+		portraits.append(portrait)
+		var label := UI.label(self, "", Vector2(x, 279), Vector2(300, 38), 28, color)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		names.append(label)
+		var detail := UI.label(self, "", Vector2(x, 322), Vector2(300, 38), 11, UI.WHITE)
+		detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		details.append(detail)
+		var tab := UI.button(self, "", Vector2(x, 364), Vector2(160, 30))
+		tab.pressed.connect(func(): editing_player = player; _refresh())
+		player_tabs.append(tab)
+		var lock := UI.button(self, "LOCK IN", Vector2(x + 166, 364), Vector2(134, 30))
+		lock.pressed.connect(_toggle_ready.bind(player))
+		ready_buttons.append(lock)
+	UI.label(self, "VS", Vector2(403, 140), Vector2(160, 70), 58, Color("ffe191")).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_label = UI.label(self, "", Vector2(347, 223), Vector2(266, 84), 15, UI.WHITE)
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	start_button = UI.button(self, "FIGHT / ENTER", Vector2(361, 326), Vector2(238, 43), true)
+	start_button.add_theme_stylebox_override("normal", UI.box(Color("ffe191"), Color("d98a4e")))
+	start_button.add_theme_stylebox_override("hover", UI.box(Color("fff1c1"), Color("ffe191")))
+	start_button.pressed.connect(_start_match)
+	for i in 7:
+		var x := 145.0 + i * 96
+		var card := UI.button(self, "", Vector2(x, 405), Vector2(92, 81))
 		card.focus_mode = Control.FOCUS_NONE
 		card.pressed.connect(_choose.bind(i))
 		cards.append(card)
-		UI.label(self, profile.name, Vector2(x + 14, 174), Vector2(160, 30), 24)
-		UI.label(self, profile.title, Vector2(x + 14, 207), Vector2(195, 20), 11, UI.MUTED)
-		var preview := PLAYER.instantiate()
-		add_child(preview)
-		preview.set_physics_process(false)
-		preview.controls_enabled = false
-		preview.collision_layer = 0
-		preview.hurtbox.collision_layer = 0
-		preview.position = Vector2(x + 108, 354)
-		preview.scale = Vector2.ONE * 1.04
-		preview.apply_character(i)
-		preview.apply_style(load("res://resources/styles/karate.tres"))
-		preview._update_animation()
-		previews.append(preview)
-		var trait_label := UI.label(self, profile.trait, Vector2(x + 12, 359), Vector2(194, 29), 10, UI.MUTED)
-		trait_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		markers.append(UI.label(self, "", Vector2(x + 142, 162), Vector2(70, 20), 11, UI.LIME))
-	for player in 2:
-		var x := 32.0 if player == 0 else 642.0
-		var tab := UI.button(self, "P%d / SELECTING" % (player + 1), Vector2(x, 402), Vector2(280, 27))
-		tab.add_theme_font_size_override("font_size", 11)
-		tab.focus_mode = Control.FOCUS_NONE
-		tab.pressed.connect(func():
-			editing_player = player
-			_refresh())
-		player_tabs.append(tab)
-		var selector := OptionButton.new()
-		selector.position = Vector2(x, 437)
-		selector.size = Vector2(151, 36)
-		selector.focus_mode = Control.FOCUS_NONE
-		selector.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		for profile in ROSTER.PROFILES:
-			selector.add_item(profile.name)
-		selector.item_selected.connect(_select_for_player.bind(player))
-		selector.pressed.connect(func(): editing_player = player)
-		add_child(selector)
-		selectors.append(selector)
-		var ready_button := UI.button(self, "LOCK IN", Vector2(x + 159, 437), Vector2(121, 36))
-		ready_button.focus_mode = Control.FOCUS_NONE
-		ready_button.pressed.connect(_toggle_ready.bind(player))
-		ready_buttons.append(ready_button)
-	start_button = UI.button(self, "FIGHT  /  ENTER  >", Vector2(344, 431), Vector2(272, 42), true)
-	start_button.focus_mode = Control.FOCUS_NONE
-	start_button.pressed.connect(_start_match)
-	UI.label(self, "LOCAL VERSUS / 4 ROUNDS", Vector2(366, 404), Vector2(245, 20), 11, UI.MUTED)
-	UI.label(self, "P1   A / D  select    F  lock in", Vector2(34, 501), Vector2(325, 24), 12, UI.LIME)
-	UI.label(self, "P2   Left / Right  select    K  lock in", Vector2(360, 501), Vector2(370, 24), 12, UI.VIOLET)
-	UI.label(self, "ENTER   Start match", Vector2(784, 501), Vector2(160, 24), 12, UI.MUTED)
+		var thumbnail := PORTRAIT.new()
+		thumbnail.index = i
+		thumbnail.closeup = true
+		thumbnail.position = Vector2(x + 8, 404)
+		thumbnail.size = Vector2(76, 63)
+		add_child(thumbnail)
+		previews.append(thumbnail)
+		var name_label := UI.label(self, ROSTER.profile(i).name, Vector2(x, 465), Vector2(92, 20), 12, UI.WHITE)
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		markers.append(UI.label(self, "", Vector2(x + 3, 407), Vector2(86, 18), 11, UI.WHITE))
+	UI.label(self, "P1: A/D select, F ready    |    P2: arrows select, K ready    |    Enter fight", Vector2(70, 505), Vector2(820, 25), 13, UI.WHITE).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if MatchSetup.vs_ai:
+		ready_players[1] = true
 	_refresh()
-	UI.enter(self)
 
 func _back() -> void:
 	if not transitioning:
@@ -90,15 +89,18 @@ func _choose(index: int) -> void:
 	_select_for_player(index, editing_player)
 
 func _select_for_player(index: int, player: int) -> void:
-	if transitioning:
+	if transitioning or (MatchSetup.arcade and player == 1):
 		return
 	selections[player] = posmod(index, ROSTER.PROFILES.size())
 	ready_players[player] = false
+	if MatchSetup.arcade:
+		selections[1] = 1 if selections[0] == 0 else 0
+		ready_players[1] = true
 	editing_player = player
 	_refresh()
 
 func _toggle_ready(player: int) -> void:
-	if transitioning:
+	if transitioning or (MatchSetup.arcade and player == 1):
 		return
 	ready_players[player] = not ready_players[player]
 	editing_player = 1 - player
@@ -106,30 +108,24 @@ func _toggle_ready(player: int) -> void:
 
 func _refresh() -> void:
 	for i in cards.size():
-		var border := UI.LINE
-		var selected := false
-		markers[i].text = ""
-		for player in 2:
-			if selections[player] == i:
-				markers[i].text += "P%d " % (player + 1)
-				border = UI.LIME if player == 0 else UI.VIOLET
-				selected = true
-		if selections[0] == i and selections[1] == i:
-			border = UI.WHITE
-		markers[i].add_theme_color_override("font_color", border)
-		cards[i].add_theme_stylebox_override("normal", UI.box(Color("202735") if selected else UI.PANEL, border, 2 if selected else 1))
-		previews[i].modulate = Color.WHITE if selected else Color(0.65, 0.68, 0.75)
+		var chosen := selections.has(i)
+		var color := Color("ffe191") if chosen else Color("44516b")
+		cards[i].add_theme_stylebox_override("normal", UI.box(Color("253550") if chosen else Color("0e1526"), color, 2))
+		markers[i].text = ("P1 " if selections[0] == i else "") + ("P2" if selections[1] == i else "")
+		previews[i].modulate = Color.WHITE if chosen else Color(0.65, 0.65, 0.7)
 	for player in 2:
-		var color := UI.LIME if player == 0 else UI.VIOLET
-		selectors[player].select(selections[player])
-		ready_buttons[player].text = "LOCKED / OK" if ready_players[player] else "LOCK IN"
-		ready_buttons[player].add_theme_stylebox_override("normal", UI.box(Color("29352b") if ready_players[player] else UI.PANEL, color))
-		ready_buttons[player].add_theme_color_override("font_color", color)
-		player_tabs[player].text = "P%d / %s" % [player + 1, "READY" if ready_players[player] else ("SELECTING  >" if editing_player == player else "CLICK TO SELECT")]
-		player_tabs[player].add_theme_color_override("font_color", color)
-		player_tabs[player].add_theme_stylebox_override("normal", UI.box(UI.PANEL, color if editing_player == player else UI.LINE))
+		var profile := ROSTER.profile(selections[player])
+		portraits[player].show_fighter(selections[player])
+		names[player].text = profile.name
+		details[player].text = profile.title + "\n" + profile.trait
+		player_tabs[player].text = "P%d / %s" % [player + 1, "SELECTING" if editing_player == player else "SELECT"]
+		ready_buttons[player].text = "READY" if ready_players[player] else "LOCK IN"
+		if MatchSetup.arcade and player == 1:
+			player_tabs[player].text = "CPU / FIRST RIVAL"
+			player_tabs[player].disabled = true
+			ready_buttons[player].disabled = true
 	start_button.disabled = not (ready_players[0] and ready_players[1])
-	status_label.text = "BOTH FIGHTERS LOCKED. THE ARENA IS YOURS." if not start_button.disabled else "SELECTING FOR P%d  /  Choose a fighter, then lock in. Both players must be ready." % (editing_player + 1)
+	status_label.text = "READY TO FIGHT" if not start_button.disabled else "CHOOSE YOUR FIGHTER\nLOCK IN TO CONTINUE"
 
 func _input(event: InputEvent) -> void:
 	if transitioning or (event is InputEventKey and event.echo):
@@ -156,6 +152,11 @@ func _start_match() -> void:
 		return
 	transitioning = true
 	MatchSetup.selected_fighters.assign(selections)
-	var tween := create_tween()
-	tween.tween_property(self, "modulate:a", 0.0, 0.18)
-	tween.tween_callback(func(): get_tree().change_scene_to_file("res://scenes/Arena3D.tscn"))
+	if MatchSetup.arcade:
+		MatchSetup.begin_arcade()
+	if MatchSetup.story:
+		StoryDirector.start_run()
+		var destination: int = StoryDirector.resolve()
+		get_tree().change_scene_to_file("res://scenes/StoryDialogue.tscn" if destination == StoryDirector.Destination.DIALOGUE else "res://scenes/Arena3D.tscn")
+	else:
+		get_tree().change_scene_to_file("res://scenes/Arena3D.tscn")

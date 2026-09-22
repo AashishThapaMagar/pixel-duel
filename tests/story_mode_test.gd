@@ -103,6 +103,9 @@ func _run() -> void:
 	setup.arcade = true
 	setup.vs_ai = true
 	menu._start_fight()
+	await _wait_for_scene("character_select.gd")
+	current_scene.ready_players.assign([true, true])
+	current_scene._start_match()
 	await _wait_for_scene("story_dialogue.gd")
 	check(director.phase == director.Phase.PROLOGUE, "A fresh run opens on the prologue")
 	var dialogue: Node = current_scene

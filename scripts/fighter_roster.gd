@@ -18,7 +18,20 @@ const PROFILES := [
 ## PROFILES entries omit fields that match these defaults (e.g. most
 ## fighters don't set "build") to keep the roster table readable; merge
 ## layers each fighter's overrides on top of them.
+## Stylized 3D interpretation of assets/concepts/fighters/roster-photo-likeness-v2.png.
+## Keep combat identity and tuning independent of costume changes.
+const LIKENESS := {
+	"anug": {"color":Color("244337"), "accent":Color("d9b45c"), "outfit":"keeper", "signature":"cap", "hair_style":"crop", "build":1.12, "eyewear":"glasses", "facial_hair":"moustache", "skin":Color("b98460")},
+	"ish": {"color":Color("8e302c"), "accent":Color("d9a75c"), "outfit":"vest", "signature":"shades", "hair_style":"crop", "build":1.10, "eyewear":"shades", "facial_hair":"stubble", "skin":Color("b87d59")},
+	"sab": {"color":Color("283b59"), "accent":Color("c48f49"), "outfit":"vest", "signature":"wraps", "hair_style":"curls", "build":1.30, "eyewear":"glasses", "facial_hair":"none", "skin":Color("c18e68")},
+	"bib": {"color":Color("244779"), "accent":Color("a6d6c6"), "outfit":"suit", "signature":"anklets", "hair_style":"curls", "build":0.88, "facial_hair":"moustache", "skin":Color("bb8968")},
+	"abhi": {"color":Color("59345f"), "accent":Color("dbb258"), "outfit":"vest", "signature":"open_vest", "hair_style":"waves", "build":1.12, "facial_hair":"goatee", "skin":Color("bf8a63")},
+	"sup": {"color":Color("b78b38"), "accent":Color("438d88"), "outfit":"vest", "signature":"sash", "hair_style":"waves", "build":0.97, "facial_hair":"goatee", "skin":Color("ba8665")},
+	"anant": {"color":Color("51354f"), "accent":Color("d3ac62"), "outfit":"gi", "signature":"coat", "hair_style":"swept", "build":1.0, "eyewear":"glasses", "facial_hair":"none", "skin":Color("bd8e70")}
+}
+
 static func profile(index: int) -> Dictionary:
 	var result := {"skin":Color("ba8665"), "hair":Color("241e25"), "hair_style":"swept", "build":1.0, "signature":""}
 	result.merge(PROFILES[clampi(index, 0, PROFILES.size() - 1)], true)
+	result.merge(LIKENESS[result.id], true)
 	return result

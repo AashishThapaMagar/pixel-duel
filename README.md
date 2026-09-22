@@ -2,7 +2,7 @@
 
 An original action fighting game prototype in Godot 4.2+, with articulated 3D fighters and side-on movement and short sidesteps on a solid Nepal courtyard. Every match lasts **four rounds**. Each fighter keeps their own moves throughout; the most round wins takes the match.
 
-Choose **Match Setup > Fighters** to select Anug, Ish, Sab, Bib, Abhi, Sup, or Anant. Start Game uses your selected fighters. The home screen remains free of character previews.
+Choose a mode with **Up/Down**, then press **Enter** for the arcade character-select screen. All seven fighters fit in the portrait grid, with large live 3D previews on either side. P1 uses A/D and F to select/confirm; P2 uses Left/Right and K. Enter starts the match once ready. Computer modes pre-confirm the CPU; Arcade and Story choose the first rival automatically. The home screen uses an original late-1990s arcade treatment inspired by Tekken 3 menu references.
 
 ## 3D arena
 
@@ -11,6 +11,10 @@ Start Game now opens `scenes/Arena3D.tscn`. All seven fighters use lit meshes in
 Combat keeps the existing move tables, stamina, hit confirms, throws, guard breaks, AI, four-round matches, and story/arcade progression. Strikes query oriented 3D volumes, so depth separation matters. Models are procedural stylized rigs, with fixed-length limbs and poses driven by the combat state; they are not ragdolls or imported motion-capture characters.
 
 ## Controls
+
+For immediate hands-on play, click **PRACTICE [F2]** on the main menu. Your selected 3D fighter enters the courtyard with a passive dummy, unlimited time, and automatic reset after a knockout. **R** resets positions and health. Use **FIGHTERS** first to change your character.
+
+Hold a direction to walk; hold **Shift + forward** (P2: **Ctrl**) to run. **Double-tap forward and keep the second tap held** to continue from a dash into a run. Release forward, reverse, guard, or attack to end the run. Retreating stays in a guarded walk; double-tap backward to backdash.
 
 | Action | Player 1 | Player 2 |
 |---|---|---|

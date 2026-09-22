@@ -1,0 +1,5 @@
+Generator: built-in image_gen
+Reference: roster-design-v1.png
+Purpose: concept art for modelling; not a playable mesh.
+
+Create a polished landscape character turnaround concept sheet of ANUG, the leftmost green goalkeeper fighter in the reference image. Preserve his face, short swept black hair, athletic build, emerald padded short-sleeve jacket, pale gold keeper gloves, green trousers, dark trainers, and Nepali woven waist trim. Show the same adult fighter in consistent full-body FRONT, SIDE, BACK neutral A-pose views plus one dynamic open-hand goalkeeper fighting guard. All feet visible, identical costume across views, same scale for turnaround views. Add face and glove detail studies. Stylized realistic 3D fighting-game concept art, believable cloth and anatomy, strong readable silhouette, neutral charcoal background, soft studio light. Title ANUG / THE LAST LINE. Small labels FRONT, SIDE, BACK, KEEPER GUARD. No other fighters or weapons. Clean modelling reference, not a photograph or gameplay screen.

@@ -40,13 +40,14 @@ func run() -> void:
 	current_scene = menu
 	menu._show_roster()
 	await process_frame
-	var pickers: Array[Node] = menu.modal_content.find_children("*", "OptionButton", true, false)
-	check(pickers.size() == 2 and pickers[0].item_count == 7, "Both players can select all seven fighters")
-	pickers[0].item_selected.emit(5)
-	pickers[1].item_selected.emit(6)
-	check(setup.selected_fighters == [5, 6], "Roster controls persist independent choices")
+	await process_frame
+	var selection: Node = current_scene
+	check(selection.cards.size() == 7, "All seven fighter cards fit the roster")
+	selection._select_for_player(5, 0)
+	selection._select_for_player(6, 1)
+	check(selection.selections == [5, 6], "Roster stores independent choices")
 	await snap("roster")
-	menu.queue_free()
+	selection.queue_free()
 	await process_frame
 	arena = load("res://scenes/Arena.tscn").instantiate()
 	root.add_child(arena)

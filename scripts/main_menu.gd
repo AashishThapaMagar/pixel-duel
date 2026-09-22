@@ -15,7 +15,7 @@ const CREAM := Color("fff2e0")
 ## only — modals keep the app-wide MUTED since they're not part of the
 ## title-screen palette. Using MUTED here left the tagline and inactive
 ## list items visibly the wrong temperature against the firelit backdrop.
-const NEUTRAL := Color("8f8175")
+const NEUTRAL := Color("bdc9dc")
 ## Keyed by mode id -> the row's Button, same contract as before this
 ## screen's redesign (menu_walk_test.gd drives these directly by button,
 ## e.g. `home_modes[mode].pressed.emit()`) — each row's y position and
@@ -50,77 +50,43 @@ var arena_count_label: Label
 func _ready() -> void:
 	theme = UI.theme()
 	add_child(BACKDROP.new())
-
-	UI.label(self, "W / W", Vector2(24, 18), Vector2(90, 22), 15, FIRE)
-	mode_summary_label = UI.label(self, "", Vector2(0, 18), Vector2(960, 22), 12, NEUTRAL)
-	mode_summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var quit_button := _flat_button("EXIT", Vector2(872, 14), Vector2(64, 28), 13)
-	quit_button.pressed.connect(func(): get_tree().quit())
-
-	var eyebrow := UI.label(self, "NEPAL. YOUR ARENA.", Vector2(0, 62), Vector2(960, 22), 13, FIRE)
-	eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var title := _logo("WHO WON?", Vector2(0, 84), Vector2(960, 92), 64)
+	UI.label(self, "NEPAL FIGHTING CHAMPIONSHIP", Vector2(24, 18), Vector2(450, 23), 13, Color("b9c9e3"))
+	mode_summary_label = UI.label(self, "", Vector2(490, 18), Vector2(446, 23), 12, Color("b9c9e3"))
+	mode_summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var title := _logo("WHO WON?", Vector2(90, 63), Vector2(780, 122), 92)
 	title.name = "GameTitle"
-	# A tiered pagoda roofline stands in for a plain underline — three
-	# narrowing eaves and a finial, echoing the temple architecture already
-	# throughout this game's own arenas (Lakeside Temple, Prayer Flag Pass),
-	# instead of a generic UI divider bar.
-	_pagoda_emblem(Vector2(480, 178))
-	var tagline := UI.label(self, "Seven rivals. Four rounds. Make every opening count.", Vector2(0, 200), Vector2(960, 22), 14, NEUTRAL)
-	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
-	# The mode list: plain centered text, big and widely spaced, exactly the
-	# way an arcade cabinet's own mode list reads — no boxes, no per-row
-	# borders. Selection shows as brightness plus a small leading marker,
-	# and only the selected (or hovered) row's description shows at all,
-	# in one label shared between rows, so the list stays uncluttered.
-	mode_desc_label = UI.label(self, "", Vector2(0, 0), Vector2(960, 18), 12, NEUTRAL)
+	title.add_theme_color_override("font_color", Color("ffb64d"))
+	title.add_theme_color_override("font_outline_color", Color("a32524"))
+	title.add_theme_constant_override("outline_size", 12)
+	UI.label(self, "THE NEPAL TOURNAMENT", Vector2(210, 183), Vector2(540, 26), 19, Color("d0d8e4")).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mode_desc_label = UI.label(self, "", Vector2(0, 0), Vector2(960, 18), 12, Color("bac8dc"))
 	mode_desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var modes := [["story", "STORY", "Follow the road to Anant"], ["arcade", "ARCADE", "Fight the roster. Defeat the boss."], ["ai", "VERSUS AI", "Pick a rival and test your skill"], ["local", "LOCAL VERSUS", "Two players. One keyboard."]]
-	const ROW_TOP := 246.0
-	const ROW_GAP := 44.0
+	var modes := [["arcade", "ARCADE MODE", "Fight the roster. Defeat Anant."], ["local", "VS BATTLE", "Two players on one keyboard"], ["ai", "VS COMPUTER", "Choose a rival and practise your combos"], ["story", "STORY MODE", "Follow the road to the final showdown"]]
 	for i in modes.size():
 		var data: Array = modes[i]
-		var row_y: float = ROW_TOP + i * ROW_GAP
-		var row := _mode_row(data[0], data[1], data[2], row_y)
+		var row := _mode_row(data[0], data[1], data[2], 230.0 + i * 47.0)
 		row.button.pressed.connect(_choose_home_mode.bind(data[0]))
 		home_modes[data[0]] = row.button
 		mode_rows[data[0]] = row
-		_reveal(row.button, i * 0.05)
-
-	play_button = _flat_button("ENTER TO FIGHT", Vector2(0, 456), Vector2(960, 28), 17)
+	play_button = _flat_button("PRESS ENTER / SELECT FIGHTER", Vector2(225, 431), Vector2(510, 34), 18)
 	play_button.name = "StartGame"
-	play_button.add_theme_color_override("font_color", FIRE)
-	play_button.add_theme_color_override("font_focus_color", FIRE)
-	# A slow "press start" blink instead of a filled button draws the eye
-	# without adding another box to the screen.
-	var pulse := play_button.create_tween().set_loops()
-	pulse.tween_property(play_button, "modulate:a", 0.5, 0.9).set_trans(Tween.TRANS_SINE)
-	pulse.tween_property(play_button, "modulate:a", 1.0, 0.9).set_trans(Tween.TRANS_SINE)
 	play_button.pressed.connect(_start_fight)
-
-	var divider := ColorRect.new()
-	divider.position = Vector2(260, 494)
-	divider.size = Vector2(440, 1)
-	divider.color = Color("2a231d")
-	add_child(divider)
-	var actions := [["FIGHTERS", _show_roster], ["ARENA", _show_match_setup], ["OPTIONS", _show_fight_options], ["MOVES", _show_guide], ["SETTINGS", _show_settings]]
-	var action_x := 480.0 - actions.size() * 90.0 * 0.5
+	var actions := [["FIGHTERS", _show_roster], ["ARENAS", _show_match_setup], ["FIGHT OPTIONS", _show_fight_options], ["HOW TO PLAY", _show_guide], ["SETTINGS", _show_settings]]
 	for i in actions.size():
 		var action: Array = actions[i]
-		var button := _flat_button(action[0], Vector2(action_x + i * 90.0, 502), Vector2(90, 22), 11)
-		button.pressed.connect(action[1])
-	var footer_left := UI.label(self, "7 FIGHTERS  /  4 NEPAL ARENAS  /  2 DAYS + 2 NIGHTS", Vector2(0, 522), Vector2(400, 18), 10, Color("5c5349"))
-	var footer_right := UI.label(self, "TAB SELECT   ·   ENTER CONFIRM", Vector2(560, 522), Vector2(400, 18), 10, Color("5c5349"))
-	footer_right.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		_flat_button(action[0], Vector2(125 + i * 142, 468), Vector2(142, 25), 12).pressed.connect(action[1])
+	_flat_button("EXIT", Vector2(840, 500), Vector2(96, 27), 12).pressed.connect(func(): get_tree().quit())
+	_flat_button("PRACTICE [F2]", Vector2(730, 431), Vector2(200, 34), 15).pressed.connect(_start_practice)
+	UI.label(self, "UP / DOWN: MODE     ENTER: CONFIRM     TAB: OPTIONS", Vector2(24, 505), Vector2(740, 23), 12, Color("bac8dc"))
 	_refresh_mode_summary()
 	play_button.grab_focus()
 
-## A plain-text interactive control: same click/hover/focus/keyboard
-## behaviour as ui_kit's button(), but with every stylebox emptied out so
-## nothing box-shaped ever draws — just the label brightening on hover or
-## focus. This is what keeps every clickable word on this screen looking
-## like part of a menu list instead of a UI widget.
+func _start_practice() -> void:
+	if transitioning:
+		return
+	transitioning = true
+	get_tree().change_scene_to_file("res://scenes/Practice3D.tscn")
+
 func _flat_button(text: String, pos: Vector2, dimensions: Vector2, font_size: int) -> Button:
 	var btn := UI.button(self, text, pos, dimensions)
 	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -268,30 +234,7 @@ func _start_fight() -> void:
 	if transitioning or is_instance_valid(modal):
 		return
 	transitioning = true
-	# Story always launches through StoryDialogue first (the prologue), which
-	# hands off to Arena itself once the opening lines are read; quitting
-	# mid-run and restarting always begins the story over from here.
-	if MatchSetup.story:
-		MatchSetup.begin_arcade()
-		StoryDirector.start_run()
-		var story_tween := create_tween()
-		story_tween.tween_property(self, "modulate:a", 0.0, 0.16)
-		story_tween.tween_callback(func():
-			# Resolved before opening StoryDialogue so it only ever has to
-			# open on something to actually say — see its _ready() comment.
-			var destination: int = StoryDirector.resolve()
-			if destination == StoryDirector.Destination.ARENA:
-				get_tree().change_scene_to_file("res://scenes/Arena3D.tscn")
-			elif destination == StoryDirector.Destination.MENU:
-				get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
-			else:
-				get_tree().change_scene_to_file("res://scenes/StoryDialogue.tscn"))
-		return
-	if MatchSetup.arcade:
-		MatchSetup.begin_arcade()
-	var tween := create_tween()
-	tween.tween_property(self, "modulate:a", 0.0, 0.16)
-	tween.tween_callback(func(): get_tree().change_scene_to_file("res://scenes/Arena3D.tscn"))
+	get_tree().change_scene_to_file("res://scenes/CharacterSelect.tscn")
 
 func _show_match_setup() -> void:
 	if transitioning or is_instance_valid(modal):
@@ -400,30 +343,9 @@ func _refresh_mode_summary() -> void:
 		mode_summary_label.text = "STORY MODE   /   ROAD TO ANANT"
 
 func _show_roster() -> void:
-	_open_modal("CHOOSE YOUR FIGHTERS", "THE ROSTER")
-	for player in 2:
-		var x := 28.0 + player * 292.0
-		UI.label(modal_content, "PLAYER %d" % (player + 1), Vector2(x, 101), Vector2(265, 22), 13, UI.LIME if player == 0 else UI.VIOLET)
-		var picker := OptionButton.new()
-		picker.position = Vector2(x, 132)
-		picker.size = Vector2(266, 36)
-		for profile in ROSTER.PROFILES:
-			picker.add_item(profile.name)
-		picker.select(MatchSetup.selected_fighters[player])
-		modal_content.add_child(picker)
-		var detail := UI.label(modal_content, "", Vector2(x, 181), Vector2(260, 106), 13, UI.MUTED)
-		detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		var update := func(index: int):
-			MatchSetup.selected_fighters[player] = index
-			var profile := ROSTER.profile(index)
-			detail.text = "%s\n%s\nStamina: %d" % [profile.title, profile.trait, profile.stamina]
-		picker.item_selected.connect(update)
-		update.call(MatchSetup.selected_fighters[player])
-	UI.label(modal_content, "Arcade chooses your rivals automatically; Anant is always last.", Vector2(28, 283), Vector2(566, 20), 11, UI.MUTED)
-	var done := UI.button(modal_content, "MATCH SETUP", Vector2(258, 311), Vector2(152, 38), true)
-	done.pressed.connect(func():
+	if is_instance_valid(modal):
 		_close_modal()
-		_show_match_setup())
+	_start_fight()
 
 func _open_modal(title: String, eyebrow: String) -> void:
 	return_focus = get_viewport().gui_get_focus_owner()
@@ -505,4 +427,21 @@ func _close_modal() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		_close_modal()
+		get_viewport().set_input_as_handled()
+
+func _input(event: InputEvent) -> void:
+	if transitioning or is_instance_valid(modal) or not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var modes := ["arcade", "local", "ai", "story"]
+	if event.physical_keycode == KEY_F2:
+		_start_practice()
+		get_viewport().set_input_as_handled()
+		return
+	if event.physical_keycode in [KEY_UP, KEY_DOWN]:
+		var step := 1 if event.physical_keycode == KEY_DOWN else -1
+		_choose_home_mode(modes[posmod(modes.find(_selected_mode()) + step, modes.size())])
+		play_button.grab_focus()
+		get_viewport().set_input_as_handled()
+	elif event.physical_keycode == KEY_ENTER and (play_button.has_focus() or home_modes.values().has(get_viewport().gui_get_focus_owner())):
+		_start_fight()
 		get_viewport().set_input_as_handled()
