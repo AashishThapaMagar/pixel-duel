@@ -27,14 +27,14 @@ func run() -> void:
 	check(menu.play_button.has_focus(), "Start has keyboard focus")
 	await snap("arcade-main-menu")
 	menu._start_fight()
-	await settle()
+	await create_timer(1.2).timeout
 	var select: Node = current_scene
 	check(select.cards.size() == 7, "All seven roster cards exist")
 	for card in select.cards:
 		check(card.position.x >= 0 and card.position.x + card.size.x <= 960, "Every roster card fits on screen")
 	select._select_for_player(2, 0)
 	select._select_for_player(5, 1)
-	check(select.names[0].text == "SAB" and select.names[1].text == "SUP", "Large portraits match each selection")
+	check(select.names[0].text == select.ROSTER.profile(2).name and select.names[1].text == select.ROSTER.profile(5).name, "Large portraits match each selection")
 	check(select.portraits[0].fighter.character_profile.id == "sab", "Preview renders the actual selected fighter")
 	check(select.start_button.disabled, "Both local players must confirm")
 	select._toggle_ready(0)
@@ -47,9 +47,9 @@ func run() -> void:
 	for mode in ["ai", "arcade", "story"]:
 		change_scene_to_file("res://scenes/MainMenu.tscn")
 		await settle()
-		current_scene._choose_home_mode(mode)
-		current_scene._start_fight()
-		await settle()
+		current_scene.home_modes[mode].pressed.emit()
+		check(current_scene.transitioning, "Clicking a door begins its transition")
+		await create_timer(1.2).timeout
 		select = current_scene
 		check(select.ready_players[1], "Computer is ready in " + mode)
 		select._select_for_player(3, 0)

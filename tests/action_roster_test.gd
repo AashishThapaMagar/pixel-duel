@@ -39,8 +39,7 @@ func run() -> void:
 	root.add_child(menu)
 	current_scene = menu
 	menu._show_roster()
-	await process_frame
-	await process_frame
+	await create_timer(1.2).timeout
 	var selection: Node = current_scene
 	check(selection.cards.size() == 7, "All seven fighter cards fit the roster")
 	selection._select_for_player(5, 0)

@@ -49,9 +49,10 @@ func run() -> void:
 		check(stage.current_round == index, "Round transition switches the 3D scenery")
 		check(stage.find_children("HeritageScenery", "Node3D", false, false).size() == 1, "Only the active scenery stays in the world")
 		check(arena.player1._is_grounded(), "Scenery change keeps the solid arena floor")
-		check(stage.backdrop_material.get_shader_parameter("scenery") != null and stage.floor_material.get_shader_parameter("paving") != null, "Each arena has its own scenery and a textured 3D floor")
+		check(stage.sky_material.get_shader_parameter("top_color") != null and stage.floor_material.get_shader_parameter("pattern") == 5, "Each arena has its own sky and a modelled flagstone floor")
+		check(stage.content.get_child_count() > 100, "Each round builds a modelled 3D arena")
 		if index == 3:
-			check(stage.night and stage.ROUNDS[index].image == "heritage-night.png", "Final round is the moonlit stupa arena")
+			check(stage.night and stage.ROUNDS[index].name == "MOONLIT STUPA", "Final round is the moonlit stupa arena")
 		if "--capture" in OS.get_cmdline_user_args():
 			await RenderingServer.frame_post_draw
 			root.get_texture().get_image().save_png("res://.godot/nepal-round-%d.png" % (index + 1))

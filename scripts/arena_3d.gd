@@ -2,10 +2,17 @@ extends "res://scripts/arena.gd"
 ## Canvas HUD and shared round rules around one real 3D world.
 var world: Node3D
 var camera_3d: Camera3D
-var camera_target := Vector3(0, 0.85, 0)
-var camera_distance := 6.5
+var camera_target := Vector3(0, CAMERA_HEIGHT, 0)
+var camera_distance := CAMERA_CLOSE
 var camera_zoom_hold := 0.0
-const CAMERA_BACK := Vector3(0, 0.229, 0.973)
+## Tekken/Street Fighter framing: a low, nearly level camera at chest height
+## that keeps the fighters large, turns to stay square-on to their fighting
+## line, and sweeps in from the side while the round is announced.
+const CAMERA_BACK := Vector3(0, 0.07, 0.9975)
+const CAMERA_HEIGHT := 1.05
+const CAMERA_CLOSE := 4.9
+const CAMERA_FOV := 38.0
+var camera_yaw := 0.0
 var impact_meshes: Array[Dictionary] = []
 var shake_3d := 0.0
 var nepal_stage: Node3D
@@ -96,14 +103,19 @@ func _ready() -> void:
 func _begin_round(index: int) -> void:
 	nepal_stage.show_round(index)
 	super._begin_round(index)
-	banner_round.text = "ROUND %d / %s" % [index + 1, nepal_stage.ROUNDS[index].name]
-	banner_tagline.text = nepal_stage.ROUNDS[index].detail
+	# One short comment under the round call: where the fight is, plus the
+	# arcade ladder position when there is one.
+	var place: String = nepal_stage.ROUNDS[index].name
+	if MatchSetup.arcade:
+		place += "   /   " + ("FINAL BOSS" if MatchSetup.is_final_boss() else "RIVAL %d OF %d" % [MatchSetup.arcade_index + 1, MatchSetup.arcade_opponents.size()])
+	banner_tagline.text = place
 	$UI/ControlsHint.text = "P1  A/D move  W/S sidestep  |  F punch  G kick  E guard     |     P2  Left/Right move  Up/Down sidestep  |  K punch  L kick  O guard\nH / J grapple   |   Space / Enter jump   |   F1 combos     |     Esc menu"
 	guide_text.text = guide_text.text.replace("Down is S (P1) / Down arrow (P2).", "Hold E (P1) / O (P2) for the command's down input.")
 	guide_text.text = "MOVEMENT: A/D or Left/Right approach and retreat. W/S or Up/Down make short sidesteps. Space / Enter jump. E / O guard.\nForward and back are relative to your opponent. Sidestep committed strikes to evade them.\n\n" + guide_text.text
-	camera_target = Vector3(0, 0.85, 0)
-	camera_distance = 6.5
+	camera_target = Vector3(0, CAMERA_HEIGHT, 0)
+	camera_distance = CAMERA_CLOSE
 	camera_zoom_hold = 0.0
+	camera_yaw = 0.0
 	_update_fight_camera(0.0)
 	shake_3d = 0
 	for spark in impact_meshes:
@@ -132,41 +144,69 @@ func _update_fight_camera(delta: float) -> void:
 	# Scene transitions can detach this arena before its last callback runs.
 	if not is_inside_tree() or get_viewport() == null or not is_instance_valid(camera_3d):
 		return
-	var midpoint: Vector3 = (player1.body.position + player2.body.position) * 0.5
-	# Ignore footwork inside this box, and never track jumping vertically.
+	var a: Vector3 = player1.body.position
+	var b: Vector3 = player2.body.position
+	var midpoint: Vector3 = (a + b) * 0.5
+	# Turn to stay square-on to the line between the fighters, as Tekken does
+	# when they sidestep around each other. Measured left-to-right so the
+	# camera never flips when fighters cross over.
+	var left := a if a.x <= b.x else b
+	var right := b if a.x <= b.x else a
+	var line := Vector2(right.x - left.x, right.z - left.z)
+	var target_yaw := 0.0
+	if line.length() > 0.4:
+		target_yaw = clampf(atan2(line.y, line.x), -0.42, 0.42)
+	# Ignore small footwork, so jabs and short steps don't wobble the view.
+	if absf(target_yaw - camera_yaw) > 0.06:
+		camera_yaw = lerp_angle(camera_yaw, target_yaw, 1.0 - exp(-3.0 * delta))
+	var turn := Basis(Vector3.UP, -camera_yaw)
+	var back: Vector3 = turn * CAMERA_BACK
+	var along: Vector3 = turn * Vector3.RIGHT
 	var desired := camera_target
-	for axis in [0]:
-		var margin := 1.0 if axis == 0 else 0.65
-		var offset: float = midpoint[axis] - camera_target[axis]
-		if absf(offset) > margin:
-			desired[axis] += offset - signf(offset) * margin
-	desired.y = 0.85
-	desired.z = 0.0
-	camera_target = camera_target.lerp(desired, 1.0 - exp(-2.5 * delta))
+	var offset: Vector3 = midpoint - camera_target
+	offset.y = 0.0
+	var sideways := offset.dot(along)
+	if absf(sideways) > 0.3:
+		desired += along * (sideways - signf(sideways) * 0.3)
+	var depth_offset := offset.dot(turn * Vector3.BACK)
+	if absf(depth_offset) > 0.3:
+		desired += (turn * Vector3.BACK) * (depth_offset - signf(depth_offset) * 0.3)
+	# Jumps never pull the view up; the level horizon stays put.
+	desired.y = CAMERA_HEIGHT
+	camera_target = camera_target.lerp(desired, 1.0 - exp(-4.0 * delta))
 	var size := get_viewport().get_visible_rect().size
 	var tan_v := tan(deg_to_rad(camera_3d.fov) * 0.5)
 	var tan_h := tan_v * size.x / maxf(size.y, 1.0)
-	var screen_up := Vector3(0, CAMERA_BACK.z, -CAMERA_BACK.y)
-	var required := 6.5
-	# Fit the two standing silhouettes, rather than zooming for every change
-	# in separation. Vertical bounds reserve space for the HUD and jumps.
+	var screen_up: Vector3 = (turn * Vector3(0, CAMERA_BACK.z, -CAMERA_BACK.y))
+	var required := CAMERA_CLOSE
+	# Fit both standing silhouettes. Zoom out promptly as fighters separate and
+	# ease back in once they close the gap again.
 	for fighter in [player1, player2]:
-		for height in [0.0, 2.15]:
+		for height in [0.0, 2.1]:
 			var point: Vector3 = fighter.body.position
 			point.y = height
 			var relative := point - camera_target
-			var depth := relative.dot(CAMERA_BACK)
+			var depth := relative.dot(back)
 			var vertical := relative.dot(screen_up)
-			required = maxf(required, depth + absf(relative.x) / (tan_h * 0.85))
-			required = maxf(required, depth + absf(vertical) / (tan_v * (0.64 if vertical > 0.0 else 0.76)))
+			required = maxf(required, depth + absf(relative.dot(along)) / (tan_h * 0.8))
+			required = maxf(required, depth + absf(vertical) / (tan_v * (0.68 if vertical > 0.0 else 0.8)))
 	if required > camera_distance:
-		camera_zoom_hold = 0.8
-		camera_distance = lerpf(camera_distance, required, 1.0 - exp(-7.0 * delta))
+		camera_zoom_hold = 0.6
+		camera_distance = lerpf(camera_distance, required, 1.0 - exp(-6.0 * delta))
 	else:
 		camera_zoom_hold = maxf(0.0, camera_zoom_hold - delta)
-		if camera_zoom_hold == 0.0 and camera_distance - required > 0.6:
-			camera_distance = lerpf(camera_distance, required, 1.0 - exp(-1.0 * delta))
-	camera_3d.position = camera_target + CAMERA_BACK * camera_distance
+		if camera_zoom_hold == 0.0 and camera_distance - required > 0.35:
+			camera_distance = lerpf(camera_distance, required, 1.0 - exp(-1.4 * delta))
+	var eye: Vector3 = camera_target + back * camera_distance
+	# Round intro: swing in from a high three-quarter angle while the round
+	# is announced, landing on the fight view as the banner clears.
+	var intro := clampf(intro_timer / INTRO_TIME, 0.0, 1.0)
+	if intro > 0.0:
+		var ease_in := intro * intro * (3.0 - 2.0 * intro)
+		var orbit := Basis(Vector3.UP, ease_in * 0.75)
+		eye = camera_target + orbit * (back * camera_distance * (1.0 + 0.45 * ease_in)) + Vector3.UP * (0.9 * ease_in)
+	camera_3d.fov = CAMERA_FOV
+	camera_3d.position = eye
 	camera_3d.look_at(camera_target)
 
 func _impact_3d(fighter: Node, blocked: bool, heavy: bool) -> void:
@@ -221,9 +261,9 @@ func _build_stage() -> void:
 	world.add_child(nepal_stage)
 	camera_3d = Camera3D.new()
 	camera_3d.name = "Camera3D"
-	camera_3d.fov = 48
+	camera_3d.fov = CAMERA_FOV
 	camera_3d.near = 0.1
-	camera_3d.far = 200
+	camera_3d.far = 400
 	world.add_child(camera_3d)
 	camera_3d.position = Vector3(0, 3.25, 10.2)
 	camera_3d.look_at(Vector3(0, 0.8, 0))

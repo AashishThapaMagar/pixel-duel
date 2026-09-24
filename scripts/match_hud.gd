@@ -83,11 +83,28 @@ func _ready() -> void:
 	arena.round_label.size = Vector2(98, 20)
 	arena.round_label.add_theme_font_size_override("font_size", 11)
 	arena.round_label.add_theme_color_override("font_color", UI.LIME)
-	arena.banner.color = Color("0e1320ee")
+	# No backing box: a big italic round call and one comment line float over
+	# the fight, outlined so they read against any arena.
+	arena.banner.color = Color(0, 0, 0, 0)
 	arena.banner.z_index = 5
-	UI.panel(arena.banner, Vector2.ZERO, Vector2(4, 150), UI.LIME, UI.LIME)
-	arena.banner_round.add_theme_font_size_override("font_size", 14)
-	arena.banner_name.add_theme_font_size_override("font_size", 42)
+	arena.banner_name.visible = false
+	arena.banner_round.position = Vector2(0, 0)
+	arena.banner_round.size = Vector2(700, 104)
+	arena.banner_round.add_theme_font_override("font", UI.display_font())
+	arena.banner_round.add_theme_font_size_override("font_size", 92)
+	arena.banner_round.add_theme_color_override("font_color", UI.GOLD)
+	arena.banner_round.add_theme_color_override("font_shadow_color", UI.CRIMSON)
+	arena.banner_round.add_theme_constant_override("shadow_offset_x", 5)
+	arena.banner_round.add_theme_constant_override("shadow_offset_y", 5)
+	arena.banner_round.add_theme_color_override("font_outline_color", UI.INK)
+	arena.banner_round.add_theme_constant_override("outline_size", 8)
+	arena.banner_tagline.position = Vector2(0, 106)
+	arena.banner_tagline.size = Vector2(700, 30)
+	arena.banner_tagline.add_theme_font_override("font", UI.strong_font())
+	arena.banner_tagline.add_theme_font_size_override("font_size", 20)
+	arena.banner_tagline.add_theme_color_override("font_color", UI.WHITE)
+	arena.banner_tagline.add_theme_color_override("font_outline_color", UI.INK)
+	arena.banner_tagline.add_theme_constant_override("outline_size", 6)
 	for child in layer.get_children():
 		if child is Button:
 			child.theme = UI.theme()
@@ -163,5 +180,5 @@ func _process(_delta: float) -> void:
 			var won: bool = arena.round_wins[0] > arena.round_wins[1]
 			next_button.text = ("NEW RUN / R" if MatchSetup.is_final_boss() else "NEXT RIVAL / R") if won else "RETRY RIVAL / R"
 			if won and MatchSetup.is_final_boss():
-				result_detail.text = "ANANT DEFEATED / ARCADE COMPLETE"
+				result_detail.text = "ANANTA DEFEATED / ARCADE COMPLETE"
 	arena.timer_label.add_theme_color_override("font_color", UI.RED if arena.time_remaining <= 10 else UI.WHITE)

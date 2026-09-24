@@ -63,7 +63,7 @@ func _ready() -> void:
 		sprite.scale = Vector2.ONE * (176.0 / 320.0)
 		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		add_child(sprite)
-	for key in ["skin", "cloth", "pants", "dark", "accent", "hair", "wrap", "team", "mouth", "eye_white"]:
+	for key in ["skin", "cloth", "pants", "dark", "accent", "hair", "wrap", "team", "mouth", "eye_white", "shoe", "sole", "under"]:
 		var surface_material := StandardMaterial3D.new()
 		surface_material.roughness = 0.92
 		# A cheap rim light along every edge gives the low-poly rig a lit,
@@ -75,6 +75,7 @@ func _ready() -> void:
 	materials.dark.albedo_color = Color("1c2331")
 	materials.wrap.albedo_color = Color("e6e2d8")
 	materials.eye_white.albedo_color = Color("f2ede4")
+	materials.sole.albedo_color = Color("ece7dc")
 	materials.eye_white.rim_enabled = false
 	# Skin reads as a glossy, rim-glowing "action figure" at this roughness;
 	# knocking the shine down and quieting its rim is what separates a face
@@ -131,30 +132,35 @@ func _bone(key: String, radius: float, surface_material: String) -> void:
 
 func _build_model() -> void:
 	for side in ["rear", "lead"]:
-		_bone(side + "_thigh", 7.6, "cloth")
-		_bone(side + "_shin", 5.0, "cloth")
-		_sphere(side + "_knee", Vector3(5.6, 5.8, 5.6), "cloth")
-		_sphere(side + "_boot", Vector3(10, 4.8, 6.5), "dark")
-		_box(side + "_sole", Vector3(18, 2, 12), "wrap")
-		_bone(side + "_upper", 5.5, "skin")
-		_bone(side + "_forearm", 4.4, "skin")
-		_sphere(side + "_shoulder", Vector3(5.8, 5.8, 5.8), "skin")
-		_sphere(side + "_elbow", Vector3(4.8, 4.8, 4.8), "skin")
+		_bone(side + "_thigh", 8.4, "cloth")
+		_bone(side + "_shin", 5.8, "cloth")
+		_sphere(side + "_knee", Vector3(6.6, 6.8, 6.6), "cloth")
+		# Baggy martial trousers balloon over the shin and gather at the boot.
+		_sphere(side + "_calf", Vector3.ONE, "pants")
+		_sphere(side + "_boot", Vector3(12, 6.4, 8), "shoe")
+		_box(side + "_sole", Vector3(21, 2.8, 13), "sole")
+		_bone(side + "_upper", 6.4, "skin")
+		_bone(side + "_forearm", 5.3, "skin")
+		_sphere(side + "_shoulder", Vector3(7.8, 7.4, 7.8), "skin")
+		_sphere(side + "_elbow", Vector3(5.4, 5.4, 5.4), "skin")
 		_sphere(side + "_hand", Vector3(6, 6.7, 6), "skin")
-		_bone(side + "_wrap", 4.9, "wrap")
+		_bone(side + "_wrap", 5.8, "wrap")
 		_box(side + "_anklet", Vector3(11, 2.6, 8), "accent")
 		_sphere(side + "_bicep", Vector3.ONE, "skin")
 		_sphere(side + "_trouser", Vector3.ONE, "pants")
-		_box(side + "_boot_trim", Vector3(15, 1.3, 12.5), "accent")
+		_box(side + "_boot_trim", Vector3(16, 1.6, 13.4), "accent")
 		_sphere(side + "_kneepad", Vector3(6.2, 6.2, 1.9), "dark")
 	var torso := CylinderMesh.new()
-	torso.top_radius = 15.0
-	torso.bottom_radius = 10.5
+	torso.top_radius = 17.0
+	torso.bottom_radius = 11.5
 	torso.height = 33.0
 	torso.radial_segments = 12
 	_mesh("torso", torso, "cloth").scale.z = 0.62
-	_sphere("hips", Vector3(13, 9, 8), "cloth")
-	_bone("neck", 4.5, "skin")
+	_sphere("hips", Vector3(13, 9, 10), "cloth")
+	# Pecs and traps give the broad, heroic arcade-fighter upper body.
+	_sphere("chest_bulk", Vector3.ONE, "cloth")
+	_sphere("traps", Vector3.ONE, "skin")
+	_bone("neck", 5.6, "skin")
 	# Rounder and a touch shorter than before: the previous head/jaw pairing
 	# (tall egg-shaped skull + narrow chin) read as an alien mannequin more
 	# than a stylized human. A fuller jaw under a rounder skull is a more
@@ -227,8 +233,12 @@ func _update_profile() -> void:
 	materials.hair.albedo_color = profile.hair
 	materials.mouth.albedo_color = profile.skin.darkened(0.45)
 	materials.team.albedo_color = Color("58a9ff") if fighter.player_id == 1 else Color("ff6868")
-	materials.wrap.albedo_color = profile.accent.lightened(0.28) if profile.id == "bib" else Color("d6cdb8")
-	parts.torso.material_override = materials.skin if _signature == "open_vest" else materials.cloth
+	materials.wrap.albedo_color = profile.get("wrap", Color("d6cdb8"))
+	materials.shoe.albedo_color = profile.get("shoe", Color("2a2531"))
+	materials.under.albedo_color = profile.get("under", Color("1d1c22"))
+	parts.torso.material_override = materials.cloth
+	parts.chest_bulk.material_override = materials.cloth
+	parts.traps.material_override = materials.cloth if _outfit in ["suit", "gi"] else materials.skin
 	parts.head.scale = Vector3(9.8, 10.7, 9.2) if profile.id == "sab" else Vector3(9.0, 10.7, 8.7)
 	parts.jaw.scale = Vector3(8.2, 6.6, 8.0) if profile.id == "sab" else Vector3(7.4, 6.6, 7.3)
 	parts.braid.visible = _hair_style == "braid"
@@ -293,7 +303,10 @@ func _update_model() -> void:
 		_place_bone(side + "_shin", _point(knee, depth), _point(ankle, depth), _build)
 		var thigh: MeshInstance3D = parts[side + "_thigh"]
 		parts[side + "_trouser"].transform = thigh.transform
-		parts[side + "_trouser"].scale = Vector3(8.0 * _build, 17.0, 7.3 * _build)
+		parts[side + "_trouser"].scale = Vector3(9.4 * _build, 17.0, 9.0 * _build)
+		parts[side + "_calf"].transform = parts[side + "_shin"].transform
+		parts[side + "_calf"].position = _point(knee.lerp(ankle, 0.55), depth)
+		parts[side + "_calf"].scale = Vector3(7.6 * _build, 14.0, 7.6 * _build)
 		parts[side + "_knee"].position = _point(knee, depth)
 		parts[side + "_boot"].position = _point(ankle + Vector2(3, 1), depth)
 		parts[side + "_sole"].position = _point(ankle + Vector2(3, 5), depth)
@@ -308,18 +321,24 @@ func _update_model() -> void:
 		var elbow := _joint(shoulder, hand, 25.0, -1.0 if hand.x < shoulder.x else 1.0)
 		_place_bone(side + "_upper", _point(shoulder, depth), _point(elbow, depth), _build)
 		parts[side + "_bicep"].transform = parts[side + "_upper"].transform
-		parts[side + "_bicep"].scale = Vector3(5.7 * _build, 10.5, 5.5 * _build)
+		parts[side + "_bicep"].scale = Vector3(7.4 * _build, 12.0, 7.0 * _build)
 		_place_bone(side + "_forearm", _point(elbow, depth), _point(hand, depth), _build)
 		_place_bone(side + "_wrap", _point(hand.lerp(elbow, 0.26), depth), _point(hand, depth), _build * (1.55 if _signature == "wraps" else 1.0))
 		parts[side + "_shoulder"].position = _point(shoulder, depth)
 		parts[side + "_elbow"].position = _point(elbow, depth)
 		parts[side + "_hand"].position = _point(hand, depth)
-		var gloves: bool = _outfit == "keeper" or (fighter != null and fighter.current_style != null and fighter.current_style.kicks_disabled)
-		parts[side + "_hand"].scale = Vector3(6.0, 6.7, 5.5) if gloves else Vector3(4.8, 5.6, 4.5)
-		parts[side + "_hand"].material_override = materials.accent if gloves else materials.dark
+		# Every fighter wears open-finger combat gloves, as on the concept sheet.
+		parts[side + "_hand"].scale = Vector3(6.4, 6.8, 6.0) * clampf(_build, 0.95, 1.12)
+		parts[side + "_hand"].material_override = materials.dark
 	parts.torso.position = _point((chest + hip) * 0.5)
 	parts.torso.rotation.z = -(chest - hip).angle() - PI * 0.5
-	parts.torso.scale = Vector3(_build, 1.0, 0.62 * _build)
+	parts.torso.scale = Vector3(_build, 1.0, 0.8 * _build)
+	parts.chest_bulk.position = _point(chest + (hip - chest) * 0.22)
+	parts.chest_bulk.rotation.z = parts.torso.rotation.z
+	parts.chest_bulk.scale = Vector3(15.5 * _build, 11.0, 13.2 * _build)
+	parts.traps.position = _point(chest + Vector2(-2, -3))
+	parts.traps.rotation.z = parts.torso.rotation.z
+	parts.traps.scale = Vector3(10.0 * _build, 5.5, 12.0 * _build)
 	parts.hips.position = _point(hip)
 	_place_bone("neck", _point(chest + Vector2(0, -4)), _point(head + Vector2(-1, 5)))
 	parts.head.position = _point(head)

@@ -2,11 +2,15 @@
 
 An original action fighting game prototype in Godot 4.2+, with articulated 3D fighters and side-on movement and short sidesteps on a solid Nepal courtyard. Every match lasts **four rounds**. Each fighter keeps their own moves throughout; the most round wins takes the match.
 
-Choose a mode with **Up/Down**, then press **Enter** for the arcade character-select screen. All seven fighters fit in the portrait grid, with large live 3D previews on either side. P1 uses A/D and F to select/confirm; P2 uses Left/Right and K. Enter starts the match once ready. Computer modes pre-confirm the CPU; Arcade and Story choose the first rival automatically. The home screen uses an original late-1990s arcade treatment inspired by Tekken 3 menu references.
+Choose a mode with **Up/Down**, then press **Enter** for the arcade character-select screen. All seven fighters fit in the portrait grid, with large live 3D previews on either side. P1 uses A/D and F to select/confirm; P2 uses Left/Right and K. Enter starts the match once ready. Computer modes pre-confirm the CPU; Arcade and Story choose the first rival automatically. The title screen is an arcade-style menu: a slanted mode list (Arcade, Story, VS Battle, VS Computer) over the live 3D arena, with each mode showing a different arena mood, a splash card for the selected mode, top tabs for Fighters / Arenas / How to Play / Settings / Exit, and a crimson slash wipe into character select. Menus share `scripts/ui_kit.gd`: heavy italic display type, parallelogram panels and a Nepal crimson / gold palette.
 
 ## 3D arena
 
-Start Game now opens `scenes/Arena3D.tscn`. All seven fighters use lit meshes in the same 3D world, with shadows, a following perspective camera, gravity, capsule collision against the floor and walls, and circular fighter pushboxes. A/D and Left/Right control the main approach/retreat movement. W/S and Up/Down give slower sidesteps within a narrow 1.3-metre-deep fighting strip; holding them cannot carry fighters into the distant scenery. Fighters start closer, with a fixed-depth camera and a solid, opaque floor under the playable strip. Every match follows a four-arena Nepal-inspired journey: Heritage Courtyard (day), Lantern Courtyard (night), Terrace Valley (day), and Moonlit Heritage (final night). The ARENA menu previews this fixed sequence using live 3D views. These fictional settings celebrate Nepal's landscapes and heritage rather than recreate specific monuments. The opening Heritage Courtyard uses a muted, late-1990s 3D arcade aesthetic: weathered Nepal brickwork, carved timber windows, tiled eaves and a distant pagoda. A generated background plate is paired with a real textured 3D stone floor and fighter shadows. Neutral daylight and softer stone textures match the enclosed courtyard. Later rounds retain their illustrated scenery, including the nighttime finale. The camera follows combat and pulls back when fighters separate. Artwork and prompts for the opening arena are in [assets/backgrounds/nepal_retro/](assets/backgrounds/nepal_retro/), generated with the built-in image_gen tool; the previous illustrated artwork remains available in `assets/backgrounds/nepal_illustrated/`.
+Start Game now opens `scenes/Arena3D.tscn`. All seven fighters use lit meshes in the same 3D world, with shadows, gravity, capsule collision against the floor and walls, and circular fighter pushboxes. A/D and Left/Right control the main approach/retreat movement. W/S and Up/Down give slower sidesteps within a narrow 1.3-metre-deep fighting strip.
+
+**Camera.** The fight camera is framed like Tekken / Street Fighter: low and nearly level at chest height, close enough that fighters fill most of the screen, zooming out only as they separate. It turns to stay square-on to the line between the fighters when they sidestep, ignores small footwork and jumps so the view stays steady, and swings in from a high three-quarter angle while each round is announced.
+
+**Arena.** The arena is fully modelled in 3D in `scripts/nepal_stage_3d.gd`, built from primitives and procedural shaders (brick, cut stone, roof tiles, plaster, timber, flagstone and carved lattice); there are no painted backdrops. A flagstone fighting dais sits in a brick Durbar Square lined with Newari houses (timber string courses, carved lattice windows, tiled roofs on struts), with Himalayan ridges on the horizon under a shader sky. Every match follows four rounds: **Heritage Square** (day, three-tier pagoda with guardian lions and stone shikhara temples), **Lantern Square** (night, strings of paper lanterns), **Terrace Overlook** (sunset, a chautari with a pipal tree above terraced hills), and **Moonlit Stupa** (final night, a white stupa with watching eyes and radiating prayer flags). Prayer flags flutter, butter lamps flicker, each round has its own ambient particles, and rounds fade through black. These fictional settings celebrate Nepal's architecture and landscape rather than recreate specific monuments.
 
 Combat keeps the existing move tables, stamina, hit confirms, throws, guard breaks, AI, four-round matches, and story/arcade progression. Strikes query oriented 3D volumes, so depth separation matters. Models are procedural stylized rigs, with fixed-length limbs and poses driven by the combat state; they are not ragdolls or imported motion-capture characters.
 
@@ -54,10 +58,10 @@ Press **F1** for all commands, combos, startup/active/recovery timings, and esti
 
 - **Start Game** enters a four-round match using your saved-in-session setup.
 - **Match Setup** selects 2 Players, vs AI, or Arcade, plus previews of the four-stage Nepal journey. **Fighters** opens compact name selectors and trait descriptions for both players.
-- **Arcade** fights the other regular roster members before **Anant**, the final boss. Each rival is a four-round match. Win to advance; losses and draws retry the same rival. Defeating Anant completes the run. Starting Arcade with Anant also ends in an Anant mirror match.
+- **Arcade** fights the other regular roster members before **Ananta**, the final boss. Each rival is a four-round match. Win to advance; losses and draws retry the same rival. Defeating Ananta completes the run. Starting Arcade with Ananta also ends in an Ananta mirror match.
 - **How to Play**, **Settings**, and **Exit** remain available. Fullscreen and volume settings persist between launches.
 
-The AI uses movement/guard inputs and the same expiring attack buffer, stamina costs, hit confirms, startup and recovery as players. It reacts to visible attacks after a delay. Anant decides more frequently, but has no immunity, automatic damage, or extra health.
+The AI uses movement/guard inputs and the same expiring attack buffer, stamina costs, hit confirms, startup and recovery as players. It reacts to visible attacks after a delay. Ananta decides more frequently, but has no immunity, automatic damage, or extra health.
 
 ### Legacy illustrated arenas
 
@@ -160,11 +164,11 @@ The controller lives in `scripts/player.gd`. The live sprite renderer in `script
 |---|---|---|
 | Anug | Goalkeeper glove checks, diving clearance, low saves; larger timed-parry window | 65 stamina, slower recovery of stamina |
 | Ish | Fast footwork and powerful punches | Low strikes hit his weak knee for 25% extra damage; weaker kicks |
-| Sab | Heavy fists and short-range clinch throws that beat guard | 65 stamina; expensive grabs and committed recovery |
+| Ballas | Heavy fists and short-range clinch throws that beat guard | 65 stamina; expensive grabs and committed recovery |
 | Bib | Fastest movement, 135 stamina, running kicks | Weak punches |
 | Abhi | Heavy punches, 125 stamina, a talking taunt | More guard chip and stamina drain while blocking |
-| Sup | Sway stance, low spiral, cartwheel strike, spinning kick and retreat feint | Evasion requires spacing; no invulnerability |
-| Anant | Strong all-round final boss with punches, kicks and a throw | No specialist weakness; normal 100 HP, stamina costs and punishable recovery |
+| Supreme | Sway stance, low spiral, cartwheel strike, spinning kick and retreat feint | Evasion requires spacing; no invulnerability |
+| Ananta | Strong all-round final boss with punches, kicks and a throw | No specialist weakness; normal 100 HP, stamina costs and punishable recovery |
 
 Light strikes cost 5 stamina, regular heavies 11, command enders 18, grabs 20, and dashes 7. Stamina regenerates after 0.65 seconds without spending while idle, walking or jumping. Guard consumes stamina on impact and breaks if it cannot pay, leaving 0.55 seconds of vulnerability. Health and stamina reset each round.
 
@@ -172,7 +176,7 @@ Light strikes cost 5 stamina, regular heavies 11, command enders 18, grabs 20, a
 
 **Abhi:** Back + Heavy performs Big Talk. Completing its 0.9-second vulnerable animation restores 24 stamina; interruption grants nothing. Five-second cooldown. The taunt uses on-screen text, not recorded voice.
 
-**Sup:** Back + Heavy retreats with Slip Away. It deals no damage and grants no invulnerability.
+**Supreme:** Back + Heavy retreats with Slip Away. It deals no damage and grants no invulnerability.
 
 Character stats live in `scripts/fighter_roster.gd`, attacks in `scripts/action_moves.gd`, and shared action rules in `resources/styles/action.tres`. Older discipline resources remain on disk for legacy regression tests, but are not used in normal matches.
 

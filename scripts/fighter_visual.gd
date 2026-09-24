@@ -14,6 +14,29 @@ var team := Color("416bd9")
 var accent := Color("e5c45d")
 var _last_position := Vector2.ZERO
 var _initialized: bool = false
+# Gait shape, in the same pose units as everything else in this file. The
+# reaches are half a stride, measured from the foot's own travelling lane, and
+# are as long as this rig's 60-unit legs can hold without the knee locking out.
+const STEP_REACH := 21.0
+const RUN_REACH := 23.0
+const STANCE_REAR := -17.0
+const STANCE_LEAD := 12.0
+# Stride clock, in cycles: 0 plants the lead foot, 0.5 plants the rear one.
+var gait_phase: float = 0.0
+# Smoothed ground speed in pose units per second, signed by travel direction.
+var gait_speed: float = 0.0
+# How much of the walk shows through the guard stance, 0..1.
+var gait_weight: float = 0.0
+var _planted: float = 0.68
+var _reach: float = STEP_REACH
+var _run_mix: float = 0.0
+# The pose without locomotion: the guard/state silhouette, smoothed over time.
+# The stride is layered on top of it every frame rather than smoothed with it,
+# so the low-pass that settles a stance change cannot also drag the feet behind
+# the ground they are standing on.
+var _stance: Array[Vector2] = []
+var _step_speed: float = 0.0
+var _tick_position := Vector2.ZERO
 
 # Hip, chest, head, rear wrist, lead wrist, rear ankle, lead ankle.
 func _guard() -> Array[Vector2]:
@@ -55,7 +78,12 @@ func _guard() -> Array[Vector2]:
 
 func reset_pose() -> void:
 	pose = _guard()
+	_stance = _guard()
 	phase = 0.0
+	gait_phase = 0.0
+	gait_speed = 0.0
+	gait_weight = 0.0
+	_step_speed = 0.0
 	ko_progress = 0.0
 	_initialized = false
 	rotation = 0.0
@@ -67,25 +95,126 @@ func sync_pose(owner_fighter: Node) -> void:
 	accent = fighter.current_style.accent_color if fighter.current_style != null else Color("e5c45d")
 	if pose.is_empty():
 		pose = _guard()
+	if _stance.is_empty():
+		_stance = _guard()
+	_sample_travel()
 	# Sample contact before hit-stop can pause rendering; the frozen pose must
 	# show the strike that dealt damage, not the preceding windup frame.
 	if fighter.state in [fighter.State.PUNCH, fighter.State.KICK]:
-		pose = _attack_pose(_guard())
+		_stance = _attack_pose(_guard())
+		pose = _stance.duplicate()
 	scale.x = float(fighter.facing)
 	queue_redraw()
+
+func _reset_travel() -> void:
+	_last_position = fighter.global_position
+	_tick_position = fighter.global_position
+	_step_speed = 0.0
+	_initialized = true
+
+func _sample_travel() -> void:
+	# How fast the fighter is actually travelling, measured on the physics tick
+	# where the step is always exactly one fixed delta wide. Sampling the same
+	# displacement per rendered frame instead reads zero on the frames between
+	# ticks and a whole step on the others, and that ripple would show up in
+	# everything this speed shapes: how far the stride fades in, how much the
+	# fighter leans, whether it reads as a walk or a run.
+	if not _initialized:
+		_reset_travel()
+		return
+	var step: float = fighter.global_position.x - _tick_position.x
+	_tick_position = fighter.global_position
+	var tick := get_physics_process_delta_time()
+	_step_speed = 0.0 if tick <= 0.0 or absf(step) > 40.0 else step * fighter.facing / tick
+
+func _advance_gait(delta: float) -> void:
+	# Speed shapes the stride; it never drives the clock.
+	var moving: bool = fighter.state in [fighter.State.WALK, fighter.State.DASH]
+	gait_speed = lerpf(gait_speed, _step_speed if moving else 0.0, 1.0 - exp(-16.0 * delta))
+	var pace := absf(gait_speed)
+	var top_speed: float = maxf(fighter.move_speed, 1.0)
+	_run_mix = clampf(inverse_lerp(top_speed * 0.72, top_speed * 0.98, pace), 0.0, 1.0)
+	gait_weight = smoothstep(4.0, 30.0, pace)
+	_planted = lerpf(0.68, 0.52, _run_mix)
+	_reach = lerpf(STEP_REACH, RUN_REACH, _run_mix)
+	var covered: float = (fighter.global_position.x - _last_position.x) * fighter.facing
+	_last_position = fighter.global_position
+	# Ignore a jump in position that no step could have produced: a round
+	# reset or a throw places the fighter, it does not walk them there.
+	if not moving or absf(covered) > 40.0:
+		return
+	# The ground the body just covered is what turns the cycle, not a clock.
+	# One cycle spans exactly the distance its two stances give back -- across
+	# a stance the planted foot travels backwards through 2 * reach while the
+	# body covers stride * planted, the same distance -- so the sole stays
+	# welded to the floor at any speed, and at any frame rate, including the
+	# rendered frames that fall between physics ticks and cover no ground at
+	# all. It also means movement blocked by a wall or a rival turns nothing:
+	# the legs can never run in place.
+	var stride := 2.0 * _reach / _planted
+	gait_phase = fposmod(gait_phase + covered / stride, 1.0)
+
+func _apply_gait() -> void:
+	pose.resize(_stance.size())
+	for i in _stance.size():
+		pose[i] = _stance[i]
+	if gait_weight <= 0.001:
+		return
+	var weight := gait_weight
+	var lanes := [STANCE_REAR, STANCE_LEAD]
+	for i in 2:
+		# The lead leg carries the clock; the rear leg is half a cycle behind.
+		var leg := fposmod(gait_phase + (0.0 if i == 1 else 0.5), 1.0)
+		var along: float
+		var lift := 0.0
+		if leg < _planted:
+			# Planted: the sole gives ground back at exactly travel speed.
+			along = lerpf(_reach, -_reach, leg / _planted)
+		else:
+			# Swing: eased off the toe and onto the heel, so the foot is never
+			# still moving at the instant it touches down.
+			var swing := (leg - _planted) / (1.0 - _planted)
+			along = lerpf(-_reach, _reach, smoothstep(0.0, 1.0, swing))
+			lift = pow(sin(swing * PI), 1.3) * lerpf(7.0, 15.0, _run_mix)
+		# Feet gather under the hips to travel. A stance this wide cannot take
+		# a full stride without reaching past the rig's fixed leg length, and a
+		# leg clamped at full extension is exactly what skates.
+		pose[5 + i].x = lerpf(_stance[5 + i].x, lanes[i], weight) + along * weight
+		pose[5 + i].y = _stance[5 + i].y - lift * weight
+	# Two dips per cycle: the pelvis sinks through double support and floats
+	# back up over mid-stance. That vertical beat is what gives a walk weight,
+	# and it lowers the hips exactly when the legs are most extended.
+	var support := 0.5 + 0.5 * cos((gait_phase - 0.1) * 2.0 * TAU)
+	var carry := 0.5 + 0.5 * cos((gait_phase - 0.18) * 2.0 * TAU)
+	var sway := cos(gait_phase * TAU)
+	var lean := lerpf(2.5, 6.5, _run_mix) * signf(gait_speed) * weight
+	pose[0].x += sway * weight
+	pose[0].y += lerpf(1.4, 4.0, support) * weight
+	pose[1].x += lean - sway * 1.4 * weight
+	pose[1].y += lerpf(0.5, 2.2, carry) * weight
+	pose[2].x += lean * 1.15 - sway * weight
+	pose[2].y += lerpf(0.3, 1.7, carry) * weight
+	# Contralateral swing: the rear hand answers the lead leg, the way a real
+	# stride counterbalances itself. Small on purpose -- the guard stays up,
+	# the arms only breathe with the steps.
+	var swing_reach := lerpf(4.5, 9.0, _run_mix) * weight
+	pose[3].x += sway * swing_reach
+	pose[3].y -= sway * 1.2 * weight
+	pose[4].x -= sway * swing_reach
+	pose[4].y += sway * 1.2 * weight
 
 func _process(delta: float) -> void:
 	if fighter == null or fighter.combat_paused:
 		return
 	if not _initialized:
-		_last_position = fighter.global_position
-		_initialized = true
+		_reset_travel()
 	if fighter.hitstop_remaining > 0.0:
 		return
-	var travel: float = fighter.global_position.x - _last_position.x
-	_last_position = fighter.global_position
-	var moving: bool = fighter.state in [fighter.State.WALK, fighter.State.DASH]
-	phase += travel * fighter.facing / 13.0 if moving else delta * 2.6
+	if _stance.is_empty():
+		_stance = _guard()
+	# Breathing keeps its own clock now that the stride has one of its own.
+	phase += delta * 2.6
+	_advance_gait(delta)
 	var target := _guard()
 	var breath := sin(phase) * 1.2
 	target[0].y += breath * 0.4
@@ -106,16 +235,6 @@ func _process(delta: float) -> void:
 			"mma":
 				target[0].y += 3.0
 				target[4] = Vector2(30, -90)
-	if moving:
-		# Distance drives the cycle, so blocked movement cannot run in place.
-		var stride := sin(phase)
-		var lift := cos(phase)
-		target[5] += Vector2(stride * 13.0, -maxf(0.0, lift) * 9.0)
-		target[6] += Vector2(-stride * 13.0, -maxf(0.0, -lift) * 9.0)
-		target[0].y -= absf(stride) * 2.0
-		target[1].x += fighter.velocity.x * fighter.facing * 0.012
-		target[2].x += fighter.velocity.x * fighter.facing * 0.014
-		target[4].x += stride * 2.0
 	match fighter.state:
 		fighter.State.JUMP_START, fighter.State.LAND:
 			for i in [0, 1, 2, 3, 4]:
@@ -155,8 +274,9 @@ func _process(delta: float) -> void:
 	# Attacks are sampled directly to keep the limb at contact on active ticks.
 	var attacking: bool = fighter.state in [fighter.State.PUNCH, fighter.State.KICK]
 	var blend := 1.0 if attacking else 1.0 - exp(-24.0 * delta)
-	for i in pose.size():
-		pose[i] = pose[i].lerp(target[i], blend)
+	for i in _stance.size():
+		_stance[i] = _stance[i].lerp(target[i], blend)
+	_apply_gait()
 	scale.x = float(fighter.facing)
 	queue_redraw()
 

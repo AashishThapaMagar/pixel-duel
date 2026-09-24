@@ -335,25 +335,59 @@ func _update_combo_ui() -> void:
 		combo_labels[i].text = text
 
 func _show_banner(index: int, fight_style: FightStyle) -> void:
-	banner_round.text = "ROUND %d" % (index + 1)
+	banner_round.text = "FINAL ROUND" if index == round_styles.size() - 1 else "ROUND %d" % (index + 1)
 	banner_name.text = "%s  VS  %s" % [player1.character_profile.name, player2.character_profile.name]
 	banner_name.modulate = fight_style.accent_color
 	banner_tagline.text = fight_style.tagline
 	if MatchSetup.arcade:
-		banner_tagline.text = "FINAL BOSS / ANANT" if MatchSetup.is_final_boss() else "ARCADE / RIVAL %d OF %d" % [MatchSetup.arcade_index + 1, MatchSetup.arcade_opponents.size()]
+		banner_tagline.text = "FINAL BOSS / ANANTA" if MatchSetup.is_final_boss() else "ARCADE / RIVAL %d OF %d" % [MatchSetup.arcade_index + 1, MatchSetup.arcade_opponents.size()]
 	banner.visible = true
 	banner.modulate.a = 0.0
 	banner.position.x = 106.0
+	# The round call slams in large and settles, arcade-style.
+	banner_round.pivot_offset = banner_round.size * 0.5
+	banner_round.scale = Vector2.ONE * 1.8
 	var entrance := create_tween().set_parallel(true)
-	entrance.tween_property(banner, "modulate:a", 1.0, 0.2)
+	entrance.tween_property(banner, "modulate:a", 1.0, 0.15)
 	entrance.tween_property(banner, "position:x", 130.0, 0.3).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	entrance.tween_property(banner_round, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	intro_timer = INTRO_TIME
 
 func _hide_banner() -> void:
+	if banner.visible:
+		_flash_fight()
 	banner.visible = false
 	player1.set_physics_process(true)
 	player2.set_physics_process(true)
 	round_active = true
+
+## "FIGHT!" bursts onto the screen as control is handed to the players.
+func _flash_fight() -> void:
+	var call := Label.new()
+	call.text = "FIGHT!"
+	call.position = Vector2(180, 180)
+	call.size = Vector2(600, 130)
+	call.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	call.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	call.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	call.z_index = 6
+	call.add_theme_font_override("font", preload("res://scripts/ui_kit.gd").display_font())
+	call.add_theme_font_size_override("font_size", 110)
+	call.add_theme_color_override("font_color", Color("ffc53d"))
+	call.add_theme_color_override("font_shadow_color", Color("d7263d"))
+	call.add_theme_constant_override("shadow_offset_x", 5)
+	call.add_theme_constant_override("shadow_offset_y", 5)
+	call.add_theme_color_override("font_outline_color", Color("07080f"))
+	call.add_theme_constant_override("outline_size", 8)
+	call.pivot_offset = call.size * 0.5
+	call.scale = Vector2.ONE * 0.4
+	$UI.add_child(call)
+	var burst := call.create_tween()
+	burst.tween_property(call, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	burst.tween_interval(0.45)
+	burst.parallel().tween_property(call, "modulate:a", 0.0, 0.25).set_delay(0.45)
+	burst.parallel().tween_property(call, "scale", Vector2.ONE * 1.25, 0.25).set_delay(0.45)
+	burst.tween_callback(call.queue_free)
 
 func _update_pips() -> void:
 	var total := round_styles.size()
