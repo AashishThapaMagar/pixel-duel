@@ -2,6 +2,12 @@ extends Node
 ## Selection survives scene changes; round restart never changes the roster.
 var selected_fighters: Array[int] = [0, 1]
 var selected_arena: int = 0
+## 3D arena for VS Battle / VS Computer: JOURNEY_STAGE plays the four-arena
+## journey, 0-3 fixes every round to that arena, RANDOM_STAGE draws one per
+## match. Arcade and Story always play the journey.
+const JOURNEY_STAGE := -1
+const RANDOM_STAGE := 4
+var stage_choice: int = JOURNEY_STAGE
 var vs_ai: bool = false
 var ai_difficulty: int = 1
 var round_seconds: int = 99

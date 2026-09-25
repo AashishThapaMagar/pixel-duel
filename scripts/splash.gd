@@ -14,6 +14,9 @@ func _ready() -> void:
 	var devanagari := SystemFont.new()
 	devanagari.font_names = PackedStringArray(["Nirmala UI", "Mangal", "Noto Sans Devanagari"])
 	devanagari.font_weight = 900
+	# Mipmapped glyphs stay smooth while the wordmark scales in.
+	for font in [arcade, devanagari]:
+		font.generate_mipmaps = true
 	var name_label := _wordmark("\u0906\u0928\u0928\u094d\u0926", Vector2(80, 175), Vector2(800, 145), 106, devanagari, Color("ffe59e"))
 	name_label.name = "PublisherTitle"
 	name_label.add_theme_color_override("font_outline_color", Color("733729"))
@@ -28,14 +31,23 @@ func _ready() -> void:
 	name_label.material = metal
 	var presents := _wordmark("P R E S E N T S", Vector2(80, 330), Vector2(800, 36), 24, arcade, Color("83e5ef"))
 	presents.name = "Presents"
-	modulate.a = 0.0
+	for label in [name_label, presents]:
+		label.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	# Fade through a black cover rather than the card's own alpha: making the
+	# layered wordmark (shadow, outline, face) translucent let the shadow
+	# show through the letters as jagged fringes mid-fade.
+	var cover := ColorRect.new()
+	cover.color = Color.BLACK
+	cover.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(cover)
 	name_label.scale = Vector2.ONE * 0.88
 	name_label.pivot_offset = name_label.size * 0.5
 	var tween := create_tween()
-	tween.tween_property(self, "modulate:a", 1.0, 0.35)
+	tween.tween_property(cover, "color:a", 0.0, 0.35)
 	tween.parallel().tween_property(name_label, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_interval(1.3)
-	tween.tween_property(self, "modulate:a", 0.0, 0.4)
+	tween.tween_property(cover, "color:a", 1.0, 0.4)
 	tween.tween_callback(_advance)
 
 func _wordmark(text: String, pos: Vector2, dimensions: Vector2, font_size: int, font: Font, color: Color) -> Label:

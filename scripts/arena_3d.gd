@@ -16,6 +16,8 @@ var camera_yaw := 0.0
 var impact_meshes: Array[Dictionary] = []
 var shake_3d := 0.0
 var nepal_stage: Node3D
+## Arena every round uses when a versus mode picked one; -1 plays the journey.
+var fixed_stage := -1
 
 func _enter_tree() -> void:
 	world = Node3D.new()
@@ -98,14 +100,24 @@ func _ready() -> void:
 		add_child(preload("res://scripts/touch_controls_3d.gd").new())
 	result_label.visible = false
 	_update_pips()
+	fixed_stage = _resolve_stage()
 	_begin_round(0)
 
+## The versus arena choice as a concrete arena index, or -1 for the journey.
+func _resolve_stage() -> int:
+	if MatchSetup.arcade or MatchSetup.stage_choice == MatchSetup.JOURNEY_STAGE:
+		return -1
+	if MatchSetup.stage_choice == MatchSetup.RANDOM_STAGE:
+		return randi() % nepal_stage.ROUNDS.size()
+	return clampi(MatchSetup.stage_choice, 0, nepal_stage.ROUNDS.size() - 1)
+
 func _begin_round(index: int) -> void:
-	nepal_stage.show_round(index)
+	var stage := index if fixed_stage < 0 else fixed_stage
+	nepal_stage.show_round(stage)
 	super._begin_round(index)
 	# One short comment under the round call: where the fight is, plus the
 	# arcade ladder position when there is one.
-	var place: String = nepal_stage.ROUNDS[index].name
+	var place: String = nepal_stage.ROUNDS[stage].name
 	if MatchSetup.arcade:
 		place += "   /   " + ("FINAL BOSS" if MatchSetup.is_final_boss() else "RIVAL %d OF %d" % [MatchSetup.arcade_index + 1, MatchSetup.arcade_opponents.size()])
 	banner_tagline.text = place

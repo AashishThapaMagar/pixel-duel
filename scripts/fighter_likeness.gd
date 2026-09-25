@@ -87,6 +87,12 @@ func _extra(key: String) -> StandardMaterial3D:
 		"stripe":
 			material.albedo_color = profile.accent
 			material.roughness = 0.8
+		"lip":
+			material.albedo_color = profile.skin.darkened(0.22).lerp(Color("9a4a44"), 0.3)
+			material.roughness = 0.7
+		"iris":
+			material.albedo_color = Color("2a1a12")
+			material.roughness = 0.3
 	visual.materials[key] = material
 	return material
 
@@ -101,7 +107,7 @@ func configure(owner_visual: Node, data: Dictionary) -> void:
 			piece.get_parent().remove_child(piece)
 			piece.queue_free()
 	attached.clear()
-	for key in ["abs", "stripe"]:
+	for key in ["abs", "stripe", "lip"]:
 		visual.materials.erase(key)
 	tails.clear()
 	root = Node3D.new()
@@ -257,29 +263,91 @@ func _build_limbs(data: Dictionary) -> void:
 		for i in 3:
 			on_limb("lead_forearm", Vector3(0, 2 + i * 4, 0), Vector3(6.3, 3.0, 6.3), "wrap", false)
 
+## Sculpted front-facing face in the head's frame (+X forward, Y up, Z across
+## the face). The skull is a 9 x 10.7 x 8.7 ellipsoid centred on the origin;
+## features sit on its front surface, so the face reads correctly both in
+## the side-on fight camera and in three-quarter portrait close-ups.
+const EYE_Y := 0.6
+const EYE_Z := 3.3
+
+## Front surface of the skull at a given height and offset across the face.
+func _skull_front(y: float, z: float) -> float:
+	return 9.0 * sqrt(maxf(0.0, 1.0 - pow(y / 10.7, 2) - pow(z / 8.7, 2)))
+
+## Front of the face: the skull, or the jaw where it sits further forward
+## (the jaw ellipsoid is centred at (1, -5, 1) in the head's frame).
+func _face_front(y: float, z: float) -> float:
+	var jaw: Vector3 = visual.parts.jaw.scale
+	var jaw_front := 1.0 + jaw.x * sqrt(maxf(0.0, 1.0 - pow((y + 5.0) / jaw.y, 2) - pow((z - 1.0) / jaw.z, 2)))
+	return maxf(_skull_front(y, z), jaw_front)
+
 func _build_face(data: Dictionary) -> void:
-	var eyewear: String = data.get("eyewear", "")
+	# The rig's older side-mounted features give way to the sculpted face.
+	for key in ["eye", "eye_white", "brow", "mouth", "nose", "ear"]:
+		visual.parts[key].visible = false
+	# Structure: brow ridge, cheekbones, jaw corners and a squared chin.
+	round_part(head, Vector3(_skull_front(2.4, 0) - 1.6, 2.4, 0), Vector3(2.0, 1.25, 6.4), "skin")
 	for side in [-1.0, 1.0]:
-		if not eyewear.is_empty():
-			# Thin open frames retain visible eyes; sunglasses get dark lenses.
-			for x in [1.0, 6.4]:
-				for y in [-3.1, 0.5]:
-					box(head, Vector3(x, y, side * 8.4), Vector3(4.9, 0.65, 0.7), "dark")
-				for edge in [-2.3, 2.3]:
-					box(head, Vector3(x + edge, -1.3, side * 8.4), Vector3(0.6, 3.6, 0.7), "dark")
-				if eyewear == "shades":
-					box(head, Vector3(x, -1.3, side * 8.3), Vector3(4.6, 3.1, 0.6), "lens")
-			box(head, Vector3(3.7, -1, side * 8.5), Vector3(1.4, 0.6, 0.7), "accent" if eyewear == "shades" else "dark")
-			box(head, Vector3(-4, -1.5, side * 7.7), Vector3(6, 0.6, 0.6), "dark")
-		var beard: String = data.get("facial_hair", "none")
-		if beard != "none":
-			round_part(head, Vector3(6.0, -4.6, side * 7.8), Vector3(2.7, 0.7, 0.5), "hair")
-			if beard in ["goatee", "stubble"]:
-				round_part(head, Vector3(4.5, -8.0, side * 6.2), Vector3(3.4, 1.6, 1.2), "hair")
-		# Heavy brow ridge keeps the scowl readable at game scale.
-		box(head, Vector3(6.2, -3.4, side * 7.9), Vector3(4.2, 1.1, 0.8), "hair")
-	if data.get("facial_hair", "none") == "stubble":
-		round_part(head, Vector3(3.5, -7.2, 0), Vector3(5.4, 3.0, 7.6), "hair").transparency = 0.55
+		round_part(head, Vector3(_skull_front(-2.4, 5.0) - 1.6, -2.4, side * 5.0), Vector3(2.0, 1.6, 1.9), "skin")
+	round_part(head, Vector3(_face_front(-9.6, 0) - 1.9, -9.6, 0), Vector3(2.2, 1.9, 2.9), "skin")
+	for side in [-1.0, 1.0]:
+		var z: float = side * EYE_Z
+		var front := _skull_front(EYE_Y, EYE_Z)
+		# Eyeball, dark iris with a catch-light, and a heavy upper lid that
+		# gives the stern arcade-fighter squint.
+		round_part(head, Vector3(front - 1.25, EYE_Y, z), Vector3(1.35, 1.0, 1.55), "eye_white")
+		round_part(head, Vector3(front - 0.2, EYE_Y - 0.05, z + side * 0.1), Vector3(0.45, 0.72, 0.72), "iris")
+		round_part(head, Vector3(front + 0.12, EYE_Y + 0.25, z - side * 0.2), Vector3(0.12, 0.18, 0.18), "eye_white")
+		var lid := round_part(head, Vector3(front - 0.95, EYE_Y + 0.75, z), Vector3(1.55, 0.72, 1.85), "skin")
+		lid.rotation.x = side * 0.08
+		# Brows angle down toward the nose.
+		var brow := round_part(head, Vector3(_skull_front(2.5, 3.4) - 0.3, 2.45, side * 3.4), Vector3(0.9, 0.5, 2.3), "hair")
+		brow.rotation.x = side * 0.28
+		# Ears on the sides of the skull with an inner fold.
+		round_part(head, Vector3(-0.6, -0.4, side * 8.5), Vector3(1.9, 3.1, 0.95), "skin")
+		round_part(head, Vector3(-0.3, -0.4, side * 9.0), Vector3(1.1, 2.0, 0.4), "lip")
+		# Nostril wings either side of the tip.
+		round_part(head, Vector3(9.0, -4.2, side * 1.25), Vector3(0.95, 0.8, 0.85), "skin")
+	# Nose: a broad bridge from the brow to a rounded tip, with shadowed
+	# nostrils underneath.
+	var bridge := round_part(head, Vector3(_skull_front(-2.0, 0) - 0.35, -2.0, 0), Vector3(1.2, 2.2, 1.25), "skin")
+	bridge.rotation.z = -0.15
+	var tip_x := _skull_front(-3.7, 0) + 0.45
+	round_part(head, Vector3(tip_x, -3.6, 0), Vector3(1.35, 1.2, 1.45), "skin")
+	for side in [-1.0, 1.0]:
+		round_part(head, Vector3(tip_x - 0.5, -4.55, side * 0.75), Vector3(0.5, 0.3, 0.45), "mouth")
+	# Lips with a shadowed parting line, sitting on the front of the jaw.
+	round_part(head, Vector3(_face_front(-6.7, 0) + 0.05, -6.7, 0), Vector3(0.7, 0.5, 2.5), "lip")
+	round_part(head, Vector3(_face_front(-7.8, 0) + 0.0, -7.8, 0), Vector3(0.8, 0.62, 2.2), "lip")
+	box(head, Vector3(_face_front(-7.2, 0) + 0.55, -7.2, 0), Vector3(0.3, 0.24, 4.2), "mouth")
+	_build_facial_hair(data.get("facial_hair", "none"))
+	_build_eyewear(data.get("eyewear", ""))
+
+func _build_facial_hair(beard: String) -> void:
+	if beard == "none":
+		return
+	# Moustache over the upper lip for every style.
+	var moustache := round_part(head, Vector3(_face_front(-5.7, 0) + 0.25, -5.7, 0), Vector3(0.7, 0.6, 3.0), "hair")
+	moustache.rotation.z = 0.1
+	if beard in ["goatee", "stubble"]:
+		round_part(head, Vector3(_face_front(-9.6, 0) + 0.2, -9.8, 0), Vector3(1.2, 1.6, 1.9), "hair")
+
+func _build_eyewear(eyewear: String) -> void:
+	if eyewear.is_empty():
+		return
+	var x := _skull_front(EYE_Y, EYE_Z) + 0.6
+	for side in [-1.0, 1.0]:
+		var z: float = side * EYE_Z
+		# Rectangular rims around each eye, with lenses for sunglasses.
+		box(head, Vector3(x, EYE_Y + 1.25, z), Vector3(0.35, 0.35, 3.1), "dark")
+		box(head, Vector3(x, EYE_Y - 1.15, z), Vector3(0.35, 0.35, 3.1), "dark")
+		for edge in [-1.4, 1.4]:
+			box(head, Vector3(x, EYE_Y + 0.05, z + edge), Vector3(0.35, 2.7, 0.35), "dark")
+		if eyewear == "shades":
+			box(head, Vector3(x - 0.05, EYE_Y + 0.05, z), Vector3(0.25, 2.2, 2.7), "lens")
+		# Arm back along the side of the head to the ear.
+		box(head, Vector3(3.8, EYE_Y + 0.8, side * 7.4), Vector3(8.5, 0.35, 0.35), "dark")
+	box(head, Vector3(x, EYE_Y + 0.6, 0), Vector3(0.35, 0.3, 1.6), "dark")
 
 func _build_hair(data: Dictionary) -> void:
 	var style: String = data.hair_style

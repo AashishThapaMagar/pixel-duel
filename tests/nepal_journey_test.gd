@@ -64,12 +64,25 @@ func run() -> void:
 	arena._toggle_move_guide()
 	arena._begin_round(0)
 	check(not arena.nepal_stage.night, "Rematch returns to the daytime opening")
-	var menu: Node = load("res://scenes/MainMenu.tscn").instantiate()
-	root.add_child(menu)
-	menu._show_match_setup()
-	check(menu.preview_stage.current_round == 0, "Arena menu starts with a live daytime preview")
-	menu._cycle_arena(-1)
-	check(menu.preview_stage.current_round == 3 and menu.preview_stage.night, "Arena previews wrap to the nighttime finale")
-	check(menu.arena_preview.texture is ViewportTexture, "Menu preview renders actual 3D scenery")
+	# A versus arena choice holds every round in that arena.
+	var setup: Node = root.get_node("MatchSetup")
+	setup.stage_choice = 2
+	arena.fixed_stage = arena._resolve_stage()
+	for index in [0, 3]:
+		arena._begin_round(index)
+		check(arena.nepal_stage.current_round == 2, "Chosen versus arena is used for every round")
+	setup.arcade = true
+	check(arena._resolve_stage() == -1, "Arcade always plays the four-arena journey")
+	setup.arcade = false
+	setup.stage_choice = setup.JOURNEY_STAGE
+	var select: Node = load("res://scenes/CharacterSelect.tscn").instantiate()
+	root.add_child(select)
+	await frames(2)
+	check(select.arena_label != null and select.arena_label.text == "ALL 4 ARENAS", "Versus fighter select offers the arena picker, defaulting to the journey")
+	select._cycle_stage(-1)
+	check(setup.stage_choice == setup.RANDOM_STAGE and select.arena_label.text == "RANDOM ARENA", "Arena picker wraps to random")
+	select._cycle_stage(-1)
+	check(setup.stage_choice == 3 and select.backdrop.stage.current_round == 3, "Picking an arena shows it live behind the roster")
+	setup.stage_choice = setup.JOURNEY_STAGE
 	print("NEPAL_JOURNEY_TEST: ", "ALL PASS" if failures.is_empty() else failures)
 	quit(0 if failures.is_empty() else 1)

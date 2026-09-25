@@ -86,7 +86,18 @@ static func theme() -> Theme:
 		result.set_color("font_pressed_color", type, WHITE)
 		result.set_color("font_hover_pressed_color", type, INK)
 		result.set_color("font_disabled_color", type, Color("6d7389"))
+		# Hovering a toggled control uses its own state; without a style it
+		# fell back to a bare face with dark text.
+		result.set_stylebox("hover_pressed", type, blade(GOLD, CRIMSON, 6))
+	# Checkboxes are toggles, not actions: keep their text readable in every
+	# state and show "on" with a gold edge and gold text instead of a fill.
+	result.set_stylebox("hover", "CheckBox", blade(Color(0.13, 0.14, 0.22, 0.95), GOLD, 6))
+	result.set_stylebox("pressed", "CheckBox", blade(Color(0.09, 0.1, 0.16, 0.95), GOLD, 6))
+	result.set_stylebox("hover_pressed", "CheckBox", blade(Color(0.13, 0.14, 0.22, 0.95), GOLD, 8))
+	result.set_color("font_hover_color", "CheckBox", WHITE)
 	result.set_color("font_pressed_color", "CheckBox", GOLD)
+	result.set_color("font_hover_pressed_color", "CheckBox", GOLD)
+	result.set_color("font_focus_color", "CheckBox", WHITE)
 	result.set_stylebox("panel", "PopupMenu", box(Color("0d0f1a"), GOLD, 2))
 	result.set_stylebox("hover", "PopupMenu", box(GOLD, GOLD, 0))
 	result.set_color("font_color", "PopupMenu", WHITE)

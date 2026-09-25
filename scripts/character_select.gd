@@ -21,6 +21,37 @@ var mode_id := "local"
 var mode_accent := Color("65e4dd")
 var route_label: Label
 var difficulty_picker: OptionButton
+var backdrop: Control
+## Tekken-style portrait tiles behind each roster card.
+var tiles: Array[ColorRect] = []
+const TILE_SHADER := """shader_type canvas_item;
+// Arcade select-screen tile: a bright vertical gradient in the fighter's
+// colour with drifting purple lightning behind the portrait.
+uniform vec4 top_color : source_color;
+uniform vec4 bottom_color : source_color;
+uniform float seed = 0.0;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+	vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+}
+void fragment() {
+	vec3 col = mix(top_color.rgb, bottom_color.rgb, UV.y);
+	vec2 p = UV * vec2(2.4, 3.0) + vec2(seed * 3.1, seed * 1.7);
+	float bolts = 0.0;
+	for (int k = 0; k < 2; k++) {
+		float n = noise(p * (2.0 + float(k)) + vec2(TIME * 0.12, -TIME * 0.05));
+		n += 0.5 * noise(p * (5.0 + float(k) * 2.0) - vec2(TIME * 0.08, 0.0));
+		bolts += smoothstep(0.05, 0.0, abs(n / 1.5 - 0.5)) * (0.9 - 0.3 * float(k));
+	}
+	col = mix(col, vec3(0.78, 0.6, 1.0), clamp(bolts, 0.0, 1.0) * 0.55);
+	col *= 1.0 - 0.35 * pow(length(UV - vec2(0.5, 0.45)), 2.0);
+	COLOR = vec4(col, 1.0);
+}
+"""
+var arena_label: Label
+## Versus arena options, in cycling order (see MatchSetup.stage_choice).
+const STAGE_OPTIONS := [-1, 0, 1, 2, 3, 4]
 
 func _ready() -> void:
 	theme = UI.theme()
@@ -32,7 +63,7 @@ func _ready() -> void:
 	if MatchSetup.arcade:
 		selections[1] = 1 if selections[0] == 0 else 0
 	# The mode's arena mood plays live behind the roster.
-	var backdrop := preload("res://scripts/menu_backdrop.gd").new()
+	backdrop = preload("res://scripts/menu_backdrop.gd").new()
 	backdrop.shade_width = 0.0
 	add_child(backdrop)
 	backdrop.selected = backdrop.MODE_ORDER.find(mode_id)
@@ -67,22 +98,42 @@ func _ready() -> void:
 	start_button.add_theme_font_override("font", UI.display_font())
 	start_button.add_theme_font_size_override("font_size", 20)
 	start_button.pressed.connect(_start_match)
+	var tile_shader := Shader.new()
+	tile_shader.code = TILE_SHADER
 	for i in ROSTER.PROFILES.size():
-		var x := 145.0 + i * 96
-		var card := UI.button(self, "", Vector2(x, 412), Vector2(92, 82))
+		var x := 98.0 + i * 110
+		var y := 406.0
+		var profile := ROSTER.profile(i)
+		# Portrait tile: coloured gradient and lightning, then the bust.
+		var tile := ColorRect.new()
+		tile.position = Vector2(x, y)
+		tile.size = Vector2(104, 98)
+		tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var look := ShaderMaterial.new()
+		look.shader = tile_shader
+		var base: Color = profile.color
+		look.set_shader_parameter("top_color", base.lightened(0.3))
+		look.set_shader_parameter("bottom_color", base.darkened(0.25))
+		look.set_shader_parameter("seed", float(i))
+		tile.material = look
+		add_child(tile)
+		tiles.append(tile)
+		var thumbnail := PORTRAIT.new()
+		thumbnail.index = i
+		thumbnail.bust = true
+		thumbnail.position = Vector2(x, y)
+		thumbnail.size = Vector2(104, 98)
+		add_child(thumbnail)
+		previews.append(thumbnail)
+		var card := UI.button(self, "", Vector2(x, y), Vector2(104, 98))
 		card.focus_mode = Control.FOCUS_NONE
 		card.pressed.connect(_choose.bind(i))
 		cards.append(card)
-		var thumbnail := PORTRAIT.new()
-		thumbnail.index = i
-		thumbnail.closeup = true
-		thumbnail.position = Vector2(x + 8, 413)
-		thumbnail.size = Vector2(76, 63)
-		add_child(thumbnail)
-		previews.append(thumbnail)
-		var card_name := UI.heading(self, ROSTER.profile(i).name, Vector2(x, 472), Vector2(92, 22), 15, UI.WHITE, Color(0, 0, 0, 0.7))
+		var card_name := UI.heading(self, profile.name, Vector2(x, y + 76), Vector2(104, 22), 15, UI.WHITE, Color(0, 0, 0, 0.8))
 		card_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		var marker := UI.label(self, "", Vector2(x + 6, 414), Vector2(86, 18), 11, UI.WHITE)
+		var marker := UI.label(self, "", Vector2(x + 6, y + 3), Vector2(94, 18), 11, UI.WHITE)
+		marker.add_theme_color_override("font_outline_color", UI.INK)
+		marker.add_theme_constant_override("outline_size", 4)
 		marker.add_theme_font_override("font", UI.strong_font())
 		markers.append(marker)
 	var hint := "P1: A/D select, F ready    |    P2: arrows select, K ready    |    Enter fight"
@@ -93,6 +144,10 @@ func _ready() -> void:
 	var hint_label := UI.label(self, hint, Vector2(55, 512), Vector2(850, 22), 12, UI.WHITE)
 	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint_label.add_theme_font_override("font", UI.strong_font())
+	if not MatchSetup.arcade:
+		_build_stage_picker()
+		hint += "    |    Tab arena"
+		hint_label.text = hint
 	if MatchSetup.vs_ai:
 		ready_players[1] = true
 	_refresh()
@@ -154,6 +209,39 @@ func _build_campaign() -> void:
 	rival_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rival_caption.visible = mode_id != "story"
 
+## Versus modes choose their arena here; Arcade and Story keep the journey.
+func _build_stage_picker() -> void:
+	var prev := UI.button(self, "◀", Vector2(356, 370), Vector2(36, 32))
+	var next := UI.button(self, "▶", Vector2(568, 370), Vector2(36, 32))
+	for arrow in [prev, next]:
+		arrow.focus_mode = Control.FOCUS_NONE
+	prev.pressed.connect(_cycle_stage.bind(-1))
+	next.pressed.connect(_cycle_stage.bind(1))
+	arena_label = UI.heading(self, "", Vector2(394, 370), Vector2(172, 32), 17, UI.GOLD)
+	arena_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	arena_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_show_stage()
+
+func _cycle_stage(step: int) -> void:
+	if transitioning:
+		return
+	var at := STAGE_OPTIONS.find(MatchSetup.stage_choice)
+	MatchSetup.stage_choice = STAGE_OPTIONS[posmod(at + step, STAGE_OPTIONS.size())]
+	_show_stage()
+
+## Name the choice and show that arena live behind the roster.
+func _show_stage() -> void:
+	var rounds: Array = backdrop.STAGE.ROUNDS
+	match MatchSetup.stage_choice:
+		MatchSetup.JOURNEY_STAGE:
+			arena_label.text = "ALL 4 ARENAS"
+			backdrop.stage.show_round(0)
+		MatchSetup.RANDOM_STAGE:
+			arena_label.text = "RANDOM ARENA"
+		_:
+			arena_label.text = rounds[MatchSetup.stage_choice].name
+			backdrop.stage.show_round(MatchSetup.stage_choice)
+
 func _back() -> void:
 	if not transitioning:
 		get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
@@ -183,10 +271,13 @@ func _refresh() -> void:
 	for i in cards.size():
 		var chosen := selections.has(i)
 		var owner_color: Color = UI.RED if selections[0] == i else (UI.VIOLET if chosen else Color("3b3f58"))
-		cards[i].add_theme_stylebox_override("normal", UI.box(Color(owner_color.darkened(0.55), 0.85) if chosen else Color(0.04, 0.045, 0.08, 0.85), owner_color, 3 if chosen else 1, 0.12))
-		cards[i].add_theme_stylebox_override("hover", UI.box(Color(UI.GOLD, 0.35), UI.GOLD, 3, 0.12))
+		# The card is just a frame over its portrait tile.
+		cards[i].add_theme_stylebox_override("normal", UI.box(Color(0, 0, 0, 0), owner_color if chosen else Color("15161f"), 4 if chosen else 2))
+		cards[i].add_theme_stylebox_override("hover", UI.box(Color(1, 1, 1, 0.08), UI.GOLD, 4))
+		cards[i].add_theme_stylebox_override("pressed", UI.box(Color(1, 1, 1, 0.15), UI.GOLD, 4))
+		tiles[i].modulate = Color.WHITE if chosen else Color(0.72, 0.72, 0.78)
 		markers[i].text = ("P1 " if selections[0] == i else "") + (("CPU" if MatchSetup.vs_ai else "P2") if selections[1] == i else "")
-		previews[i].modulate = Color.WHITE if chosen else Color(0.65, 0.65, 0.7)
+		previews[i].modulate = Color.WHITE if chosen else Color(0.78, 0.78, 0.84)
 	for player in 2:
 		var profile := ROSTER.profile(selections[player])
 		portraits[player].show_fighter(selections[player])
@@ -226,6 +317,9 @@ func _input(event: InputEvent) -> void:
 			_select_for_player(selections[player] + 1, player)
 		elif event.is_action_pressed(prefix + "punch"):
 			_toggle_ready(player)
+	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_TAB and is_instance_valid(arena_label):
+		_cycle_stage(-1 if event.shift_pressed else 1)
+		get_viewport().set_input_as_handled()
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_ENTER:
 		_start_match()
 
