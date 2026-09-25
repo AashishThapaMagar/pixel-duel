@@ -50,10 +50,20 @@ func run() -> void:
 		check(stage.find_children("HeritageScenery", "Node3D", false, false).size() == 1, "Only the active scenery stays in the world")
 		check(arena.player1._is_grounded(), "Scenery change keeps the solid arena floor")
 		check(stage.sky_material.get_shader_parameter("top_color") != null and stage.floor_material.get_shader_parameter("pattern") == 5, "Each arena has its own sky and a modelled flagstone floor")
-		check(stage.content.get_child_count() > 100, "Each round builds a modelled 3D arena")
+		var model: Node = stage.content.get_node("ArenaModel")
+		check(model.get_meta("source_glb") == stage.ARENA_MODELS[index], "Each round loads its supplied arena model")
+		check(model.find_children("*", "MeshInstance3D", true, false).size() > 100, "Each imported arena retains its modelled architecture")
+		check(stage.lamp_lights.size() >= 2, "Imported practical lamps are registered for flicker")
+		check(stage.environment.environment.fog_enabled, "Arena lighting includes atmospheric depth")
+		if index == 1:
+			check(stage.lanterns.size() == 24, "All imported paper lanterns sway from their hanger pivots")
+		else:
+			check(not stage.flags.is_empty(), "Imported prayer flags retain animated pivots")
 		if index == 3:
 			check(stage.night and stage.ROUNDS[index].name == "MOONLIT STUPA", "Final round is the moonlit stupa arena")
 		if "--capture" in OS.get_cmdline_user_args():
+			# Let the opening callout clear so the scenery is visible for review.
+			await frames(40)
 			await RenderingServer.frame_post_draw
 			root.get_texture().get_image().save_png("res://.godot/nepal-round-%d.png" % (index + 1))
 	check(nights == 2, "Exactly two day rounds and two night rounds")
@@ -84,5 +94,15 @@ func run() -> void:
 	select._cycle_stage(-1)
 	check(setup.stage_choice == 3 and select.backdrop.stage.current_round == 3, "Picking an arena shows it live behind the roster")
 	setup.stage_choice = setup.JOURNEY_STAGE
+	# An unusable scene must never leave only fighters and sky on screen.
+	var fallback: Node3D = load("res://scripts/nepal_stage_3d.gd").new()
+	root.add_child(fallback)
+	var path: String = fallback.ARENA_MODELS[0]
+	var saved: PackedScene = fallback.arena_cache[path]
+	fallback.arena_cache[path] = PackedScene.new()
+	fallback.show_round(0)
+	check(fallback.floor_material != null and fallback.content.find_children("*", "MeshInstance3D", true, false).size() > 100, "Invalid imported scenes fall back to a visible floor and complete arena")
+	fallback.arena_cache[path] = saved
+	fallback.queue_free()
 	print("NEPAL_JOURNEY_TEST: ", "ALL PASS" if failures.is_empty() else failures)
 	quit(0 if failures.is_empty() else 1)

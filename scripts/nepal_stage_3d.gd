@@ -1,15 +1,23 @@
 extends Node3D
-## A fully modelled Kathmandu-valley arena, built from primitives and
-## procedural shaders: a flagstone fighting dais set into a brick Durbar
-## Square, Newari houses with carved lattice windows, a tiered pagoda, stone
-## shikhara temples and Himalayan ridges. The four rounds move through the
-## day and swap the centrepiece, ending at a moonlit stupa.
+## Four supplied Kathmandu-valley GLB arenas, dressed with live lighting,
+## weathered materials, atmospheric skies and animated practical details.
+## Procedural construction helpers remain below for future scenery edits.
 const ROUNDS := [
 	{"name": "HERITAGE SQUARE", "night": false, "detail": "DAY / Brick courtyards, carved windows and a three-tier pagoda"},
 	{"name": "LANTERN SQUARE", "night": true, "detail": "NIGHT / Paper lanterns glow across the old square"},
 	{"name": "TERRACE OVERLOOK", "night": false, "detail": "SUNSET / Terraced hills and the Himalaya turning gold"},
 	{"name": "MOONLIT STUPA", "night": true, "detail": "FINAL NIGHT / Prayer flags stream from a white stupa"},
 ]
+const ARENA_MODELS := [
+	"res://assets/arenas/models/heritage-square.glb",
+	"res://assets/arenas/models/lantern-square.glb",
+	"res://assets/arenas/models/terrace-overlook.glb",
+	"res://assets/arenas/models/moonlit-stupa.glb",
+]
+## Decode the source GLB with the running engine, not another version's
+## binary import cache. Cache packed scenes for menu/round reuse.
+static var arena_cache: Dictionary = {}
+const IMPORTED_SURFACE := preload("res://scripts/arena_surface.gdshader")
 ## Five traditional prayer-flag colours, in their customary order.
 const FLAG_COLORS := [Color("2f6fc4"), Color("f1ede2"), Color("c8342c"), Color("2f8f4e"), Color("e6b62f")]
 ## Per-round ambient life: [kind, colour, amount].
@@ -22,7 +30,7 @@ const AMBIENCE := [
 ## Sky and light per round: [sky top, horizon, sun colour, sun energy,
 ## ambient colour, ambient energy, sun pitch, sun yaw, mountain tint].
 const MOODS := [
-	[Color("3f7fd0"), Color("cfe2f2"), Color("fff1dc"), 0.9, Color("b9c9dc"), 0.38, -48.0, -35.0, Color(1, 1, 1)],
+	[Color("3f7fd0"), Color("cfe2f2"), Color("fff1dc"), 0.68, Color("b9c9dc"), 0.34, -48.0, -35.0, Color(1, 1, 1)],
 	[Color("070b1c"), Color("1d2442"), Color("9fb4ec"), 0.32, Color("5b6690"), 0.55, -40.0, 30.0, Color(0.32, 0.36, 0.55)],
 	[Color("46558f"), Color("f4a45e"), Color("ffb070"), 0.95, Color("c79a86"), 0.42, -16.0, 28.0, Color(1.0, 0.78, 0.62)],
 	[Color("050817"), Color("18223e"), Color("b7c8f5"), 0.3, Color("5d6a96"), 0.42, -35.0, -25.0, Color(0.36, 0.42, 0.62)],
@@ -80,9 +88,12 @@ void fragment() {
 		vec2 b = uv / vec2(0.9, 0.62);
 		b.x += mod(floor(b.y), 2.0) * 0.37;
 		vec2 f = fract(b);
-		float face = step(0.015, f.x) * step(0.022, f.y);
-		col = mix(joint_color, base_color * (0.84 + 0.26 * hash(floor(b))), face);
-		rough = 0.8;
+		vec2 edge = min(f, 1.0 - f);
+		float face = smoothstep(0.008, 0.023, edge.x) * smoothstep(0.012, 0.03, edge.y);
+		float grain = noise(uv * 65.0);
+		float veins = smoothstep(0.46, 0.54, noise(uv * 3.8 + noise(uv * 12.0)));
+		col = mix(joint_color, base_color * (0.76 + 0.24 * hash(floor(b))) * (0.86 + grain * 0.18 + veins * 0.08), face);
+		rough = mix(0.94, 0.66 + grain * 0.16, face);
 	} else if (pattern == 6) {
 		vec2 b = uv / 0.09;
 		vec2 f = abs(fract(b) - 0.5);
@@ -100,12 +111,21 @@ uniform vec3 sun_color : source_color;
 uniform vec3 sun_dir = vec3(0.0, 0.5, -1.0);
 uniform float disc = 0.9994;
 uniform float stars = 0.0;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+	vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+	return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+}
 void sky() {
 	float y = EYEDIR.y;
 	vec3 col = mix(horizon_color, top_color, smoothstep(-0.02, 0.55, y));
 	float d = dot(EYEDIR, normalize(sun_dir));
 	col += sun_color * smoothstep(disc, disc + 0.0003, d);
 	col += sun_color * 0.35 * pow(max(d, 0.0), 18.0);
+	vec2 cloud_uv = EYEDIR.xz / max(y + 0.18, 0.08) * 2.2;
+	float cloud = noise(cloud_uv) * 0.57 + noise(cloud_uv * 2.1) * 0.28 + noise(cloud_uv * 4.3) * 0.15;
+	float cover = smoothstep(0.51, 0.75, cloud) * smoothstep(0.0, 0.18, y);
+	col = mix(col, mix(horizon_color, sun_color, 0.3), cover * (0.58 - stars * 0.3));
 	if (stars > 0.0) {
 		vec3 cell = floor(EYEDIR * 260.0);
 		float h = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
@@ -148,6 +168,8 @@ func _ready() -> void:
 	sun = DirectionalLight3D.new()
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 40.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.shadow_blur = 1.4
 	add_child(sun)
 	surface_shader = Shader.new()
 	surface_shader.code = SURFACE_SHADER
@@ -170,27 +192,157 @@ func show_round(index: int) -> void:
 	add_child(content)
 	elapsed = 0
 	_lighting()
+	_import_arena(index)
+	_fight_lighting()
+	_arena_inlay()
+	_ambience()
+	if changing:
+		_fade_in()
+
+## Imported scenes already include the plaza, dais, flags and practical
+## lamps. Keep their transforms intact: the solid fighting floor is y=0.
+func _import_arena(index: int) -> void:
+	var packed := _load_arena_model(index)
+	if packed == null or not packed.can_instantiate():
+		_build_fallback(index)
+		return
+	var model := packed.instantiate() as Node3D
+	model.name = "ArenaModel"
+	model.set_meta("source_glb", ARENA_MODELS[index])
+	content.add_child(model)
+	floor_material = _surface("dais", 5, Color("8a8071"), Color("463f37"))
+	var polished: Dictionary = {}
+	for node in model.find_children("*", "", true, false):
+		if node is OmniLight3D:
+			# glTF stores candela; Godot's non-physical renderer uses energy.
+			node.light_energy = (0.95 if node.position.y > 2.0 else 1.1) if night else 0.35
+			node.set_meta("base", node.light_energy)
+			lamp_lights.append(node)
+		elif node is MeshInstance3D:
+			var bounds: AABB = node.mesh.get_aabb()
+			# Identify the supplied dais geometrically, independent of exporter names.
+			# Older glTF decoders pad bounds by roughly 0.00001 units.
+			if bounds.size.distance_to(Vector3(12.2, 0.12, 3.8)) < 0.001:
+				node.material_override = floor_material
+				continue
+			for surface in node.mesh.get_surface_count():
+				var original: Material = node.get_active_material(surface)
+				if original is StandardMaterial3D and original.emission_enabled:
+					var paper: StandardMaterial3D = original.duplicate()
+					paper.emission = paper.albedo_color
+					paper.emission_energy_multiplier = 0.65
+					node.set_surface_override_material(surface, paper)
+				if original is StandardMaterial3D and original.albedo_texture != null and not original.emission_enabled:
+					if not polished.has(original):
+						var finish := ShaderMaterial.new()
+						finish.shader = IMPORTED_SURFACE
+						finish.set_shader_parameter("color_texture", original.albedo_texture)
+						finish.set_shader_parameter("tint", original.albedo_color)
+						finish.set_shader_parameter("roughness", original.roughness)
+						finish.set_shader_parameter("wetness", 0.65 if night else 0.15)
+						polished[original] = finish
+					node.set_surface_override_material(surface, polished[original])
+			# The exports preserve the cloth/lantern hanger pivots.
+			if node.get_parent() is Node3D and node.get_parent().get_parent() != model and node.get_parent().get_child_count() <= 3:
+				var pivot: Node3D = node.get_parent()
+				if bounds.size.z < 0.01 and bounds.size.x < 0.5 and bounds.size.y < 0.7 and not flags.has(pivot):
+					flags.append(pivot)
+				elif index == 1 and bounds.size.distance_to(Vector3(0.26, 0.3, 0.26)) < 0.001 and not lanterns.has(pivot):
+					lanterns.append(pivot)
+					_lantern_halo(pivot)
+
+static func _load_arena_model(index: int) -> PackedScene:
+	var path: String = ARENA_MODELS[index]
+	if arena_cache.has(path):
+		return arena_cache[path]
+	var document := GLTFDocument.new()
+	var state := GLTFState.new()
+	var result := document.append_from_file(path, state)
+	if result != OK:
+		push_warning("Could not decode arena %s (%s); using procedural scenery." % [path, error_string(result)])
+		return null
+	var model := document.generate_scene(state)
+	if model == null:
+		push_warning("Arena %s has no scene; using procedural scenery." % path)
+		return null
+	var packed := PackedScene.new()
+	result = packed.pack(model)
+	model.free()
+	if result != OK:
+		push_warning("Could not cache arena %s; using procedural scenery." % path)
+		return null
+	arena_cache[path] = packed
+	return packed
+
+## Asset failures must still leave a visible floor and complete arena.
+func _build_fallback(index: int) -> void:
 	_ground()
 	_mountains()
 	_houses()
 	match index:
 		0, 1:
-			_pagoda(Vector3(0, -0.12, -24.0))
+			_pagoda(Vector3(0, -0.12, -24))
 			for side in [-1.0, 1.0]:
 				_shikhara(Vector3(side * 8.2, -0.12, -19.5))
 		2:
 			_overlook()
 		3:
-			_stupa(Vector3(0, -0.12, -25.0))
+			_stupa(Vector3(0, -0.12, -25))
 	if index == 1:
 		_lantern_strings()
 	elif index != 3:
 		_flag_line(Vector3(-6.4, 3.7, -4.6), Vector3(6.4, 3.7, -4.6), 0.55, 35)
 		_flag_poles(6.4, 3.7, -4.6)
 	_butter_lamps()
-	_ambience()
-	if changing:
-		_fade_in()
+
+## A small soft halo works in Compatibility without full-screen bloom.
+func _lantern_halo(parent: Node3D) -> void:
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.9, 0.9)
+	var glow := ShaderMaterial.new()
+	glow.shader = preload("res://scripts/lantern_glow.gdshader")
+	var sprite := _piece(quad, Vector3(0, -0.22, 0), glow, parent)
+	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+## Broad, low-energy fill separates silhouettes from dark architecture.
+## These lights stay outside the fighting lane and never change collision.
+func _fight_lighting() -> void:
+	var fill := OmniLight3D.new()
+	fill.name = "FighterFill"
+	fill.position = Vector3(0, 4, 3)
+	fill.omni_range = 13
+	fill.light_color = Color("b8d9ff") if night else Color("fff0d6")
+	fill.light_energy = 0.7 if night else 0.35
+	content.add_child(fill)
+	var rim := OmniLight3D.new()
+	rim.name = "FighterRim"
+	rim.position = Vector3(0, 3.4, -3)
+	rim.omni_range = 10
+	rim.light_color = Color("ffb46e") if current_round in [1, 2] else Color("a0cfff")
+	rim.light_energy = 1.1 if night else 0.6
+	content.add_child(rim)
+	if night:
+		for side in [-1.0, 1.0]:
+			var wash := OmniLight3D.new()
+			wash.position = Vector3(side * 7.5, 3.5, -17)
+			wash.omni_range = 15
+			wash.light_color = Color("ffaf68") if current_round == 1 else Color("adc7ff")
+			wash.light_energy = 1.25
+			content.add_child(wash)
+
+## Thin brass inlays make the usable lane legible without floating UI.
+func _arena_inlay() -> void:
+	var brass := _flat("inlay", Color("bc9855"), 0.08, 0.65)
+	for side in [-1.0, 1.0]:
+		_box(Vector3(11.7, 0.004, 0.018), Vector3(0, 0.003, side * 1.75), brass)
+		_box(Vector3(0.018, 0.004, 3.5), Vector3(side * 5.85, 0.003, 0), brass)
+	var ring := TorusMesh.new()
+	ring.inner_radius = 0.71
+	ring.outer_radius = 0.73
+	ring.rings = 64
+	ring.ring_segments = 8
+	var seal := _piece(ring, Vector3(0, 0.004, 0), brass)
+	seal.scale.y = 0.12
 
 func animate(delta: float) -> void:
 	elapsed += delta
@@ -303,6 +455,13 @@ func _lighting() -> void:
 	environment.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.environment.ambient_light_color = mood[4]
 	environment.environment.ambient_light_energy = mood[5]
+	# Depth fog leaves the fighters crisp while the distant ridges merge
+	# naturally into the sky. Supported by the Compatibility renderer.
+	environment.environment.fog_enabled = true
+	environment.environment.fog_light_color = mood[1]
+	environment.environment.fog_light_energy = 0.65
+	environment.environment.fog_density = 0.0025 if night else 0.0018
+	environment.environment.fog_sky_affect = 0.12
 
 func _ground() -> void:
 	# Brick plaza one step below the flagstone fighting dais.

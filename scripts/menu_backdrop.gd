@@ -94,5 +94,5 @@ func draw_wipe(canvas: CanvasItem) -> void:
 		return
 	var size := Vector2(960, 540)
 	var front := lerpf(-400.0, size.x + 400.0, clampf(opening, 0.0, 1.0))
-	canvas.draw_colored_polygon(PackedVector2Array([Vector2(-400, 0), Vector2(front + 180, 0), Vector2(front - 180, size.y), Vector2(-400, size.y)]), Color("b3162d"))
+	canvas.draw_colored_polygon(PackedVector2Array([Vector2(-800, 0), Vector2(front + 180, 0), Vector2(front - 180, size.y), Vector2(-800, size.y)]), Color("b3162d"))
 	canvas.draw_colored_polygon(PackedVector2Array([Vector2(front + 180, 0), Vector2(front + 206, 0), Vector2(front - 154, size.y), Vector2(front - 180, size.y)]), Color("ffc53d"))
