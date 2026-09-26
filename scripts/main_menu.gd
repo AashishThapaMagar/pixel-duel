@@ -227,6 +227,7 @@ func _start_fight() -> void:
 	add_child(wipe)
 	backdrop.wipe_canvas = wipe
 	move_child(fade, -1)
+	preload("res://scripts/sfx.gd").fire("wipe")
 	var tween := create_tween()
 	tween.tween_property(backdrop, "opening", 1.0, 0.7).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	tween.tween_property(fade, "modulate:a", 1.0, 0.2)
@@ -286,30 +287,19 @@ func _show_settings() -> void:
 	if transitioning or is_instance_valid(modal):
 		return
 	_open_modal("YOUR SETUP", "SETTINGS")
-	_option_label("DISPLAY", 116)
+	_option_label("DISPLAY", 110)
 	var fullscreen := CheckBox.new()
 	fullscreen.text = "FULLSCREEN"
-	fullscreen.position = Vector2(306, 108)
+	fullscreen.position = Vector2(306, 102)
 	fullscreen.size = Vector2(282, 38)
 	fullscreen.button_pressed = Settings.fullscreen
 	fullscreen.toggled.connect(Settings.set_fullscreen)
 	modal_content.add_child(fullscreen)
-	_option_label("MASTER VOLUME", 167)
-	var value := UI.heading(modal_content, "%d%%" % roundi(Settings.volume * 100), Vector2(532, 160), Vector2(64, 32), 22, UI.GOLD)
-	var slider := HSlider.new()
-	slider.position = Vector2(306, 168)
-	slider.size = Vector2(216, 24)
-	slider.max_value = 1.0
-	slider.step = 0.05
-	slider.value = Settings.volume
-	slider.value_changed.connect(func(volume: float):
-		Settings.set_volume(volume)
-		value.text = "%d%%" % roundi(volume * 100))
-	modal_content.add_child(slider)
-	_option_label("TOUCH CONTROLS", 218)
+	_volume_row("MASTER VOLUME", 157, Settings.volume, Settings.set_volume)
+	_option_label("TOUCH CONTROLS", 208)
 	var touch := CheckBox.new()
 	touch.text = "ON-SCREEN BUTTONS"
-	touch.position = Vector2(306, 210)
+	touch.position = Vector2(306, 200)
 	touch.size = Vector2(282, 38)
 	touch.button_pressed = Settings.touch_controls
 	touch.toggled.connect(Settings.set_touch_controls)
@@ -322,7 +312,22 @@ func _show_settings() -> void:
 	guide.pressed.connect(func():
 		_close_modal()
 		_show_guide())
-	UI.label(modal_content, "Changes are saved automatically.", Vector2(28, 267), Vector2(540, 22), 12, UI.MUTED)
+	UI.label(modal_content, "Changes are saved automatically.", Vector2(28, 262), Vector2(540, 22), 12, UI.MUTED)
+
+## Option name, slider and live percentage for one volume setting.
+func _volume_row(text: String, y: float, level: float, apply: Callable) -> void:
+	_option_label(text, y)
+	var value := UI.heading(modal_content, "%d%%" % roundi(level * 100), Vector2(532, y - 7), Vector2(64, 32), 22, UI.GOLD)
+	var slider := HSlider.new()
+	slider.position = Vector2(306, y + 1)
+	slider.size = Vector2(216, 24)
+	slider.max_value = 1.0
+	slider.step = 0.05
+	slider.value = level
+	slider.value_changed.connect(func(volume: float):
+		apply.call(volume)
+		value.text = "%d%%" % roundi(volume * 100))
+	modal_content.add_child(slider)
 
 func _show_guide() -> void:
 	if transitioning or is_instance_valid(modal):
@@ -343,6 +348,7 @@ func _show_guide() -> void:
 func _close_modal() -> void:
 	if not is_instance_valid(modal):
 		return
+	preload("res://scripts/sfx.gd").fire("menu_back")
 	modal.queue_free()
 	modal = null
 	for child in get_children():
@@ -371,6 +377,7 @@ func _input(event: InputEvent) -> void:
 			_choose_home_mode(next)
 		else:
 			_point_at(next)
+		preload("res://scripts/sfx.gd").fire("menu_move")
 		play_button.grab_focus()
 		get_viewport().set_input_as_handled()
 	elif event.physical_keycode == KEY_ENTER and (play_button.has_focus() or home_modes.values().has(get_viewport().gui_get_focus_owner())):

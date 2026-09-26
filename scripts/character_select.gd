@@ -244,6 +244,7 @@ func _show_stage() -> void:
 
 func _back() -> void:
 	if not transitioning:
+		preload("res://scripts/sfx.gd").fire("menu_back")
 		get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
 
 func _choose(index: int) -> void:
@@ -253,6 +254,7 @@ func _select_for_player(index: int, player: int) -> void:
 	if transitioning or (MatchSetup.arcade and player == 1):
 		return
 	selections[player] = posmod(index, ROSTER.PROFILES.size())
+	preload("res://scripts/sfx.gd").fire("menu_move")
 	ready_players[player] = MatchSetup.vs_ai and player == 1
 	if MatchSetup.arcade:
 		selections[1] = 1 if selections[0] == 0 else 0
@@ -264,6 +266,7 @@ func _toggle_ready(player: int) -> void:
 	if transitioning or (MatchSetup.vs_ai and player == 1):
 		return
 	ready_players[player] = not ready_players[player]
+	preload("res://scripts/sfx.gd").fire("menu_confirm" if ready_players[player] else "menu_back")
 	editing_player = 0 if MatchSetup.vs_ai else 1 - player
 	_refresh()
 
@@ -327,6 +330,7 @@ func _start_match() -> void:
 	if transitioning or not (ready_players[0] and ready_players[1]):
 		return
 	transitioning = true
+	preload("res://scripts/sfx.gd").fire("wipe")
 	MatchSetup.selected_fighters.assign(selections)
 	if MatchSetup.arcade:
 		MatchSetup.begin_arcade()

@@ -76,9 +76,10 @@ func _run() -> void:
 	arena._end_round(1)
 	await settle()
 	await screenshot("ui-results")
-	hud.next_button.pressed.emit()
+	check(not hud.result_panel.visible and arena.result_label.visible, "Round end shows only the winner callout, no panel")
+	await create_timer(arena.ROUND_PAUSE + 0.4).timeout
 	await settle()
-	check(arena.round_index == 1, "Next round button advances round")
+	check(arena.round_index == 1, "Next round starts by itself after the callout")
 	check(arena.health_bar2.value == arena.player2.max_health, "New round resets health")
 	check(arena.timer_label.text == "99", "New round resets displayed timer")
 	arena._begin_round(3)

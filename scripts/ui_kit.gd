@@ -182,7 +182,11 @@ static func button(parent: Node, text: String, pos: Vector2, dimensions: Vector2
 	node.pivot_offset = dimensions * 0.5
 	node.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	parent.add_child(node)
-	node.mouse_entered.connect(func(): _pop(node, 1.045, 0.15))
+	node.mouse_entered.connect(func():
+		_pop(node, 1.045, 0.15)
+		if not node.disabled:
+			preload("res://scripts/sfx.gd").fire("menu_move", -8.0))
+	node.pressed.connect(func(): preload("res://scripts/sfx.gd").fire("menu_confirm"))
 	node.mouse_exited.connect(func(): _pop(node, 1.0, 0.18))
 	node.button_down.connect(func(): _pop(node, 0.93, 0.06))
 	node.button_up.connect(func(): _pop(node, 1.045 if node.is_hovered() else 1.0, 0.12))

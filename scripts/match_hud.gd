@@ -9,6 +9,7 @@ var result_panel: Panel
 var next_button: Button
 var result_detail: Label
 var stamina_bars: Array[ProgressBar] = []
+var callout_style := false
 
 func _ready() -> void:
 	arena = get_parent()
@@ -155,6 +156,36 @@ func _health_changed(health: int, maximum: int, player: int) -> void:
 		damage_tweens[player].tween_interval(0.25)
 		damage_tweens[player].tween_property(damage_bars[player], "value", float(health), 0.35)
 
+## Round-winner callout (big, centred, no panel) or the match result line
+## that sits inside the end-of-match panel.
+func _style_result(callout: bool) -> void:
+	callout_style = callout
+	var label: Label = arena.result_label
+	if callout:
+		label.position = Vector2(80, 190)
+		label.size = Vector2(800, 100)
+		label.add_theme_font_override("font", UI.display_font())
+		label.add_theme_font_size_override("font_size", 78)
+		label.add_theme_color_override("font_color", UI.GOLD)
+		label.add_theme_color_override("font_shadow_color", UI.CRIMSON)
+		label.add_theme_constant_override("shadow_offset_x", 5)
+		label.add_theme_constant_override("shadow_offset_y", 5)
+		label.add_theme_color_override("font_outline_color", UI.INK)
+		label.add_theme_constant_override("outline_size", 8)
+		label.pivot_offset = label.size * 0.5
+		label.scale = Vector2.ONE * 1.5
+		label.create_tween().tween_property(label, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	else:
+		label.position = Vector2(196, 220)
+		label.size = Vector2(568, 56)
+		label.scale = Vector2.ONE
+		label.remove_theme_font_override("font")
+		label.add_theme_font_size_override("font_size", 33)
+		label.add_theme_color_override("font_color", UI.WHITE)
+		label.add_theme_constant_override("shadow_offset_x", 0)
+		label.add_theme_constant_override("shadow_offset_y", 0)
+		label.add_theme_constant_override("outline_size", 0)
+
 func _continue_match() -> void:
 	if arena.round_active or arena.move_guide.visible:
 		return
@@ -170,11 +201,17 @@ func _process(_delta: float) -> void:
 		stamina_bars[i].value = fighter.stamina
 		stamina_bars[i].modulate = UI.RED if fighter.stamina < 18.0 else Color.WHITE
 	var show_result: bool = arena.result_label.visible
+	# Between rounds only the winner callout shows; the panel with Rematch /
+	# Next Rival / Main Menu is kept for the end of the match.
+	var callout: bool = show_result and not arena.match_over
+	if callout != callout_style:
+		_style_result(callout)
+	show_result = show_result and arena.match_over
 	if show_result and not result_panel.visible:
 		UI.enter(result_panel)
 	result_panel.visible = show_result
 	if show_result:
-		next_button.text = "REMATCH / R" if arena.match_over else "NEXT ROUND / R"
+		next_button.text = "REMATCH / R"
 		result_detail.text = "%s  /  SCORE %d : %d" % ["MATCH COMPLETE" if arena.match_over else "ROUND %d COMPLETE" % (arena.round_index + 1), arena.round_wins[0], arena.round_wins[1]]
 		if arena.match_over and MatchSetup.arcade:
 			var won: bool = arena.round_wins[0] > arena.round_wins[1]

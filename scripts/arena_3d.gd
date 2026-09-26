@@ -94,6 +94,8 @@ func _ready() -> void:
 	player2.health_changed.connect(func(h, _mh): health_bar2.value = h)
 	player1.ko.connect(func(): _end_round(2))
 	player2.ko.connect(func(): _end_round(1))
+	for fighter in [player1, player2]:
+		fighter.ko.connect(func(): preload("res://scripts/sfx.gd").fire("ko"))
 	_build_move_ui()
 	add_child(preload("res://scripts/match_hud.gd").new())
 	if Settings.touch_controls:
@@ -222,6 +224,7 @@ func _update_fight_camera(delta: float) -> void:
 	camera_3d.look_at(camera_target)
 
 func _impact_3d(fighter: Node, blocked: bool, heavy: bool) -> void:
+	preload("res://scripts/sfx.gd").fire("block" if blocked else ("hit_heavy" if heavy else "hit_light"))
 	var material := _material(Color("8bdeff") if blocked else Color("ffd78b"))
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED

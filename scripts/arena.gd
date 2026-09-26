@@ -37,6 +37,9 @@ var time_remaining: float = ROUND_TIME
 var round_active: bool = false
 var intro_timer: float = 0.0
 var match_over: bool = false
+## Seconds the round winner is shown before the next round starts itself.
+const ROUND_PAUSE := 2.2
+var advance_timer := 0.0
 
 var p1_start_pos: Vector2
 var p2_start_pos: Vector2
@@ -136,6 +139,11 @@ func _process(delta: float) -> void:
 				_start_new_match()
 			else:
 				_begin_round(round_index + 1)
+		elif not match_over and advance_timer > 0.0:
+			# Rounds flow into each other: winner callout, then ROUND N.
+			advance_timer -= delta
+			if advance_timer <= 0.0:
+				_begin_round(round_index + 1)
 
 func _time_up() -> void:
 	if player1.health == player2.health:
@@ -165,20 +173,21 @@ func _end_round(winner: int) -> void:
 	var round_no := round_index + 1
 	var winner_text := "DRAW"
 	if winner == 1:
-		winner_text = "PLAYER 1 WINS"
+		winner_text = "%s WINS" % player1.character_profile.name
 	elif winner == 2:
-		winner_text = "PLAYER 2 WINS"
+		winner_text = "%s WINS" % player2.character_profile.name
 
 	if round_no >= round_styles.size():
 		match_over = true
 		var match_winner := "DRAW"
 		if round_wins[0] > round_wins[1]:
-			match_winner = "PLAYER 1"
+			match_winner = player1.character_profile.name
 		elif round_wins[1] > round_wins[0]:
-			match_winner = "PLAYER 2"
+			match_winner = player2.character_profile.name
 		result_label.text = "MATCH DRAW" if match_winner == "DRAW" else match_winner + " TAKES THE MATCH"
 	else:
 		result_label.text = winner_text
+		advance_timer = ROUND_PAUSE
 
 	result_label.visible = true
 
@@ -224,6 +233,7 @@ func _start_new_match() -> void:
 
 func _begin_round(index: int) -> void:
 	combat_effects.reset()
+	advance_timer = 0.0
 	round_index = index
 	var fight_style: FightStyle = round_styles[index]
 
@@ -351,6 +361,7 @@ func _show_banner(index: int, fight_style: FightStyle) -> void:
 	entrance.tween_property(banner, "modulate:a", 1.0, 0.15)
 	entrance.tween_property(banner, "position:x", 130.0, 0.3).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	entrance.tween_property(banner_round, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	preload("res://scripts/sfx.gd").fire("round")
 	intro_timer = INTRO_TIME
 
 func _hide_banner() -> void:
@@ -382,6 +393,7 @@ func _flash_fight() -> void:
 	call.pivot_offset = call.size * 0.5
 	call.scale = Vector2.ONE * 0.4
 	$UI.add_child(call)
+	preload("res://scripts/sfx.gd").fire("fight")
 	var burst := call.create_tween()
 	burst.tween_property(call, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	burst.tween_interval(0.45)

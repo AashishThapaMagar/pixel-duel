@@ -435,6 +435,7 @@ func _start_attack(new_state: int, variant: String = "jab") -> void:
 	attack_connected = false
 	velocity.x = 0.0
 	attack_variant = variant
+	preload("res://scripts/sfx.gd").fire("whoosh_heavy" if new_state == State.KICK else "whoosh", -6.0)
 	if variant == "kick" and current_style != null and current_style.has_finisher:
 		if _last_land_type == "punch" and combat_time - _last_land_time <= current_style.finisher_window and combat_time >= _finisher_cooldown_until:
 			attack_variant = "finisher"
