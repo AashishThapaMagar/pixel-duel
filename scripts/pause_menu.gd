@@ -72,6 +72,7 @@ func _show_main() -> void:
 	var title := UI.heading(panel, "PAUSED", Vector2(56, 64), Vector2(420, 90), 76, UI.GOLD)
 	title.add_theme_constant_override("shadow_offset_x", 5)
 	title.add_theme_constant_override("shadow_offset_y", 5)
+	UI.nepali_heading(panel, "विश्राम", Vector2(300, 70), Vector2(200, 80), 44, UI.WHITE).horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var info := "ROUND %d  /  %s  VS  %s" % [arena.round_index + 1, arena.player1.character_profile.name, arena.player2.character_profile.name]
 	UI.eyebrow(panel, info, Vector2(62, 150), Vector2(500, 20))
 	var entries := [

@@ -21,6 +21,37 @@ static var _body: Font
 static var _strong: Font
 
 ## Condensed heavy italic for titles, names and big callouts.
+## Heavy Devanagari face for Nepali callouts (Windows ships Nirmala UI).
+static var _nepali: Font
+static func nepali_font() -> Font:
+	if _nepali == null:
+		var font := SystemFont.new()
+		font.font_names = PackedStringArray(["Nirmala UI", "Mangal", "Noto Sans Devanagari"])
+		font.font_weight = 800
+		_nepali = font
+	return _nepali
+
+## Writes a number with Nepali (Devanagari) digits: 12 -> "१२".
+static func nepali_digits(value: int) -> String:
+	var digits := "०१२३४५६७८९"
+	var out := ""
+	for c in str(value):
+		out += digits[int(c)] if c >= "0" and c <= "9" else c
+	return out
+
+## Big outlined Nepali callout text in the fighting-game style.
+static func nepali_heading(parent: Node, text: String, pos: Vector2, dimensions: Vector2, font_size: int, color: Color = GOLD) -> Label:
+	var node := label(parent, text, pos, dimensions, font_size, color)
+	node.add_theme_font_override("font", nepali_font())
+	node.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	node.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	node.add_theme_color_override("font_shadow_color", CRIMSON)
+	node.add_theme_constant_override("shadow_offset_x", 3)
+	node.add_theme_constant_override("shadow_offset_y", 3)
+	node.add_theme_color_override("font_outline_color", INK)
+	node.add_theme_constant_override("outline_size", 7)
+	return node
+
 static func display_font() -> Font:
 	if _display == null:
 		var font := SystemFont.new()

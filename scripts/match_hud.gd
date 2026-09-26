@@ -13,6 +13,11 @@ var callout_style := false
 ## Hand-drawn gauges and clock plate (hud_gauges.gd); the ProgressBars
 ## below stay as invisible data holders for combat code and tests.
 var gauges: Control
+var movebook: Control
+## Nepali under the round call ("चरण १", "अन्तिम चरण") and the winner
+## callout ("विजयी!" = victorious).
+var round_nepali: Label
+var winner_nepali: Label
 
 func _ready() -> void:
 	arena = get_parent()
@@ -139,12 +144,25 @@ func _ready() -> void:
 			child.theme = UI.theme()
 			child.position = Vector2(815, 92)
 			child.add_theme_font_size_override("font_size", 12)
+	# The move list becomes a full-screen movebook (movebook.gd); the old text
+	# column stays hidden underneath as the data the tests read.
 	arena.move_guide.theme = UI.theme()
-	arena.move_guide.add_theme_stylebox_override("panel", UI.box(UI.PANEL, UI.LIME))
-	arena.move_guide.z_index = 20
-	var guide_style: StyleBoxFlat = arena.move_guide.get_theme_stylebox("panel")
-	guide_style.content_margin_top = 16
-	guide_style.content_margin_bottom = 16
+	arena.move_guide.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	arena.move_guide.position = Vector2.ZERO
+	arena.move_guide.size = Vector2(960, 540)
+	arena.move_guide.z_index = 25
+	arena.move_guide.get_child(0).hide()
+	movebook = preload("res://scripts/movebook.gd").new()
+	movebook.arena = arena
+	arena.move_guide.add_child(movebook)
+	arena.move_guide.visibility_changed.connect(func():
+		if arena.move_guide.visible:
+			movebook.refresh())
+	# Nepali calls under the big round, FIGHT! and winner callouts.
+	round_nepali = UI.nepali_heading(arena.banner, "", Vector2(0, 132), Vector2(700, 56), 36)
+	winner_nepali = UI.nepali_heading(layer, "विजयी!", Vector2(80, 282), Vector2(800, 64), 44, UI.WHITE)
+	winner_nepali.z_index = 11
+	winner_nepali.hide()
 	result_panel = UI.panel(layer, Vector2(180, 163), Vector2(600, 244), UI.INK, UI.LIME)
 	result_panel.z_index = 10
 	UI.label(result_panel, "THE RESULTS ARE IN", Vector2(24, 17), Vector2(552, 22), 12, UI.LIME).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -236,6 +254,10 @@ func _process(_delta: float) -> void:
 	var callout: bool = show_result and not arena.match_over
 	if callout != callout_style:
 		_style_result(callout)
+	winner_nepali.visible = callout and arena.result_label.text != "DRAW"
+	if arena.banner.visible:
+		var final: bool = arena.round_index == arena.round_styles.size() - 1
+		round_nepali.text = "अन्तिम चरण" if final else "चरण %s" % UI.nepali_digits(arena.round_index + 1)
 	show_result = show_result and arena.match_over
 	if show_result and not result_panel.visible:
 		UI.enter(result_panel)
