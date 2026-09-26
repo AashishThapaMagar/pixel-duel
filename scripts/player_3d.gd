@@ -35,7 +35,29 @@ func world_input() -> Vector3:
 		direction.z *= SIDESTEP_RATIO
 		return direction
 	var axes := Input.get_vector(input_prefix + "left", input_prefix + "right", input_prefix + "far", input_prefix + "near")
-	return Vector3(axes.x, 0.0, axes.y * SIDESTEP_RATIO)
+	# Tekken-style: left/right run along the fight axis as seen on screen, and
+	# up/down step into or out of the background at right angles to it. The
+	# camera stays square-on to that axis, so this is always screen-relative.
+	var along := fight_axis()
+	var toward_camera := Vector3(-along.z, 0.0, along.x)
+	var sidestep := toward_camera * axes.y * SIDESTEP_RATIO
+	# At the edge of the fighting strip a held sidestep simply stops, instead
+	# of its sideways share sliding the fighter along the lane.
+	if body != null and absf(body.position.z) >= LANE_HALF_DEPTH - 0.01 and signf(sidestep.z) == signf(body.position.z):
+		sidestep = Vector3.ZERO
+	return along * axes.x + sidestep
+
+## The line between the fighters, pointing screen-right (+x side). The fight
+## camera (arena_3d.gd) turns to stay square-on to it.
+func fight_axis() -> Vector3:
+	if body == null or opponent == null or opponent.body == null:
+		return Vector3.RIGHT
+	return axis_between(body.position, opponent.body.position)
+
+static func axis_between(a: Vector3, b: Vector3) -> Vector3:
+	var line := (b - a) if a.x <= b.x else (a - b)
+	line.y = 0.0
+	return line.normalized() if line.length() > 0.05 else Vector3.RIGHT
 
 func _movement_axis() -> float:
 	var projection := world_input().dot(forward)

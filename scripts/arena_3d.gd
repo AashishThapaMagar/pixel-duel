@@ -161,18 +161,16 @@ func _update_fight_camera(delta: float) -> void:
 	var a: Vector3 = player1.body.position
 	var b: Vector3 = player2.body.position
 	var midpoint: Vector3 = (a + b) * 0.5
-	# Turn to stay square-on to the line between the fighters, as Tekken does
-	# when they sidestep around each other. Measured left-to-right so the
-	# camera never flips when fighters cross over.
-	var left := a if a.x <= b.x else b
-	var right := b if a.x <= b.x else a
-	var line := Vector2(right.x - left.x, right.z - left.z)
-	var target_yaw := 0.0
-	if line.length() > 0.4:
-		target_yaw = clampf(atan2(line.y, line.x), -0.42, 0.42)
-	# Ignore small footwork, so jabs and short steps don't wobble the view.
-	if absf(target_yaw - camera_yaw) > 0.06:
-		camera_yaw = lerp_angle(camera_yaw, target_yaw, 1.0 - exp(-3.0 * delta))
+	# Tekken-style: stay square-on to the line between the fighters, so they
+	# are always seen in profile and sidesteps turn the stage behind them
+	# instead of swinging the view round to a front angle. Measured
+	# left-to-right so the camera never flips when fighters cross over.
+	var axis: Vector3 = preload("res://scripts/player_3d.gd").axis_between(a, b)
+	var target_yaw := clampf(atan2(axis.z, axis.x), -1.05, 1.05)
+	# Follow closely (a lagging camera is what shows the fighters' fronts),
+	# ignoring only sub-degree jitter.
+	if absf(angle_difference(camera_yaw, target_yaw)) > 0.01:
+		camera_yaw = lerp_angle(camera_yaw, target_yaw, 1.0 - exp(-9.0 * delta))
 	var turn := Basis(Vector3.UP, -camera_yaw)
 	var back: Vector3 = turn * CAMERA_BACK
 	var along: Vector3 = turn * Vector3.RIGHT
