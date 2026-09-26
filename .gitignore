@@ -19,3 +19,5 @@ Thumbs.db
 # files. Keep them local; fighters without them use the procedural rig.
 assets/fighters/*/*.fbx
 assets/fighters/*/*.fbx.import
+assets/fighters/*/style/*.fbx
+assets/fighters/*/style/*.fbx.import

@@ -83,9 +83,23 @@ it doesn't allow sharing the raw files on their own. The `.fbx` files are
 therefore listed in `.gitignore` and stay on your machine; a copy of the
 project without them falls back to the procedural fighter automatically.
 
-Anug currently uses the Mixamo X Bot with Idle, Walking, Walking Backwards,
-Running, Injured Run, Body Block, Lead Jab, Jab Cross, Body Jab Cross, Head
-Hit, Hit To Body, three MMA Kicks (mid, front and high/spin) and Knocked Out
-(in `assets/fighters/anug/`). Kicks land as heavy hits, so the victim plays
-the body-hit reaction. At 25% health or less, walking and running forward
-switch to Injured Run.
+All seven fighters use the Mixamo X Bot body, tinted in their colours and
+scaled to their build, with shared clips from `assets/fighters/anug/`
+(jab, cross, kicks, hits, KO, block, injured run) and their own style clips
+from `assets/fighters/<id>/style/` (idle stance, walk, back-step, strafes,
+run and signature moves). `scripts/fighter_models.gd` (`STYLES`) lists each
+fighter's style clips and their measured impact timing:
+
+| Fighter | Stance | Signature clips |
+|---|---|---|
+| Anug | keeper crouch | Goalkeeper Catch (blocked hits), Dodging (backdash) |
+| Ish | Bouncing Fight Idle | Hook Punch, Uppercut |
+| Ballas | Wrestling Idle | Headbutt, Grab and Slam (throws) |
+| Bib | quick fighting idle | Jab, Fast Run, Dodging (backdash) |
+| Abhi | relaxed showman idle | Haymaker, Taunt, Victory |
+| Supreme | Capoeira Ginga | Roundhouse Kick, Flip Kick |
+| Ananta | Kung Fu stance | Martial Arts Kick, Fireball (victory) |
+
+Winners play their victory clip over a knocked-out rival. Kicks land as
+heavy hits, so the victim plays the body-hit reaction; at 25% health or
+less, walking and running forward switch to Injured Run.

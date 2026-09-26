@@ -19,26 +19,31 @@ const MODELS := preload("res://scripts/fighter_models.gd")
 ## Missing logical clips fall back along these links until one exists.
 const FALLBACK := {
 	"walk_back": "walk", "sidestep": "walk", "run": "walk", "dash": "run", "backdash": "walk_back",
+	"sidestep_left": "sidestep", "sidestep_right": "sidestep", "victory": "taunt", "uppercut": "punch_heavy",
 	"land": "idle", "block_hit": "block", "block": "idle", "hit_heavy": "hit",
 	"hit": "idle", "punch_heavy": "jab", "kick_spin": "kick", "kick_front": "kick", "grapple": "jab",
 	"taunt": "idle", "jump": "idle", "ko": "idle", "kick": "jab", "jab": "idle",
 }
 ## Attack variants (from move data poses) that use the heavy-punch clip.
 const HEAVY_PUNCHES := ["cross", "hook", "rear_hook", "uppercut", "overhand", "backfist", "body_hook"]
-const LOOPING := ["idle", "walk", "walk_back", "sidestep", "run", "dash", "backdash", "block", "injured"]
+const LOOPING := ["idle", "walk", "walk_back", "sidestep", "sidestep_left", "sidestep_right", "run", "dash", "backdash", "block", "injured"]
 ## Movement that keeps the guard up on the upper body.
-const GUARDED := ["walk", "walk_back", "sidestep", "dash", "backdash"]
+const GUARDED := ["walk", "walk_back", "sidestep", "sidestep_left", "sidestep_right", "dash", "backdash"]
 ## Bones the guard overlay drives (substring match on the bone name).
 const UPPER_BODY := ["Spine", "Neck", "Head", "Shoulder", "Arm", "Hand"]
 ## Playback speed limits for locomotion: beyond these the legs look frantic
 ## (too fast) or floaty (too slow), so a little foot slide is accepted.
 const MOVE_SPEED_RANGE := {"walk": [0.6, 2.4], "walk_back": [0.6, 2.4], "sidestep": [0.6, 2.4],
+	"sidestep_left": [0.6, 2.4], "sidestep_right": [0.6, 2.4],
 	"run": [0.6, 1.8], "injured": [0.6, 2.0], "dash": [1.0, 2.2], "backdash": [1.2, 3.0]}
 ## Health fraction at or below which forward movement limps.
 const INJURED_HEALTH := 0.25
-## Locomotion clips whose hips must not travel: the game moves the fighter,
-## so baked-in forward motion would drift and snap back every loop.
-const IN_PLACE := ["walk", "walk_back", "sidestep", "run", "dash", "backdash", "injured"]
+## Clips allowed to move the hips across the floor. Everything else plays in
+## place: the game moves the fighter, so baked-in travel (a walk, a flip kick,
+## a diving catch) would drift away from the body and snap back.
+const TRAVELLING := ["ko"]
+## Attack-like clips driven by the fighter's attack timer.
+const SCRUBBED := ["jab", "punch_heavy", "uppercut", "kick", "kick_spin", "kick_front", "grapple", "taunt"]
 var visual: Node
 var root: Node3D
 var character: Node3D
@@ -68,6 +73,15 @@ func configure(owner_visual: Node, profile: Dictionary) -> void:
 	root = null
 	active = false
 	current = ""
+	# Switching fighters starts from a clean slate: no clips, paces or guard
+	# bones may carry over from the previous character.
+	clip_names.clear()
+	clip_pace.clear()
+	guard_tracks.clear()
+	guard_clip = null
+	skeleton = null
+	guard_weight = 0.0
+	_last_state = -1
 	config = MODELS.entry(str(profile.id))
 	if config.is_empty() or visual.model == null:
 		visual.model.visible = true if visual.model != null else false
@@ -92,6 +106,7 @@ func configure(owner_visual: Node, profile: Dictionary) -> void:
 	_resolve_clips()
 	_prepare_guard()
 	_fit(float(config.get("height", 1.8)))
+	_tint(config.get("tint", []))
 	visual.model.visible = false
 	active = true
 	var fighter: Node = visual.fighter
@@ -117,8 +132,22 @@ func _fit(height: float) -> void:
 	var model_height := maxf(bounds.size.y, 0.01)
 	# The fight rig works in pixels-per-metre units (64 per metre).
 	var units := 64.0
-	character.scale = Vector3.ONE * (height / model_height) * units
+	var width: float = config.get("width", 1.0)
+	character.scale = Vector3(width, 1.0, width) * (height / model_height) * units
 	character.position.y = -bounds.position.y * (height / model_height) * units - (64.0 if visual.world_root == null else 0.0)
+
+## Paints the shared body in the fighter's colours: [body, joints]. Meshes
+## named like joints or trims take the second colour.
+func _tint(colors: Array) -> void:
+	if colors.size() < 2:
+		return
+	for mesh in character.find_children("*", "MeshInstance3D", true, false):
+		var paint := StandardMaterial3D.new()
+		var joint: bool = String(mesh.name).to_lower().contains("joint")
+		paint.albedo_color = colors[1] if joint else colors[0]
+		paint.roughness = 0.45 if joint else 0.7
+		paint.metallic = 0.35 if joint else 0.0
+		mesh.material_override = paint
 
 ## Mixamo-style one-move-per-file downloads, retargeted onto this skeleton.
 func _add_clip_files() -> void:
@@ -149,7 +178,7 @@ func _add_clip_files() -> void:
 					var path := animation.track_get_path(track)
 					if path.get_subname_count() > 0:
 						animation.track_set_path(track, NodePath(str(to_skeleton) + ":" + path.get_concatenated_subnames()))
-				if key in IN_PLACE:
+				if not key in TRAVELLING:
 					clip_pace["files/" + key] = _pin_hips(animation)
 				library.add_animation(key, animation)
 				break
@@ -244,12 +273,16 @@ func update(delta: float) -> void:
 			logical = "hit_heavy" if last_hit_heavy else "hit"
 		S.KO:
 			logical = "ko"
+	# The winner celebrates over a knocked-out rival.
+	var rival = fighter.get("opponent")
+	if state == S.IDLE and rival != null and rival.state == rival.State.KO:
+		logical = "victory"
 	var clip: String = clip_names.get(logical, clip_names.get("idle", ""))
 	if clip.is_empty():
 		return
 	var entered := state != _last_state
 	_last_state = state
-	if logical in ["jab", "punch_heavy", "kick", "kick_spin", "kick_front", "grapple"]:
+	if logical in SCRUBBED:
 		guard_weight = 0.0
 		_scrub_attack(fighter, logical, clip)
 		return
@@ -277,12 +310,16 @@ func _attack_clip(fighter: Node) -> String:
 	var variant: String = fighter.attack_variant
 	if variant in ["grapple"]:
 		return "grapple"
+	if variant == "taunt":
+		return "taunt"
 	if fighter.state == fighter.State.KICK or variant in ["kick", "finisher", "front_kick"]:
 		if variant in ["spin", "finisher"]:
 			return "kick_spin"
 		return "kick_front" if variant == "front_kick" else "kick"
 	if variant == "spin":
 		return "kick_spin"
+	if variant in ["uppercut", "overhand", "body_hook"]:
+		return "uppercut"
 	return "punch_heavy" if variant in HEAVY_PUNCHES else "jab"
 
 func _move_clip(fighter: Node) -> String:
@@ -298,7 +335,10 @@ func _move_clip(fighter: Node) -> String:
 	var ahead: float = velocity.dot(fighter.get("forward") if fighter.get("forward") != null else Vector3.RIGHT)
 	var across := velocity.length() - absf(ahead)
 	if across > absf(ahead):
-		return "sidestep"
+		# The fighter's right is forward x up; +z when facing +x.
+		var forward: Vector3 = fighter.get("forward") if fighter.get("forward") != null else Vector3.RIGHT
+		var right := Vector3(-forward.z, 0.0, forward.x)
+		return "sidestep_right" if velocity.dot(right) > 0.0 else "sidestep_left"
 	if ahead < -0.05:
 		return "walk_back"
 	return "injured" if hurt else "walk"
