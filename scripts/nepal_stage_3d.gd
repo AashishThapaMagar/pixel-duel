@@ -17,6 +17,19 @@ const ARENA_MODELS := [
 ## Decode the source GLB with the running engine, not another version's
 ## binary import cache. Cache packed scenes for menu/round reuse.
 static var arena_cache: Dictionary = {}
+const PHOTO_SURFACE := preload("res://scripts/arena_photo_surface.gdshader")
+## Photo-scanned surfaces from Poly Haven (CC0), in assets/arenas/textures/:
+## kind -> [texture folder, metres per repeat, tint, normal strength, saturation].
+const PHOTO_TEXTURES := {
+	"wall_brick": ["red_bricks_04", 2.5, Color(1.25, 0.95, 0.82), 1.0, 1.35],
+	"paving_brick": ["red_brick", 1.4, Color(1.1, 0.92, 0.84), 0.8, 1.15],
+	"roof": ["roof_09", 3.2, Color(1.05, 0.9, 0.82), 1.0, 1.15],
+	"wood": ["weathered_brown_planks", 1.8, Color(0.78, 0.5, 0.34), 0.9, 1.4],
+	"plaster": ["painted_plaster_wall", 2.0, Color(1.05, 0.98, 0.86), 0.8, 1.0],
+	"stone": ["medieval_blocks_03", 2.0, Color(0.95, 0.93, 0.9), 1.0, 0.9],
+	"whitewash": ["white_plaster_02", 1.5, Color(1.08, 1.08, 1.06), 0.6, 0.7],
+}
+static var photo_materials: Dictionary = {}
 const IMPORTED_SURFACE := preload("res://scripts/arena_surface.gdshader")
 ## Five traditional prayer-flag colours, in their customary order.
 const FLAG_COLORS := [Color("2f6fc4"), Color("f1ede2"), Color("c8342c"), Color("2f8f4e"), Color("e6b62f")]
@@ -239,6 +252,10 @@ func _import_arena(index: int) -> void:
 					paper.emission_energy_multiplier = 0.65
 					node.set_surface_override_material(surface, paper)
 				if original is StandardMaterial3D and original.albedo_texture != null and not original.emission_enabled:
+					var kind := _surface_kind(original.albedo_texture, bounds)
+					if not kind.is_empty():
+						node.set_surface_override_material(surface, _photo_material(kind))
+						continue
 					if not polished.has(original):
 						var finish := ShaderMaterial.new()
 						finish.shader = IMPORTED_SURFACE
@@ -256,6 +273,63 @@ func _import_arena(index: int) -> void:
 				elif index == 1 and bounds.size.distance_to(Vector3(0.26, 0.3, 0.26)) < 0.001 and not lanterns.has(pivot):
 					lanterns.append(pivot)
 					_lantern_halo(pivot)
+
+## Which photo surface replaces a baked pattern texture, recognised by its
+## average colour (the exporter bakes one flat pattern per surface type).
+## Returns "" for textures kept as they are (carved lattice, gilt roofs).
+static var _kind_cache: Dictionary = {}
+func _surface_kind(texture: Texture2D, bounds: AABB) -> String:
+	var kind: String
+	if _kind_cache.has(texture):
+		kind = _kind_cache[texture]
+	else:
+		var image := texture.get_image()
+		if image == null:
+			return ""
+		image = image.duplicate()
+		if image.is_compressed():
+			image.decompress()
+		image.resize(1, 1, Image.INTERPOLATE_BILINEAR)
+		var c := image.get_pixel(0, 0)
+		var lum := 0.3 * c.r + 0.59 * c.g + 0.11 * c.b
+		if lum < 0.14 or (c.r > 0.6 and c.g > 0.45 and c.b < 0.35 and c.r - c.b > 0.35):
+			kind = ""
+		elif lum > 0.82:
+			kind = "whitewash"
+		elif absf(c.r - c.g) < 0.07 and absf(c.g - c.b) < 0.09 and lum > 0.3:
+			kind = "stone"
+		elif c.r > 0.7 and c.g > 0.65 and c.b > 0.5:
+			kind = "plaster"
+		elif c.r > c.g * 1.5 and lum > 0.3:
+			kind = "brick"
+		elif c.r > c.g * 1.7:
+			kind = "roof"
+		else:
+			kind = "wood"
+		_kind_cache[texture] = kind
+	# The plaza is one huge flat slab; walls and plinths get the older brick.
+	if kind == "brick":
+		kind = "paving_brick" if bounds.size.y < 0.5 and bounds.size.x > 20.0 else "wall_brick"
+	return kind
+
+func _photo_material(kind: String) -> ShaderMaterial:
+	var key := kind + ("_night" if night else "_day")
+	if photo_materials.has(key):
+		return photo_materials[key]
+	var spec: Array = PHOTO_TEXTURES[kind]
+	var folder := "res://assets/arenas/textures/%s/%s_" % [spec[0], spec[0]]
+	var material := ShaderMaterial.new()
+	material.shader = PHOTO_SURFACE
+	material.set_shader_parameter("albedo_map", load(folder + "diff_1k.jpg"))
+	material.set_shader_parameter("normal_map", load(folder + "nor_gl_1k.jpg"))
+	material.set_shader_parameter("roughness_map", load(folder + "rough_1k.jpg"))
+	material.set_shader_parameter("world_size", spec[1])
+	material.set_shader_parameter("tint", spec[2])
+	material.set_shader_parameter("normal_strength", spec[3])
+	material.set_shader_parameter("saturation", spec[4])
+	material.set_shader_parameter("wetness", 0.65 if night and kind in ["paving_brick", "stone"] else 0.0)
+	photo_materials[key] = material
+	return material
 
 static func _load_arena_model(index: int) -> PackedScene:
 	var path: String = ARENA_MODELS[index]
