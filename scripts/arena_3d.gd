@@ -210,13 +210,14 @@ func _update_fight_camera(delta: float) -> void:
 		if camera_zoom_hold == 0.0 and camera_distance - required > 0.35:
 			camera_distance = lerpf(camera_distance, required, 1.0 - exp(-1.4 * delta))
 	var eye: Vector3 = camera_target + back * camera_distance
-	# Round intro: swing in from a high three-quarter angle while the round
-	# is announced, landing on the fight view as the banner clears.
+	# Round intro: crane down from high in front of the fighters while the
+	# round is announced, landing on the fight view as the banner clears. The
+	# swing stays small so neither fighter is ever seen from behind.
 	var intro := clampf(intro_timer / INTRO_TIME, 0.0, 1.0)
 	if intro > 0.0:
 		var ease_in := intro * intro * (3.0 - 2.0 * intro)
-		var orbit := Basis(Vector3.UP, ease_in * 0.75)
-		eye = camera_target + orbit * (back * camera_distance * (1.0 + 0.45 * ease_in)) + Vector3.UP * (0.9 * ease_in)
+		var orbit := Basis(Vector3.UP, ease_in * 0.22)
+		eye = camera_target + orbit * (back * camera_distance * (1.0 + 0.55 * ease_in)) + Vector3.UP * (1.6 * ease_in)
 	camera_3d.fov = CAMERA_FOV
 	camera_3d.position = eye
 	camera_3d.look_at(camera_target)

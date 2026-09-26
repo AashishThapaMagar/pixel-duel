@@ -208,6 +208,13 @@ func reset_for_new_round() -> void:
 	travel = 0.0
 	dash_run_held = false
 	super.reset_for_new_round()
+	# Face the rival's spawn: the facing left over from the last round can
+	# point anywhere, and fighters are frozen through the round intro.
+	if opponent != null and opponent.get("spawn_position") != null:
+		var toward: Vector3 = opponent.spawn_position - spawn_position
+		toward.y = 0.0
+		if toward.length_squared() > 0.01:
+			forward = toward.normalized()
 	if pivot != null:
 		pivot.rotation.y = atan2(-forward.z, forward.x)
 	if visual != null:
