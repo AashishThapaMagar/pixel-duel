@@ -14,7 +14,7 @@ const MODELS := preload("res://scripts/fighter_models.gd")
 const FALLBACK := {
 	"walk_back": "walk", "sidestep": "walk", "run": "walk", "dash": "run",
 	"land": "idle", "block_hit": "block", "block": "idle", "hit_heavy": "hit",
-	"hit": "idle", "punch_heavy": "jab", "kick_spin": "kick", "grapple": "jab",
+	"hit": "idle", "punch_heavy": "jab", "kick_spin": "kick", "kick_front": "kick", "grapple": "jab",
 	"taunt": "idle", "jump": "idle", "ko": "idle", "kick": "jab", "jab": "idle",
 }
 ## Attack variants (from move data poses) that use the heavy-punch clip.
@@ -32,6 +32,8 @@ var clip_names: Dictionary = {}
 var current := ""
 var active := false
 var _last_state := -1
+## Set from the fighter's impact signal: kicks land as heavy hits.
+var last_hit_heavy := false
 
 func configure(owner_visual: Node, profile: Dictionary) -> void:
 	visual = owner_visual
@@ -64,6 +66,13 @@ func configure(owner_visual: Node, profile: Dictionary) -> void:
 	_fit(float(config.get("height", 1.8)))
 	visual.model.visible = false
 	active = true
+	var fighter: Node = visual.fighter
+	if fighter != null and fighter.has_signal("impact") and not fighter.impact.is_connected(_on_impact):
+		fighter.impact.connect(_on_impact)
+
+func _on_impact(_point: Vector2, blocked: bool, heavy: bool) -> void:
+	if not blocked:
+		last_hit_heavy = heavy
 
 ## Scales the model to its configured height, feet on the floor, turned to
 ## face the game's +X like the procedural rig.
@@ -183,7 +192,7 @@ func update(delta: float) -> void:
 		S.BLOCKSTUN:
 			logical = "block_hit"
 		S.HITSTUN:
-			logical = "hit_heavy" if fighter.velocity.x != 0.0 and absf(fighter.velocity.x) > 250.0 else "hit"
+			logical = "hit_heavy" if last_hit_heavy else "hit"
 		S.KO:
 			logical = "ko"
 	var clip: String = clip_names.get(logical, clip_names.get("idle", ""))
@@ -191,7 +200,7 @@ func update(delta: float) -> void:
 		return
 	var entered := state != _last_state
 	_last_state = state
-	if logical in ["jab", "punch_heavy", "kick", "kick_spin", "grapple"]:
+	if logical in ["jab", "punch_heavy", "kick", "kick_spin", "kick_front", "grapple"]:
 		_scrub_attack(fighter, logical, clip)
 		return
 	if clip != current or (entered and not logical in LOOPING):
@@ -204,7 +213,9 @@ func _attack_clip(fighter: Node) -> String:
 	if variant in ["grapple"]:
 		return "grapple"
 	if fighter.state == fighter.State.KICK or variant in ["kick", "finisher", "front_kick"]:
-		return "kick_spin" if variant in ["spin", "finisher"] else "kick"
+		if variant in ["spin", "finisher"]:
+			return "kick_spin"
+		return "kick_front" if variant == "front_kick" else "kick"
 	if variant == "spin":
 		return "kick_spin"
 	return "punch_heavy" if variant in HEAVY_PUNCHES else "jab"

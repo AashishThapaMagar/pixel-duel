@@ -39,6 +39,9 @@ var intro_timer: float = 0.0
 var match_over: bool = false
 ## Seconds the round winner is shown before the next round starts itself.
 const ROUND_PAUSE := 2.2
+## Extra wait after a knockout so the loser's fall plays out before the next
+## round's call (the animated KO takes ~2.5 s to reach the floor).
+const KO_PAUSE := 1.8
 var advance_timer := 0.0
 
 var p1_start_pos: Vector2
@@ -187,7 +190,8 @@ func _end_round(winner: int) -> void:
 		result_label.text = "MATCH DRAW" if match_winner == "DRAW" else match_winner + " TAKES THE MATCH"
 	else:
 		result_label.text = winner_text
-		advance_timer = ROUND_PAUSE
+		var knockout: bool = player1.state == player1.State.KO or player2.state == player2.State.KO
+		advance_timer = ROUND_PAUSE + (KO_PAUSE if knockout else 0.0)
 
 	result_label.visible = true
 

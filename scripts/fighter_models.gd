@@ -22,8 +22,7 @@ extends RefCounted
 ## kick_spin, grapple, taunt.
 const MODELS := {
 	# Mixamo X Bot with Mixamo animations. The files were downloaded "With
-	# Skin", so each one carries the body; idle.fbx supplies it. No kick clip
-	# yet: kicks borrow the body jab until one is downloaded.
+	# Skin", so each one carries the body; idle.fbx supplies it.
 	"anug": {
 		"scene": "res://assets/fighters/anug/idle.fbx",
 		"enabled": true,
@@ -37,15 +36,24 @@ const MODELS := {
 			"cross": "res://assets/fighters/anug/jab_cross.fbx",
 			"body": "res://assets/fighters/anug/body_jab_cross.fbx",
 			"hit": "res://assets/fighters/anug/head_hit.fbx",
+			"hit_body": "res://assets/fighters/anug/hit_to_body.fbx",
+			"kick_mid": "res://assets/fighters/anug/mma_kick_2.fbx",
+			"kick_front": "res://assets/fighters/anug/mma_kick_1.fbx",
+			"kick_high": "res://assets/fighters/anug/mma_kick.fbx",
 			"ko": "res://assets/fighters/anug/knocked_out.fbx",
 		},
 		"clips": {
 			"idle": "idle", "walk": "walk", "walk_back": "walk_back", "jab": "jab",
-			"punch_heavy": "cross", "kick": "body", "hit": "hit", "ko": "ko",
+			"punch_heavy": "cross", "hit": "hit", "hit_heavy": "hit_body", "ko": "ko",
+			"kick": "kick_mid", "kick_front": "kick_front", "kick_spin": "kick_high",
 		},
-		# [start, impact, end] seconds, measured from where each fist is
-		# fully extended. Jab Cross is two punches; heavy punches use the cross.
-		"timing": {"jab": [0.0, 0.5, 1.2], "punch_heavy": [0.45, 0.7, 1.5], "kick": [0.1, 0.4, 1.0]},
+		# [start, impact, end] seconds, measured from where each fist or foot
+		# is fully extended. Jab Cross is two punches; heavy punches use the
+		# cross. Mid kick = Mma Kick (2), front = (1), high/spin = Mma Kick.
+		"timing": {
+			"jab": [0.0, 0.5, 1.2], "punch_heavy": [0.45, 0.7, 1.5],
+			"kick": [0.25, 0.6, 1.3], "kick_front": [0.2, 0.6, 1.2], "kick_spin": [0.3, 0.7, 1.4],
+		},
 	},
 	# Test dummy: Kenney "Mini Characters" (CC0), a simple 7-bone rig with
 	# idle/walk/sprint/jump/punch/kick/die clips. Kept as a pipeline example
