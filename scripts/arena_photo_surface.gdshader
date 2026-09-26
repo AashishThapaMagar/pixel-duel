@@ -12,19 +12,14 @@ uniform float normal_strength = 1.0;
 uniform float wetness = 0.0;
 // Pushes colour away from grey; the scans are shot under flat, neutral light.
 uniform float saturation = 1.0;
+// How strongly the large-scale variation breaks up repeats (0 = off).
+uniform float macro_strength = 0.55;
 varying vec3 world_pos;
 varying vec3 world_normal;
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
-}
-
-float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-float noise(vec3 p) {
-	vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-	return mix(mix(mix(hash(i), hash(i+vec3(1,0,0)), f.x), mix(hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)), f.x), f.y),
-		mix(mix(hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)), f.x), mix(hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)), f.x), f.y), f.z);
 }
 
 void fragment() {
@@ -54,9 +49,22 @@ void fragment() {
 	vec3 t = texture(normal_map, uv).rgb * 2.0 - 1.0;
 	// OpenGL-style normal map: +Y points up the texture, opposite to v.
 	vec3 bent = normalize(tangent * t.x * normal_strength - bitangent * t.y * normal_strength + n * max(t.z, 0.2));
-	// Rain-darkened patches on upward faces at night.
-	float damp = wetness * smoothstep(0.45, 0.75, noise(world_pos * 1.6)) * max(n.y, 0.0);
-	float grey = dot(col, vec3(0.3, 0.59, 0.11));
+	// Anti-tiling: the same scan sampled ~7x larger and rotated acts as a soft
+	// light/dark map, so identical repeats never line up across a wall or
+	// floor. Its tiniest mip is the scan's average, used to centre it. Two
+	// cheap texture reads instead of per-pixel procedural noise.
+	const vec3 LUMA = vec3(0.3, 0.59, 0.11);
+	vec2 macro_uv = mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * (uv * 0.137) + vec2(0.37, 0.61);
+	float macro = dot(texture(albedo_map, macro_uv).rgb, LUMA);
+	float average = max(dot(textureLod(albedo_map, vec2(0.5), 12.0).rgb, LUMA), 0.02);
+	float variation = clamp(macro / average, 0.6, 1.45);
+	col *= mix(1.0, variation, macro_strength);
+	// Rain-darkened patches on upward faces at night, from the same map.
+	float damp = 0.0;
+	if (wetness > 0.0) {
+		damp = wetness * smoothstep(0.95, 1.2, variation) * max(n.y, 0.0);
+	}
+	float grey = dot(col, LUMA);
 	col = mix(vec3(grey), col, saturation);
 	ALBEDO = col * tint.rgb * (1.0 - damp * 0.25);
 	ROUGHNESS = clamp(rough - damp * 0.5, 0.2, 1.0);

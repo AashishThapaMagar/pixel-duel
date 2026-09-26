@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://btk0xyncjli7k"
-path="res://.godot/imported/heritage-square_2.png-501e78f35778c8e53d46801d485e3a66.ctex"
+path.s3tc="res://.godot/imported/heritage-square_2.png-501e78f35778c8e53d46801d485e3a66.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c02e29a5784fdba1a26c0d2691689954"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/arenas/models/heritage-square_2.png"
-dest_files=["res://.godot/imported/heritage-square_2.png-501e78f35778c8e53d46801d485e3a66.ctex"]
+dest_files=["res://.godot/imported/heritage-square_2.png-501e78f35778c8e53d46801d485e3a66.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

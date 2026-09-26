@@ -21,11 +21,12 @@ const RENDER_SCALES := [0.5, 0.75, 1.0]
 const PRESETS := [
 	[1, 0, 0, false],
 	[2, 1, 1, false],
-	[2, 2, 2, true],
+	# High uses 2x MSAA: 4x cost ~15 fps at 1080p on integrated GPUs.
+	[2, 1, 2, true],
 ]
 var quality: int = Quality.HIGH
 var render_scale: int = 2
-var anti_aliasing: int = 2
+var anti_aliasing: int = 1
 var shadows: int = 2
 var detailed_textures: bool = true
 var vsync: bool = true

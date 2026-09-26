@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://btcevdxe1epe6"
-path="res://.godot/imported/terrace-overlook_0.png-edd7173678775499d54ebbabd450bcfd.ctex"
+path.s3tc="res://.godot/imported/terrace-overlook_0.png-edd7173678775499d54ebbabd450bcfd.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "68a886a5c1b53c2f49925ee62a88f5c4"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/arenas/models/terrace-overlook_0.png"
-dest_files=["res://.godot/imported/terrace-overlook_0.png-edd7173678775499d54ebbabd450bcfd.ctex"]
+dest_files=["res://.godot/imported/terrace-overlook_0.png-edd7173678775499d54ebbabd450bcfd.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

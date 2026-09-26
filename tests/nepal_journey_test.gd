@@ -52,7 +52,8 @@ func run() -> void:
 		check(stage.sky_material.get_shader_parameter("top_color") != null and stage.floor_material.get_shader_parameter("pattern") == 5, "Each arena has its own sky and a modelled flagstone floor")
 		var model: Node = stage.content.get_node("ArenaModel")
 		check(model.get_meta("source_glb") == stage.ARENA_MODELS[index], "Each round loads its supplied arena model")
-		check(model.find_children("*", "MeshInstance3D", true, false).size() > 100, "Each imported arena retains its modelled architecture")
+		check(stage.batched_pieces > 100, "Each imported arena retains its modelled architecture (merged into batches)")
+		check(stage.content.find_children("Batched", "MeshInstance3D", false, false).size() < 60, "Static scenery is merged into a few draw batches")
 		check(stage.lamp_lights.size() >= 2, "Imported practical lamps are registered for flicker")
 		check(stage.environment.environment.fog_enabled, "Arena lighting includes atmospheric depth")
 		if index == 1:
@@ -101,7 +102,7 @@ func run() -> void:
 	var saved: PackedScene = fallback.arena_cache[path]
 	fallback.arena_cache[path] = PackedScene.new()
 	fallback.show_round(0)
-	check(fallback.floor_material != null and fallback.content.find_children("*", "MeshInstance3D", true, false).size() > 100, "Invalid imported scenes fall back to a visible floor and complete arena")
+	check(fallback.floor_material != null and fallback.batched_pieces + fallback.content.find_children("*", "MeshInstance3D", true, false).size() > 100, "Invalid imported scenes fall back to a visible floor and complete arena")
 	fallback.arena_cache[path] = saved
 	fallback.queue_free()
 	print("NEPAL_JOURNEY_TEST: ", "ALL PASS" if failures.is_empty() else failures)

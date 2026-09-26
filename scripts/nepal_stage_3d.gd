@@ -106,7 +106,10 @@ void fragment() {
 		float face = smoothstep(0.008, 0.023, edge.x) * smoothstep(0.012, 0.03, edge.y);
 		float grain = noise(uv * 65.0);
 		float veins = smoothstep(0.46, 0.54, noise(uv * 3.8 + noise(uv * 12.0)));
-		col = mix(joint_color, base_color * (0.76 + 0.24 * hash(floor(b))) * (0.86 + grain * 0.18 + veins * 0.08), face);
+		// Each slab gets its own shade and a warm or cool cast, so no two
+		// neighbouring stones read as copies.
+		vec3 slab_tint = mix(vec3(1.05, 1.0, 0.93), vec3(0.94, 0.98, 1.05), hash(floor(b) + 17.3));
+		col = mix(joint_color, base_color * slab_tint * (0.72 + 0.32 * hash(floor(b))) * (0.86 + grain * 0.18 + veins * 0.08), face);
 		rough = mix(0.94, 0.66 + grain * 0.16, face);
 	} else if (pattern == 6) {
 		vec2 b = uv / 0.09;
@@ -165,6 +168,9 @@ var materials: Dictionary = {}
 var flags: Array[Node3D] = []
 var lamp_lights: Array[OmniLight3D] = []
 var lanterns: Array[Node3D] = []
+## How many separate scenery meshes were merged into shared batches for the
+## current round (see _batch_static); the arena's piece count, for tests.
+var batched_pieces := 0
 var fade: ColorRect
 
 func _ready() -> void:
@@ -214,6 +220,7 @@ func show_round(index: int) -> void:
 	content.add_child(HIMALAYA.build(MOODS[index][1], night, index == 2))
 	_fight_lighting()
 	_arena_inlay()
+	_batch_static()
 	_ambience()
 	if changing:
 		_fade_in()
@@ -431,6 +438,70 @@ func _fight_lighting() -> void:
 			wash.light_color = Color("ffaf68") if current_round == 1 else Color("adc7ff")
 			wash.light_energy = 1.25
 			content.add_child(wash)
+
+## Merges every static scenery mesh that shares a material (and vertex
+## layout and shadow setting) into one mesh, the way shipped games bake
+## their arenas: ~600 separately drawn bricks, beams, steps and lamps become
+## a couple of dozen draws, which is what integrated GPUs choke on. Pieces
+## that move (flag and lantern pivots), lights, particles and the shared
+## Himalayan backdrop stay as they are. World-space shaders are unaffected
+## because merged vertices keep their world positions.
+func _batch_static() -> void:
+	batched_pieces = 0
+	if not is_inside_tree() or content == null:
+		return
+	var moving := {}
+	for pivot in flags:
+		moving[pivot] = true
+	for pivot in lanterns:
+		moving[pivot] = true
+	var to_content := content.global_transform.affine_inverse()
+	var groups := {}
+	var merged: Array[Node] = []
+	for node in content.find_children("*", "MeshInstance3D", true, false):
+		if node.mesh == null or not node.is_visible_in_tree() or _moves_or_shared(node, moving):
+			continue
+		var parts := []
+		for surface in node.mesh.get_surface_count():
+			if node.mesh is ArrayMesh and node.mesh.surface_get_primitive_type(surface) != Mesh.PRIMITIVE_TRIANGLES:
+				parts.clear()
+				break
+			var arrays: Array = node.mesh.surface_get_arrays(surface)
+			var layout := "%d%d%d%d" % [int(arrays[Mesh.ARRAY_COLOR] != null), int(arrays[Mesh.ARRAY_TEX_UV] != null),
+				int(arrays[Mesh.ARRAY_TEX_UV2] != null), int(arrays[Mesh.ARRAY_TANGENT] != null)]
+			parts.append([node.get_active_material(surface), layout, surface])
+		if parts.is_empty():
+			continue
+		var place: Transform3D = to_content * node.global_transform
+		for part in parts:
+			var key := [part[0], part[1], node.cast_shadow]
+			if not groups.has(key):
+				groups[key] = []
+			groups[key].append([node.mesh, part[2], place])
+		merged.append(node)
+	for key in groups:
+		var tool := SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for piece in groups[key]:
+			tool.append_from(piece[0], piece[1], piece[2])
+		var batch := MeshInstance3D.new()
+		batch.name = "Batched"
+		batch.mesh = tool.commit()
+		batch.material_override = key[0]
+		batch.cast_shadow = key[2]
+		content.add_child(batch)
+	for node in merged:
+		node.get_parent().remove_child(node)
+		node.queue_free()
+	batched_pieces = merged.size()
+
+func _moves_or_shared(node: Node, moving: Dictionary) -> bool:
+	var parent := node.get_parent()
+	while parent != null and parent != content:
+		if moving.has(parent) or parent.name == "HimalayaBackdrop":
+			return true
+		parent = parent.get_parent()
+	return false
 
 ## Thin brass inlays make the usable lane legible without floating UI.
 func _arena_inlay() -> void:

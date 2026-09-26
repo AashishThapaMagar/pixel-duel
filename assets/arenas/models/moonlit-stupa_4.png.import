@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cujl6v3im54dv"
-path="res://.godot/imported/moonlit-stupa_4.png-353bb1af2571953d0f5f66434c92ad72.ctex"
+path.s3tc="res://.godot/imported/moonlit-stupa_4.png-353bb1af2571953d0f5f66434c92ad72.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "cebd6aa372cfb9eee87b7c6e9ff6d1ef"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/arenas/models/moonlit-stupa_4.png"
-dest_files=["res://.godot/imported/moonlit-stupa_4.png-353bb1af2571953d0f5f66434c92ad72.ctex"]
+dest_files=["res://.godot/imported/moonlit-stupa_4.png-353bb1af2571953d0f5f66434c92ad72.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
