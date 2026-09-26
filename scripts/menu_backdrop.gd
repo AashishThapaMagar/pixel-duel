@@ -81,12 +81,6 @@ func _draw() -> void:
 	draw_rect(Rect2(0, 0, size.x, 6), Color(0, 0, 0, 0.9))
 	draw_rect(Rect2(0, size.y - 34, size.x, 34), Color(0.01, 0.012, 0.025, 0.92))
 	draw_rect(Rect2(0, size.y - 35, size.x, 1.5), Color(ACCENTS[selected], 0.8))
-	# Drifting diagonal speed lines in the mode's accent.
-	var accent: Color = ACCENTS[selected]
-	for i in 7:
-		var x := fposmod(elapsed * (40.0 + i * 9.0) + i * 173.0, size.x + 300.0) - 150.0
-		var y := 60.0 + i * 64.0
-		draw_line(Vector2(x, y), Vector2(x + 90 + i * 12, y - 22), Color(accent, 0.12), 2.0)
 
 ## Crimson slash sweeps across with a gold edge until it covers the screen.
 func draw_wipe(canvas: CanvasItem) -> void:

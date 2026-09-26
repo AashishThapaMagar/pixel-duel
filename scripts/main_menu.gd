@@ -287,19 +287,19 @@ func _show_settings() -> void:
 	if transitioning or is_instance_valid(modal):
 		return
 	_open_modal("YOUR SETUP", "SETTINGS")
-	_option_label("DISPLAY", 110)
+	_option_label("DISPLAY", 104)
 	var fullscreen := CheckBox.new()
 	fullscreen.text = "FULLSCREEN"
-	fullscreen.position = Vector2(306, 102)
+	fullscreen.position = Vector2(306, 96)
 	fullscreen.size = Vector2(282, 38)
 	fullscreen.button_pressed = Settings.fullscreen
 	fullscreen.toggled.connect(Settings.set_fullscreen)
 	modal_content.add_child(fullscreen)
-	_volume_row("MASTER VOLUME", 157, Settings.volume, Settings.set_volume)
-	_option_label("TOUCH CONTROLS", 208)
+	_volume_row("MASTER VOLUME", 148, Settings.volume, Settings.set_volume)
+	_option_label("TOUCH CONTROLS", 192)
 	var touch := CheckBox.new()
 	touch.text = "ON-SCREEN BUTTONS"
-	touch.position = Vector2(306, 200)
+	touch.position = Vector2(306, 184)
 	touch.size = Vector2(282, 38)
 	touch.button_pressed = Settings.touch_controls
 	touch.toggled.connect(Settings.set_touch_controls)
@@ -312,7 +312,68 @@ func _show_settings() -> void:
 	guide.pressed.connect(func():
 		_close_modal()
 		_show_guide())
-	UI.label(modal_content, "Changes are saved automatically.", Vector2(28, 262), Vector2(540, 22), 12, UI.MUTED)
+	_option_label("GRAPHICS", 240)
+	var graphics := UI.button(modal_content, "%s  ▶" % QUALITY_NAMES[Settings.quality], Vector2(306, 232), Vector2(282, 38))
+	graphics.pressed.connect(func():
+		_close_modal()
+		_show_graphics())
+	UI.label(modal_content, "Changes are saved automatically.", Vector2(28, 280), Vector2(540, 22), 12, UI.MUTED)
+
+const QUALITY_NAMES := ["LOW", "MEDIUM", "HIGH", "CUSTOM"]
+
+## Graphics page: a quality preset plus each option it controls. Picking a
+## preset updates the rows below; changing a row switches to CUSTOM.
+func _show_graphics() -> void:
+	if transitioning or is_instance_valid(modal):
+		return
+	_open_modal("GRAPHICS", "SETTINGS  /  GRAPHICS")
+	var rows := [
+		["QUALITY", "quality", QUALITY_NAMES],
+		["RESOLUTION", "render_scale", ["50%  (FASTEST)", "75%", "100%  (SHARPEST)"]],
+		["ANTI-ALIASING", "anti_aliasing", ["OFF", "2X", "4X"]],
+		["SHADOWS", "shadows", ["OFF", "LOW", "HIGH"]],
+		["ARENA TEXTURES", "detailed_textures", ["STANDARD", "PHOTO-REAL"]],
+	]
+	var pickers: Dictionary = {}
+	for i in rows.size():
+		var row: Array = rows[i]
+		var y := 100.0 + i * 38.0
+		_option_label(row[0], y)
+		var picker := OptionButton.new()
+		for choice in row[2]:
+			picker.add_item(choice)
+		picker.position = Vector2(306, y - 8)
+		picker.size = Vector2(282, 32)
+		picker.focus_mode = Control.FOCUS_NONE
+		modal_content.add_child(picker)
+		pickers[row[1]] = picker
+	var refresh := func():
+		for key in pickers:
+			pickers[key].select(int(Settings.get(key)))
+	refresh.call()
+	# Custom is a result, not something to pick.
+	pickers.quality.set_item_disabled(3, true)
+	pickers.quality.item_selected.connect(func(index: int):
+		Settings.set_quality(index)
+		refresh.call())
+	for key in ["render_scale", "anti_aliasing", "shadows"]:
+		pickers[key].item_selected.connect(func(index: int):
+			Settings.set_graphic(key, index)
+			refresh.call())
+	pickers.detailed_textures.item_selected.connect(func(index: int):
+		Settings.set_graphic("detailed_textures", index == 1)
+		refresh.call())
+	for pair in [["VSYNC", "vsync", 28.0], ["SHOW FPS", "show_fps", 200.0]]:
+		var toggle := CheckBox.new()
+		toggle.text = pair[0]
+		toggle.position = Vector2(pair[2], 296)
+		toggle.size = Vector2(160, 36)
+		toggle.button_pressed = Settings.get(pair[1])
+		toggle.toggled.connect(func(on: bool):
+			Settings.set(pair[1], on)
+			Settings.apply_graphics()
+			Settings._save())
+		modal_content.add_child(toggle)
 
 ## Option name, slider and live percentage for one volume setting.
 func _volume_row(text: String, y: float, level: float, apply: Callable) -> void:
