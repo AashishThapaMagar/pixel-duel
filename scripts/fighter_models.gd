@@ -41,11 +41,15 @@ const MODELS := {
 			"kick_front": "res://assets/fighters/anug/mma_kick_1.fbx",
 			"kick_high": "res://assets/fighters/anug/mma_kick.fbx",
 			"ko": "res://assets/fighters/anug/knocked_out.fbx",
+			"block": "res://assets/fighters/anug/body_block.fbx",
+			"run": "res://assets/fighters/anug/running.fbx",
+			"injured": "res://assets/fighters/anug/injured_run.fbx",
 		},
 		"clips": {
 			"idle": "idle", "walk": "walk", "walk_back": "walk_back", "jab": "jab",
 			"punch_heavy": "cross", "hit": "hit", "hit_heavy": "hit_body", "ko": "ko",
 			"kick": "kick_mid", "kick_front": "kick_front", "kick_spin": "kick_high",
+			"block": "block", "block_hit": "block", "run": "run", "injured": "injured",
 		},
 		# [start, impact, end] seconds, measured from where each fist or foot
 		# is fully extended. Jab Cross is two punches; heavy punches use the

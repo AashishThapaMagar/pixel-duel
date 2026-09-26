@@ -19,10 +19,12 @@ const FALLBACK := {
 }
 ## Attack variants (from move data poses) that use the heavy-punch clip.
 const HEAVY_PUNCHES := ["cross", "hook", "rear_hook", "uppercut", "overhand", "backfist", "body_hook"]
-const LOOPING := ["idle", "walk", "walk_back", "sidestep", "run", "dash", "block"]
+const LOOPING := ["idle", "walk", "walk_back", "sidestep", "run", "dash", "block", "injured"]
+## Health fraction at or below which forward movement limps.
+const INJURED_HEALTH := 0.25
 ## Locomotion clips whose hips must not travel: the game moves the fighter,
 ## so baked-in forward motion would drift and snap back every loop.
-const IN_PLACE := ["walk", "walk_back", "sidestep", "run", "dash"]
+const IN_PLACE := ["walk", "walk_back", "sidestep", "run", "dash", "injured"]
 var visual: Node
 var root: Node3D
 var character: Node3D
@@ -227,19 +229,22 @@ func _move_clip(fighter: Node) -> String:
 		return "walk"
 	var velocity: Vector3 = body.velocity
 	velocity.y = 0.0
+	var hurt: bool = clip_names.has("injured") and fighter.health <= fighter.max_health * INJURED_HEALTH
 	if fighter.running:
-		return "run"
+		return "injured" if hurt else "run"
 	var ahead: float = velocity.dot(fighter.get("forward") if fighter.get("forward") != null else Vector3.RIGHT)
 	var across := velocity.length() - absf(ahead)
 	if across > absf(ahead):
 		return "sidestep"
-	return "walk_back" if ahead < -0.05 else "walk"
+	if ahead < -0.05:
+		return "walk_back"
+	return "injured" if hurt else "walk"
 
 ## Loops keep pace with the fighter; walking back plays the walk reversed
 ## when there's no dedicated clip.
 func _loop_speed(fighter: Node, logical: String) -> float:
 	var body = fighter.get("body")
-	if body == null or not logical in ["walk", "walk_back", "sidestep", "run", "dash"]:
+	if body == null or not logical in ["walk", "walk_back", "sidestep", "run", "dash", "injured"]:
 		return 1.0
 	var pace: float = Vector3(body.velocity.x, 0.0, body.velocity.z).length()
 	var speed := clampf(pace / 1.6, 0.6, 1.8)

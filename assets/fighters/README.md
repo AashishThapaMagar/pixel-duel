@@ -84,6 +84,8 @@ therefore listed in `.gitignore` and stay on your machine; a copy of the
 project without them falls back to the procedural fighter automatically.
 
 Anug currently uses the Mixamo X Bot with Idle, Walking, Walking Backwards,
-Lead Jab, Jab Cross, Body Jab Cross, Head Hit, Hit To Body, three MMA Kicks
-(mid, front and high/spin) and Knocked Out (in `assets/fighters/anug/`).
-Kicks land as heavy hits, so the victim plays the body-hit reaction.
+Running, Injured Run, Body Block, Lead Jab, Jab Cross, Body Jab Cross, Head
+Hit, Hit To Body, three MMA Kicks (mid, front and high/spin) and Knocked Out
+(in `assets/fighters/anug/`). Kicks land as heavy hits, so the victim plays
+the body-hit reaction. At 25% health or less, walking and running forward
+switch to Injured Run.

@@ -14,6 +14,14 @@ var lateral_speed := 0.0
 var travel := 0.0
 var dash_vector := Vector3.RIGHT
 var dash_run_held := false
+## Speed of the fight relative to real time. Below 1.0 every attack, stun,
+## recovery, walk, dash and jump plays out slower and weightier, while frame
+## advantage, combo links and jump arcs keep their shape because the whole
+## combat clock is scaled together. Menus, camera and round timer ignore it.
+const COMBAT_TEMPO := 0.8
+
+func _physics_process(delta: float) -> void:
+	super._physics_process(delta * COMBAT_TEMPO)
 
 func _ready() -> void:
 	super._ready()
@@ -130,10 +138,13 @@ func _move_combat_body(delta: float) -> void:
 	if state == State.JUMP:
 		planar = planar.limit_length(move_speed)
 	body.get_node("Hurtbox3D").rotation.y = atan2(-forward.z, forward.x)
-	body.velocity = planar / UNITS + Vector3.UP * -velocity.y / UNITS
+	# Velocities stay in combat time; the body moves at the tempo-scaled rate
+	# for one real physics step and the velocity is restored afterwards.
+	body.velocity = (planar / UNITS + Vector3.UP * -velocity.y / UNITS) * COMBAT_TEMPO
 	var previous := body.position
 	_separate_bodies()
 	body.move_and_slide()
+	body.velocity /= COMBAT_TEMPO
 	_separate_bodies()
 	# Keep sidesteps on the fighting strip, including pushback and jumps.
 	body.position.x = clampf(body.position.x, -LANE_HALF_WIDTH, LANE_HALF_WIDTH)
