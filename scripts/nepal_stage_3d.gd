@@ -18,6 +18,7 @@ const ARENA_MODELS := [
 ## binary import cache. Cache packed scenes for menu/round reuse.
 static var arena_cache: Dictionary = {}
 const PHOTO_SURFACE := preload("res://scripts/arena_photo_surface.gdshader")
+const HIMALAYA := preload("res://scripts/himalaya_backdrop.gd")
 ## Photo-scanned surfaces from Poly Haven (CC0), in assets/arenas/textures/:
 ## kind -> [texture folder, metres per repeat, tint, normal strength, saturation].
 const PHOTO_TEXTURES := {
@@ -206,6 +207,7 @@ func show_round(index: int) -> void:
 	elapsed = 0
 	_lighting()
 	_import_arena(index)
+	content.add_child(HIMALAYA.build(MOODS[index][1], night, index == 2))
 	_fight_lighting()
 	_arena_inlay()
 	_ambience()
@@ -240,12 +242,11 @@ func _import_arena(index: int) -> void:
 				continue
 			for surface in node.mesh.get_surface_count():
 				var original: Material = node.get_active_material(surface)
-				# The ridges carry their colours per vertex. Newer glTF importers
-				# leave vertex colours off, which drew the mountains flat white.
-				if original is StandardMaterial3D and not original.vertex_color_use_as_albedo and node.mesh is ArrayMesh and node.mesh.surface_get_format(surface) & Mesh.ARRAY_FORMAT_COLOR:
-					original = original.duplicate()
-					original.vertex_color_use_as_albedo = true
-					node.set_surface_override_material(surface, original)
+				# The models' flat vertex-coloured ridge strips are replaced by
+				# the generated Himalaya backdrop (see himalaya_backdrop.gd).
+				if node.mesh is ArrayMesh and node.mesh.surface_get_format(surface) & Mesh.ARRAY_FORMAT_COLOR and bounds.size.x > 100.0:
+					node.visible = false
+					break
 				if original is StandardMaterial3D and original.emission_enabled:
 					var paper: StandardMaterial3D = original.duplicate()
 					paper.emission = paper.albedo_color
@@ -357,7 +358,6 @@ static func _load_arena_model(index: int) -> PackedScene:
 ## Asset failures must still leave a visible floor and complete arena.
 func _build_fallback(index: int) -> void:
 	_ground()
-	_mountains()
 	_houses()
 	match index:
 		0, 1:
