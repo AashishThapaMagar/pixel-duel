@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vxxt3gay8gnw"
-path="res://.godot/imported/anant.png-cfa92c7059738428249c85c3bac11947.ctex"
+uid="uid://5r3pqs137nut"
+path="res://.godot/imported/lakeside-day.png-eee89a185274246cf36eaa860a2f7737.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/fighter/nepali/anant.png"
-dest_files=["res://.godot/imported/anant.png-cfa92c7059738428249c85c3bac11947.ctex"]
+source_file="res://assets/backgrounds/nepal_realistic/lakeside-day.png"
+dest_files=["res://.godot/imported/lakeside-day.png-eee89a185274246cf36eaa860a2f7737.ctex"]
 
 [params]
 

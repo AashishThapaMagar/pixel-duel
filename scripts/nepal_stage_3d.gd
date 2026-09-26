@@ -227,6 +227,12 @@ func _import_arena(index: int) -> void:
 				continue
 			for surface in node.mesh.get_surface_count():
 				var original: Material = node.get_active_material(surface)
+				# The ridges carry their colours per vertex. Newer glTF importers
+				# leave vertex colours off, which drew the mountains flat white.
+				if original is StandardMaterial3D and not original.vertex_color_use_as_albedo and node.mesh is ArrayMesh and node.mesh.surface_get_format(surface) & Mesh.ARRAY_FORMAT_COLOR:
+					original = original.duplicate()
+					original.vertex_color_use_as_albedo = true
+					node.set_surface_override_material(surface, original)
 				if original is StandardMaterial3D and original.emission_enabled:
 					var paper: StandardMaterial3D = original.duplicate()
 					paper.emission = paper.albedo_color

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vxxt3gay8gnw"
-path="res://.godot/imported/anant.png-cfa92c7059738428249c85c3bac11947.ctex"
+uid="uid://d3oswbl8020ec"
+path="res://.godot/imported/heritage-night.png-b743f63abd13956ec066202d46882ee7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/fighter/nepali/anant.png"
-dest_files=["res://.godot/imported/anant.png-cfa92c7059738428249c85c3bac11947.ctex"]
+source_file="res://assets/backgrounds/nepal_illustrated/heritage-night.png"
+dest_files=["res://.godot/imported/heritage-night.png-b743f63abd13956ec066202d46882ee7.ctex"]
 
 [params]
 

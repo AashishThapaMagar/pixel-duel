@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vxxt3gay8gnw"
-path="res://.godot/imported/anant.png-cfa92c7059738428249c85c3bac11947.ctex"
+uid="uid://b3y64arl4mh8w"
+path="res://.godot/imported/terrace-day.png-4ac251c4b6a2c08dd80ccc7e8658b228.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/fighter/nepali/anant.png"
-dest_files=["res://.godot/imported/anant.png-cfa92c7059738428249c85c3bac11947.ctex"]
+source_file="res://assets/backgrounds/nepal_realistic/terrace-day.png"
+dest_files=["res://.godot/imported/terrace-day.png-4ac251c4b6a2c08dd80ccc7e8658b228.ctex"]
 
 [params]
 

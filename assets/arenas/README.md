@@ -23,3 +23,6 @@ These effects target the existing Compatibility renderer.
 Validation: `tests/nepal_journey_test.gd` checks the model mapping, lighting,
 animated pivots, grounded fighters, and fixed/random/journey arena selection.
 Run with `-- --capture` on a rendered Godot invocation for four screenshots.
+
+Godot 4.7's glTF importer leaves vertex colours off, which drew the ridges
+flat white; `_import_arena` turns them back on for any mesh that has them.

@@ -1,6 +1,6 @@
 # Who Won?
 
-An original action fighting game prototype in Godot 4.2+, with articulated 3D fighters and side-on movement and short sidesteps on a solid Nepal courtyard. Every match lasts **four rounds**. Each fighter keeps their own moves throughout; the most round wins takes the match.
+An original action fighting game prototype in Godot 4.7, with articulated 3D fighters and side-on movement and short sidesteps on a solid Nepal courtyard. Every match lasts **four rounds**. Each fighter keeps their own moves throughout; the most round wins takes the match.
 
 Choose a mode with **Up/Down**, then press **Enter** for the arcade character-select screen. All seven fighters fit in the portrait grid, with large live 3D previews on either side. P1 uses A/D and F to select/confirm; P2 uses Left/Right and K. Enter starts the match once ready. Computer modes pre-confirm the CPU; Arcade and Story choose the first rival automatically. The title screen is an arcade-style menu: a slanted mode list (Arcade, Story, VS Battle, VS Computer) over the live 3D arena, with each mode showing a different arena mood, a splash card for the selected mode, top tabs for Fighters / Arenas / How to Play / Settings / Exit, and a crimson slash wipe into character select. Menus share `scripts/ui_kit.gd`: heavy italic display type, parallelogram panels and a Nepal crimson / gold palette.
 
@@ -114,7 +114,7 @@ pixel-duel/
 
 ## 1. Install the tools
 
-1. **Godot 4.2+** — download from [godotengine.org/download](https://godotengine.org/download) (the standard, non-.NET build is fine — this project uses GDScript, not C#). No installer needed on most platforms; it's a single executable.
+1. **Godot 4.7** (4.7.2 or later) — download from [godotengine.org/download](https://godotengine.org/download) (the standard, non-.NET build is fine — this project uses GDScript, not C#). No installer needed on most platforms; it's a single executable.
 2. **VS Code** — [code.visualstudio.com](https://code.visualstudio.com) if you don't already have it.
 3. In VS Code, install the **"Godot Tools"** extension (by `geequlim`) from the Extensions panel. This gives you GDScript syntax highlighting, autocomplete, and debugging.
 4. In the Godot editor, go to **Editor > Editor Settings > Text Editor > External Editor**, enable "Use External Editor", and point it at your VS Code executable. Now double-clicking a script in Godot opens it in VS Code.
@@ -262,7 +262,7 @@ godot --path . --fixed-fps 60 -s res://tests/arena_3d_test.gd -- --capture
 
 The integration test covers depth movement, diagonal speed, jumping/landing, walls, pushboxes, 3D hits and misses, guard, pause, AI depth tracking, roster changes and round resets. The rendered check writes `.godot/arena-3d-review.png`.
 
-Validated with Godot 4.5.1 using the Compatibility renderer.
+Validated with Godot 4.7.2 using the Compatibility renderer.
 
 `arena_3d.gd` builds the world and reuses the existing round/HUD manager. `player_3d.gd` adapts shared `player.gd` combat rules to a `CharacterBody3D` at 64 combat units per metre. Its inherited 2D collision is disabled; `hit_detection_3d.gd` resolves actual 3D strike volumes. `fighter_visual_3d.gd` places articulated meshes directly under the fighter's world rig. `ai_controller_3d.gd` measures 3D separation while retaining the original AI decisions. The HUD remains a canvas overlay.
 
