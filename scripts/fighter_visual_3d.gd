@@ -17,6 +17,9 @@ var _signature: String = ""
 var _turn_rotation: float = 0.0
 var _turn_initialized: bool = false
 var likeness := preload("res://scripts/fighter_likeness.gd").new()
+## Skinned, animated model used instead of the procedural rig for fighters
+## that have one (see fighter_models.gd).
+var animated := preload("res://scripts/fighter_animated.gd").new()
 
 func _ready() -> void:
 	# Dedicated/headless simulations need poses and collision, not GPU meshes.
@@ -261,10 +264,13 @@ func _update_profile() -> void:
 		parts[side + "_forearm"].material_override = materials.cloth if _outfit in ["suit", "gi"] else materials.skin
 		parts[side + "_anklet"].visible = _signature == "anklets"
 	likeness.configure(self, profile)
+	animated.configure(self, profile)
 
 func _process(delta: float) -> void:
 	super._process(delta)
 	if model == null or fighter == null or fighter.combat_paused or fighter.hitstop_remaining > 0.0:
+		# Still called so the animated model freezes with the fight.
+		animated.update(delta)
 		return
 	scale.x = 1.0
 	var target_turn := 0.0 if fighter.facing >= 0 else PI
@@ -276,6 +282,7 @@ func _process(delta: float) -> void:
 		# `rotation` (hit reactions, etc.) is carried over as a Z-spin instead.
 		model.rotation.z = -rotation
 	_update_model()
+	animated.update(delta)
 
 func _point(point: Vector2, depth: float = 0.0) -> Vector3:
 	return Vector3(point.x, -point.y - (64.0 if world_root == null else 0.0), depth)
