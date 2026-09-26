@@ -7,7 +7,7 @@ func _ready() -> void:
 	super._ready()
 	MatchSetup.vs_ai = previous_ai
 	$UI/P2Label.text = player2.character_profile.name + " / PRACTICE DUMMY"
-	$UI/ControlsHint.text = "A/D WALK   W/S SIDESTEP   SHIFT + FORWARD RUN   DOUBLE-TAP + HOLD FORWARD TO RUN\nF PUNCH   G KICK   H THROW   E GUARD   SPACE JUMP   R RESET   F1 MOVES   ESC MENU"
+	$UI/ControlsHint.text = "A/D WALK   W/S SIDESTEP   SHIFT + FORWARD RUN   DOUBLE-TAP + HOLD FORWARD TO RUN\nF PUNCH   G KICK   H THROW   E GUARD   SPACE JUMP   R RESET   F1 MOVES   ESC PAUSE"
 
 func _begin_round(index: int) -> void:
 	super._begin_round(index)

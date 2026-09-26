@@ -110,15 +110,61 @@ func _ready() -> void:
 	_update_pips()
 	_begin_round(0)
 
+## Esc opens the pause menu (pause_menu.gd) instead of leaving the fight.
+var pause_menu: Control
+
+func _build_pause_menu() -> void:
+	pause_menu = preload("res://scripts/pause_menu.gd").new()
+	pause_menu.arena = self
+	$UI.add_child(pause_menu)
+	pause_menu.resume_requested.connect(_resume)
+	pause_menu.move_list_requested.connect(func():
+		_resume()
+		_toggle_move_guide())
+	pause_menu.quit_requested.connect(func(): get_tree().change_scene_to_file("res://scenes/MainMenu.tscn"))
+
+func is_paused() -> bool:
+	return is_instance_valid(pause_menu) and pause_menu.visible
+
+func _pause() -> void:
+	if not is_instance_valid(pause_menu):
+		_build_pause_menu()
+	_freeze(true)
+	pause_menu.open()
+
+func _resume() -> void:
+	if is_paused():
+		pause_menu.close()
+		_freeze(false)
+		preload("res://scripts/sfx.gd").fire("menu_back")
+
+## Stops or restarts both fighters and the round clock, as the move guide does.
+func _freeze(on: bool) -> void:
+	if on:
+		_resume_physics.assign([player1.is_physics_processing(), player2.is_physics_processing()])
+		player1.set_physics_process(false)
+		player2.set_physics_process(false)
+	else:
+		player1.set_physics_process(_resume_physics[0])
+		player2.set_physics_process(_resume_physics[1])
+	player1.combat_paused = on
+	player2.combat_paused = on
+
+## Esc is handled as an event, not polled, so a quick tap is never missed.
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("ui_cancel") or event.is_echo() or is_paused():
+		return
+	get_viewport().set_input_as_handled()
+	if move_guide.visible:
+		_toggle_move_guide()
+	else:
+		_pause()
+
 func _process(delta: float) -> void:
+	if is_paused():
+		return
 	if Input.is_action_just_pressed("move_list"):
 		_toggle_move_guide()
-	if Input.is_action_just_pressed("ui_cancel"):
-		if move_guide.visible:
-			_toggle_move_guide()
-			return
-		get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
-		return
 	_update_combo_ui()
 	if move_guide.visible:
 		return
@@ -265,7 +311,7 @@ func _begin_round(index: int) -> void:
 
 	_show_banner(index, fight_style)
 	var p2_hint := "P2 is AI-controlled" if MatchSetup.vs_ai else "P2   Arrows move/jump   Down guard   K/L attack"
-	$UI/ControlsHint.text = "P1   A/D move   W jump   S guard   F/G attack        |        %s\nHOLD SHIFT (P1) / CTRL (P2) TO RUN    /    DOUBLE-TAP DASH    /    F1 MOVES    /    ESC MENU" % p2_hint
+	$UI/ControlsHint.text = "P1   A/D move   W jump   S guard   F/G attack        |        %s\nHOLD SHIFT (P1) / CTRL (P2) TO RUN    /    DOUBLE-TAP DASH    /    F1 MOVES    /    ESC PAUSE" % p2_hint
 
 func _build_move_ui() -> void:
 	for player in 2:

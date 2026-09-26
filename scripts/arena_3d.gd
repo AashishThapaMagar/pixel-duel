@@ -123,7 +123,7 @@ func _begin_round(index: int) -> void:
 	if MatchSetup.arcade:
 		place += "   /   " + ("FINAL BOSS" if MatchSetup.is_final_boss() else "RIVAL %d OF %d" % [MatchSetup.arcade_index + 1, MatchSetup.arcade_opponents.size()])
 	banner_tagline.text = place
-	$UI/ControlsHint.text = "P1  A/D move  W/S sidestep  |  F punch  G kick  E guard     |     P2  Left/Right move  Up/Down sidestep  |  K punch  L kick  O guard\nH / J grapple   |   Space / Enter jump   |   F1 combos     |     Esc menu"
+	$UI/ControlsHint.text = "P1  A/D move  W/S sidestep  |  F punch  G kick  E guard     |     P2  Left/Right move  Up/Down sidestep  |  K punch  L kick  O guard\nH / J grapple   |   Space / Enter jump   |   F1 combos     |     Esc pause"
 	guide_text.text = guide_text.text.replace("Down is S (P1) / Down arrow (P2).", "Hold E (P1) / O (P2) for the command's down input.")
 	guide_text.text = "MOVEMENT: A/D or Left/Right approach and retreat. W/S or Up/Down make short sidesteps. Space / Enter jump. E / O guard.\nForward and back are relative to your opponent. Sidestep committed strikes to evade them.\n\n" + guide_text.text
 	camera_target = Vector3(0, CAMERA_HEIGHT, 0)
@@ -140,7 +140,7 @@ func _process(delta: float) -> void:
 	super._process(delta)
 	if not is_instance_valid(player1) or player1.body == null:
 		return
-	if move_guide.visible:
+	if move_guide.visible or is_paused():
 		return
 	_update_fight_camera(delta)
 	shake_3d = move_toward(shake_3d, 0.0, delta * 0.65)
