@@ -7,24 +7,38 @@ extends RefCounted
 ##
 ## Attacks are scrubbed rather than played: the fighter's own attack_timer
 ## picks the frame, so the blow lands exactly on the active frames, and
-## hitstop or the pause menu freeze it for free. Loops are played normally
-## and frozen by zeroing the player's speed.
+## hitstop or the pause menu freeze it for free. Loops are advanced by hand
+## each frame (frozen at speed 0), then the guard overlay is applied.
+##
+## Guard overlay: while stepping, backing up, sidestepping or dashing, the
+## spine, arms and head keep the boxing guard from the idle clip and only the
+## legs use the locomotion clip, the way fighting games layer upper and lower
+## body. Locomotion clips play at the speed that matches the fighter's real
+## ground speed (measured from how far each clip travels) so feet don't skate.
 const MODELS := preload("res://scripts/fighter_models.gd")
 ## Missing logical clips fall back along these links until one exists.
 const FALLBACK := {
-	"walk_back": "walk", "sidestep": "walk", "run": "walk", "dash": "run",
+	"walk_back": "walk", "sidestep": "walk", "run": "walk", "dash": "run", "backdash": "walk_back",
 	"land": "idle", "block_hit": "block", "block": "idle", "hit_heavy": "hit",
 	"hit": "idle", "punch_heavy": "jab", "kick_spin": "kick", "kick_front": "kick", "grapple": "jab",
 	"taunt": "idle", "jump": "idle", "ko": "idle", "kick": "jab", "jab": "idle",
 }
 ## Attack variants (from move data poses) that use the heavy-punch clip.
 const HEAVY_PUNCHES := ["cross", "hook", "rear_hook", "uppercut", "overhand", "backfist", "body_hook"]
-const LOOPING := ["idle", "walk", "walk_back", "sidestep", "run", "dash", "block", "injured"]
+const LOOPING := ["idle", "walk", "walk_back", "sidestep", "run", "dash", "backdash", "block", "injured"]
+## Movement that keeps the guard up on the upper body.
+const GUARDED := ["walk", "walk_back", "sidestep", "dash", "backdash"]
+## Bones the guard overlay drives (substring match on the bone name).
+const UPPER_BODY := ["Spine", "Neck", "Head", "Shoulder", "Arm", "Hand"]
+## Playback speed limits for locomotion: beyond these the legs look frantic
+## (too fast) or floaty (too slow), so a little foot slide is accepted.
+const MOVE_SPEED_RANGE := {"walk": [0.6, 2.4], "walk_back": [0.6, 2.4], "sidestep": [0.6, 2.4],
+	"run": [0.6, 1.8], "injured": [0.6, 2.0], "dash": [1.0, 2.2], "backdash": [1.2, 3.0]}
 ## Health fraction at or below which forward movement limps.
 const INJURED_HEALTH := 0.25
 ## Locomotion clips whose hips must not travel: the game moves the fighter,
 ## so baked-in forward motion would drift and snap back every loop.
-const IN_PLACE := ["walk", "walk_back", "sidestep", "run", "dash", "injured"]
+const IN_PLACE := ["walk", "walk_back", "sidestep", "run", "dash", "backdash", "injured"]
 var visual: Node
 var root: Node3D
 var character: Node3D
@@ -36,6 +50,15 @@ var active := false
 var _last_state := -1
 ## Set from the fighter's impact signal: kicks land as heavy hits.
 var last_hit_heavy := false
+## Metres per second each locomotion clip travels at normal speed, keyed by
+## animation name (measured before its hips are pinned).
+var clip_pace: Dictionary = {}
+var skeleton: Skeleton3D
+var guard_clip: Animation
+## [track, bone] pairs of the idle clip's upper-body rotation tracks.
+var guard_tracks: Array = []
+var guard_weight := 0.0
+var guard_time := 0.0
 
 func configure(owner_visual: Node, profile: Dictionary) -> void:
 	visual = owner_visual
@@ -63,8 +86,11 @@ func configure(owner_visual: Node, profile: Dictionary) -> void:
 	if player == null:
 		player = AnimationPlayer.new()
 		character.add_child(player)
+	# Advanced by hand in update(), so the guard overlay lands after the clip.
+	player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	_add_clip_files()
 	_resolve_clips()
+	_prepare_guard()
 	_fit(float(config.get("height", 1.8)))
 	visual.model.visible = false
 	active = true
@@ -124,15 +150,17 @@ func _add_clip_files() -> void:
 					if path.get_subname_count() > 0:
 						animation.track_set_path(track, NodePath(str(to_skeleton) + ":" + path.get_concatenated_subnames()))
 				if key in IN_PLACE:
-					_pin_hips(animation)
+					clip_pace["files/" + key] = _pin_hips(animation)
 				library.add_animation(key, animation)
 				break
 		scene.free()
 	player.add_animation_library("files", library)
 
 ## Holds the root bone's horizontal position at its first key (keeping the
-## up-down bob), making a travelling clip play in place.
-func _pin_hips(animation: Animation) -> void:
+## up-down bob), making a travelling clip play in place. Returns how fast
+## the clip travelled, in metres per second.
+func _pin_hips(animation: Animation) -> float:
+	var pace := 0.0
 	for track in animation.get_track_count():
 		if animation.track_get_type(track) != Animation.TYPE_POSITION_3D:
 			continue
@@ -140,9 +168,28 @@ func _pin_hips(animation: Animation) -> void:
 		if not bone.to_lower().ends_with("hips") and bone != "root":
 			continue
 		var first: Vector3 = animation.track_get_key_value(track, 0)
+		var last: Vector3 = animation.track_get_key_value(track, animation.track_get_key_count(track) - 1)
+		pace = Vector2(last.x - first.x, last.z - first.z).length() / maxf(animation.length, 0.01)
 		for key in animation.track_get_key_count(track):
 			var value: Vector3 = animation.track_get_key_value(track, key)
 			animation.track_set_key_value(track, key, Vector3(first.x, value.y, first.z))
+	return pace
+
+## Finds the idle clip's upper-body rotation tracks for the guard overlay.
+func _prepare_guard() -> void:
+	var skeletons := character.find_children("*", "Skeleton3D", true, false)
+	if skeletons.is_empty() or not clip_names.has("idle"):
+		return
+	skeleton = skeletons[0]
+	guard_clip = player.get_animation(clip_names.idle)
+	for track in guard_clip.get_track_count():
+		if guard_clip.track_get_type(track) != Animation.TYPE_ROTATION_3D:
+			continue
+		var bone_name := String(guard_clip.track_get_path(track).get_concatenated_subnames())
+		if UPPER_BODY.any(func(part): return bone_name.contains(part)):
+			var bone := skeleton.find_bone(bone_name)
+			if bone >= 0:
+				guard_tracks.append([track, bone])
 
 func _resolve_clips() -> void:
 	var available := player.get_animation_list()
@@ -184,7 +231,7 @@ func update(delta: float) -> void:
 		S.WALK:
 			logical = _move_clip(fighter)
 		S.DASH:
-			logical = "dash"
+			logical = "dash" if fighter._dash_dir == fighter.facing else "backdash"
 		S.JUMP, S.JUMP_START:
 			logical = "jump"
 		S.LAND:
@@ -203,12 +250,28 @@ func update(delta: float) -> void:
 	var entered := state != _last_state
 	_last_state = state
 	if logical in ["jab", "punch_heavy", "kick", "kick_spin", "kick_front", "grapple"]:
+		guard_weight = 0.0
 		_scrub_attack(fighter, logical, clip)
 		return
 	if clip != current or (entered and not logical in LOOPING):
 		player.play(clip, 0.12)
 		current = clip
-	player.speed_scale = 0.0 if frozen else _loop_speed(fighter, logical)
+	player.speed_scale = 0.0 if frozen else _loop_speed(fighter, logical, clip)
+	player.advance(delta)
+	if not frozen:
+		guard_time += delta
+		guard_weight = move_toward(guard_weight, 1.0 if logical in GUARDED else 0.0, delta * 8.0)
+	_apply_guard()
+
+## Blends the upper body toward the idle clip's boxing guard.
+func _apply_guard() -> void:
+	if guard_weight <= 0.0 or guard_clip == null:
+		return
+	var t := fmod(guard_time, guard_clip.length)
+	for pair in guard_tracks:
+		var guard: Quaternion = guard_clip.rotation_track_interpolate(pair[0], t)
+		var pose := skeleton.get_bone_pose_rotation(pair[1])
+		skeleton.set_bone_pose_rotation(pair[1], pose.slerp(guard, guard_weight))
 
 func _attack_clip(fighter: Node) -> String:
 	var variant: String = fighter.attack_variant
@@ -240,15 +303,19 @@ func _move_clip(fighter: Node) -> String:
 		return "walk_back"
 	return "injured" if hurt else "walk"
 
-## Loops keep pace with the fighter; walking back plays the walk reversed
-## when there's no dedicated clip.
-func _loop_speed(fighter: Node, logical: String) -> float:
+## Locomotion plays at the speed that matches the fighter's ground speed;
+## walking back plays the walk reversed when there's no dedicated clip.
+func _loop_speed(fighter: Node, logical: String, clip: String) -> float:
 	var body = fighter.get("body")
-	if body == null or not logical in ["walk", "walk_back", "sidestep", "run", "dash", "injured"]:
+	if body == null or not MOVE_SPEED_RANGE.has(logical):
 		return 1.0
-	var pace: float = Vector3(body.velocity.x, 0.0, body.velocity.z).length()
-	var speed := clampf(pace / 1.6, 0.6, 1.8)
-	var reversed: bool = logical == "walk_back" and clip_names.get("walk_back") == clip_names.get("walk")
+	# Body velocity is in combat time; the fight runs at COMBAT_TEMPO.
+	var tempo: float = fighter.get_script().get_script_constant_map().get("COMBAT_TEMPO", 1.0)
+	var pace: float = Vector3(body.velocity.x, 0.0, body.velocity.z).length() * tempo
+	var native: float = clip_pace.get(clip, 0.0)
+	var limits: Array = MOVE_SPEED_RANGE[logical]
+	var speed: float = clampf(pace / native if native > 0.2 else pace / 1.6, limits[0], limits[1])
+	var reversed: bool = logical in ["walk_back", "backdash"] and clip_names.get(logical) == clip_names.get("walk")
 	return -speed if reversed else speed
 
 ## Maps attack_timer onto the clip: wind-up covers the clip up to its
