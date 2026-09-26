@@ -20,6 +20,9 @@ const FALLBACK := {
 ## Attack variants (from move data poses) that use the heavy-punch clip.
 const HEAVY_PUNCHES := ["cross", "hook", "rear_hook", "uppercut", "overhand", "backfist", "body_hook"]
 const LOOPING := ["idle", "walk", "walk_back", "sidestep", "run", "dash", "block"]
+## Locomotion clips whose hips must not travel: the game moves the fighter,
+## so baked-in forward motion would drift and snap back every loop.
+const IN_PLACE := ["walk", "walk_back", "sidestep", "run", "dash"]
 var visual: Node
 var root: Node3D
 var character: Node3D
@@ -98,17 +101,37 @@ func _add_clip_files() -> void:
 		var source_players := scene.find_children("*", "AnimationPlayer", true, false)
 		if not source_players.is_empty():
 			var from: AnimationPlayer = source_players[0]
-			for name in from.get_animation_list():
+			# Mixamo files also carry a leftover bind-pose "Take 001"; the
+			# real clip is "mixamo_com", otherwise take the longest.
+			var names := Array(from.get_animation_list())
+			names.sort_custom(func(x, y): return x == "mixamo_com" or (y != "mixamo_com" and from.get_animation(x).length > from.get_animation(y).length))
+			for name in names:
 				var animation: Animation = from.get_animation(name).duplicate()
 				# Point every bone track at this character's skeleton.
 				for track in animation.get_track_count():
 					var path := animation.track_get_path(track)
 					if path.get_subname_count() > 0:
 						animation.track_set_path(track, NodePath(str(to_skeleton) + ":" + path.get_concatenated_subnames()))
+				if key in IN_PLACE:
+					_pin_hips(animation)
 				library.add_animation(key, animation)
 				break
 		scene.free()
 	player.add_animation_library("files", library)
+
+## Holds the root bone's horizontal position at its first key (keeping the
+## up-down bob), making a travelling clip play in place.
+func _pin_hips(animation: Animation) -> void:
+	for track in animation.get_track_count():
+		if animation.track_get_type(track) != Animation.TYPE_POSITION_3D:
+			continue
+		var bone := String(animation.track_get_path(track).get_concatenated_subnames())
+		if not bone.to_lower().ends_with("hips") and bone != "root":
+			continue
+		var first: Vector3 = animation.track_get_key_value(track, 0)
+		for key in animation.track_get_key_count(track):
+			var value: Vector3 = animation.track_get_key_value(track, key)
+			animation.track_set_key_value(track, key, Vector3(first.x, value.y, first.z))
 
 func _resolve_clips() -> void:
 	var available := player.get_animation_list()
@@ -224,11 +247,20 @@ func _scrub_attack(fighter: Node, logical: String, clip: String) -> void:
 		player.play(clip, 0.0)
 		current = clip
 	player.speed_scale = 0.0
+	# Part of the clip to use: [start, impact, end] seconds from "timing",
+	# or the whole clip with the impact at the "impact" fraction.
+	var cut: Array = config.get("timing", {}).get(logical, [])
+	var start := 0.0
+	var end := animation.length
 	var impact: float = float(config.get("impact", {}).get(logical, 0.45)) * animation.length
+	if cut.size() == 3:
+		start = cut[0]
+		impact = cut[1]
+		end = minf(cut[2], animation.length)
 	var startup: float = fighter.attack_startup()
 	var total: float = maxf(fighter.attack_duration(), startup + 0.01)
 	var t: float = fighter.attack_timer
-	var position := impact * clampf(t / maxf(startup, 0.001), 0.0, 1.0)
+	var position := start + (impact - start) * clampf(t / maxf(startup, 0.001), 0.0, 1.0)
 	if t > startup:
-		position = impact + (animation.length - impact) * clampf((t - startup) / (total - startup), 0.0, 1.0)
+		position = impact + (end - impact) * clampf((t - startup) / (total - startup), 0.0, 1.0)
 	player.seek(minf(position, animation.length - 0.001), true)

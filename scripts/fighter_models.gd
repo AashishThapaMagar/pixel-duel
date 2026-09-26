@@ -21,10 +21,36 @@ extends RefCounted
 ## land, block, block_hit, hit, hit_heavy, ko, jab, punch_heavy, kick,
 ## kick_spin, grapple, taunt.
 const MODELS := {
-	# Test dummy wired to Anug: Kenney "Mini Characters" (CC0), a simple
-	# 7-bone rig with idle/walk/sprint/jump/punch/kick/die clips. Proves the
-	# pipeline; replace with the real Anug model when it's ready.
+	# Mixamo X Bot with Mixamo animations. The files were downloaded "With
+	# Skin", so each one carries the body; idle.fbx supplies it. No kick clip
+	# yet: kicks borrow the body jab until one is downloaded.
 	"anug": {
+		"scene": "res://assets/fighters/anug/idle.fbx",
+		"enabled": true,
+		"height": 1.8,
+		"yaw": PI / 2.0,
+		"files": {
+			"idle": "res://assets/fighters/anug/idle.fbx",
+			"walk": "res://assets/fighters/anug/walking.fbx",
+			"walk_back": "res://assets/fighters/anug/walking_backwards.fbx",
+			"jab": "res://assets/fighters/anug/lead_jab.fbx",
+			"cross": "res://assets/fighters/anug/jab_cross.fbx",
+			"body": "res://assets/fighters/anug/body_jab_cross.fbx",
+			"hit": "res://assets/fighters/anug/head_hit.fbx",
+			"ko": "res://assets/fighters/anug/knocked_out.fbx",
+		},
+		"clips": {
+			"idle": "idle", "walk": "walk", "walk_back": "walk_back", "jab": "jab",
+			"punch_heavy": "cross", "kick": "body", "hit": "hit", "ko": "ko",
+		},
+		# [start, impact, end] seconds, measured from where each fist is
+		# fully extended. Jab Cross is two punches; heavy punches use the cross.
+		"timing": {"jab": [0.0, 0.5, 1.2], "punch_heavy": [0.45, 0.7, 1.5], "kick": [0.1, 0.4, 1.0]},
+	},
+	# Test dummy: Kenney "Mini Characters" (CC0), a simple 7-bone rig with
+	# idle/walk/sprint/jump/punch/kick/die clips. Kept as a pipeline example
+	# under an unused id; rename the key to a fighter id to try it.
+	"kenney_test": {
 		"scene": "res://assets/fighters/test-kenney/character-male-a.glb",
 		"enabled": false,
 		"height": 1.85,

@@ -79,4 +79,11 @@ reversed, `hit_heavy` uses `hit`, and so on), so start with `idle`, `walk`,
 `jab`, `kick`, `hit` and `ko` and add the rest later.
 
 Mixamo's licence allows using its characters and animations in your game;
-it doesn't allow sharing the raw files on their own.
+it doesn't allow sharing the raw files on their own. The `.fbx` files are
+therefore listed in `.gitignore` and stay on your machine; a copy of the
+project without them falls back to the procedural fighter automatically.
+
+Anug currently uses the Mixamo X Bot with Idle, Walking, Walking Backwards,
+Lead Jab, Jab Cross, Body Jab Cross, Head Hit and Knocked Out (in
+`assets/fighters/anug/`). It has no kick clip yet, so kicks borrow the body
+jab; download a kick (e.g. "Mma Kick") to fix that.

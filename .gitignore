@@ -14,3 +14,8 @@ data_*/
 # System / editor files
 .DS_Store
 Thumbs.db
+
+# Mixamo downloads: usable in the game, but not to be redistributed as raw
+# files. Keep them local; fighters without them use the procedural rig.
+assets/fighters/*/*.fbx
+assets/fighters/*/*.fbx.import
