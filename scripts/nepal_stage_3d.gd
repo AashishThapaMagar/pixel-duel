@@ -36,7 +36,7 @@ const IMPORTED_SURFACE := preload("res://scripts/arena_surface.gdshader")
 const FLAG_COLORS := [Color("2f6fc4"), Color("f1ede2"), Color("c8342c"), Color("2f8f4e"), Color("e6b62f")]
 ## Per-round ambient life: [kind, colour, amount].
 const AMBIENCE := [
-	["dust", Color(1.0, 0.94, 0.8, 0.5), 26],
+	["none", Color(0, 0, 0, 0), 0],
 	["embers", Color(1.0, 0.7, 0.32, 0.9), 34],
 	["petals", Color(0.86, 0.2, 0.27, 0.95), 40],
 	["sky_lanterns", Color(1.0, 0.66, 0.3, 0.95), 16],
@@ -165,6 +165,15 @@ var materials: Dictionary = {}
 var flags: Array[Node3D] = []
 var lamp_lights: Array[OmniLight3D] = []
 var lanterns: Array[Node3D] = []
+## Dashain kites (changa) in the daytime rounds: each entry is
+## [kite pivot, string segment, anchor point, drift phase].
+var kites: Array = []
+## Bright paper colours, paired for the two-tone diagonal split.
+const KITE_COLORS := [
+	[Color("e02b35"), Color("ffd23f")], [Color("1f6fd1"), Color("f5f1e6")],
+	[Color("12a150"), Color("ff7a1a")], [Color("7b2fbf"), Color("ffcf33")],
+	[Color("ff4f8b"), Color("2dc3d6")], [Color("f5f1e6"), Color("e02b35")],
+]
 var fade: ColorRect
 
 func _ready() -> void:
@@ -201,6 +210,7 @@ func show_round(index: int) -> void:
 	flags.clear()
 	lamp_lights.clear()
 	lanterns.clear()
+	kites.clear()
 	content = Node3D.new()
 	content.name = "HeritageScenery"
 	add_child(content)
@@ -211,6 +221,8 @@ func show_round(index: int) -> void:
 	_fight_lighting()
 	_arena_inlay()
 	_ambience()
+	if not night:
+		_kites()
 	if changing:
 		_fade_in()
 
@@ -432,6 +444,8 @@ func animate(delta: float) -> void:
 		flags[i].rotation.z = sin(elapsed * 2.3 - i * 0.4) * 0.08
 	for i in lanterns.size():
 		lanterns[i].rotation.z = sin(elapsed * 1.6 + i * 0.9) * 0.06
+	for kite in kites:
+		_fly_kite(kite)
 	for i in lamp_lights.size():
 		var flicker := 0.86 + 0.14 * sin(elapsed * 11.0 + i * 2.1) * sin(elapsed * 4.7 + i)
 		lamp_lights[i].light_energy = lamp_lights[i].get_meta("base") * flicker
@@ -915,8 +929,84 @@ func _butter_lamps() -> void:
 
 ## Per-round atmosphere: courtyard dust, lantern embers, drifting rhododendron
 ## petals and, for the finale, sky lanterns rising behind the stupa.
+## Dashain kites: two-tone diamond paper kites flown from the rooftops,
+## strings trailing down out of sight behind the houses.
+func _kites() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7 + current_round
+	var diamond := ArrayMesh.new()
+	# Two triangles split along the diagonal, so each half takes a colour.
+	for half in 2:
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		var side := -1.0 if half == 0 else 1.0
+		arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3(0, 0.75, 0), Vector3(0, -0.75, 0), Vector3(side * 0.62, 0.08, 0)])
+		arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array([Vector3.BACK, Vector3.BACK, Vector3.BACK])
+		diamond.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var stick := BoxMesh.new()
+	var string_mesh := CylinderMesh.new()
+	string_mesh.top_radius = 0.02
+	string_mesh.bottom_radius = 0.02
+	string_mesh.height = 1.0
+	string_mesh.radial_segments = 4
+	var string_material := _flat("kite_string", Color(0.95, 0.93, 0.88, 0.85))
+	for i in 12:
+		var pivot := Node3D.new()
+		# Spread across the sky above the square and the valley beyond.
+		# Height is set by elevation angle from the fight camera (eye ~1.4 m
+		# up, ~5 m in front of the dais): 7.5-9.5 degrees is the band of sky
+		# between the fighters' heads and the HUD, whatever the distance.
+		var z := rng.randf_range(-78.0, -40.0)
+		var elevation := deg_to_rad(rng.randf_range(7.8, 9.4))
+		var home := Vector3(rng.randf_range(-24.0, 24.0), 1.4 + (4.9 - z) * tan(elevation), z)
+		pivot.position = home
+		# Drawn larger than life so they read at this distance.
+		pivot.scale = Vector3.ONE * rng.randf_range(3.4, 4.8)
+		content.add_child(pivot)
+		var pair: Array = KITE_COLORS[i % KITE_COLORS.size()]
+		var kite := MeshInstance3D.new()
+		kite.mesh = diamond
+		kite.set_surface_override_material(0, _flat("kite_%d_a" % (i % KITE_COLORS.size()), pair[0]))
+		kite.set_surface_override_material(1, _flat("kite_%d_b" % (i % KITE_COLORS.size()), pair[1]))
+		kite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		pivot.add_child(kite)
+		# Bamboo spine and bow.
+		for spar in [[Vector3(0.018, 1.5, 0.018), 0.0], [Vector3(1.24, 0.018, 0.018), 0.08]]:
+			var s := _piece(stick, Vector3(0, spar[1], -0.01), _flat("bamboo", Color("c9a86a")), pivot)
+			s.scale = spar[0]
+			s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# A small paper tassel at the tail.
+		var tail := _piece(stick, Vector3(0, -0.92, 0), _flat("kite_%d_a" % (i % KITE_COLORS.size()), pair[0]), pivot)
+		tail.scale = Vector3(0.16, 0.34, 0.01)
+		# The string runs to a rooftop far below and behind, out of view.
+		var anchor := Vector3(home.x * 0.6 + rng.randf_range(-6.0, 6.0), 4.5, home.z + rng.randf_range(10.0, 18.0))
+		var line := _piece(string_mesh, Vector3.ZERO, string_material)
+		line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		kites.append([pivot, line, anchor, rng.randf() * TAU, home])
+		_fly_kite(kites[-1])
+
+## Wind makes each kite bob, drift and rock; now and then it swoops.
+func _fly_kite(kite: Array) -> void:
+	var pivot: Node3D = kite[0]
+	var line: MeshInstance3D = kite[1]
+	var anchor: Vector3 = kite[2]
+	var phase: float = kite[3]
+	var home: Vector3 = kite[4]
+	var t := elapsed + phase * 3.0
+	var swoop := pow(maxf(sin(t * 0.23 + phase), 0.0), 8.0)
+	pivot.position = home + Vector3(sin(t * 0.41 + phase) * 2.2 + swoop * 3.0, sin(t * 0.67) * 0.5 - swoop * 0.8, cos(t * 0.29) * 1.2)
+	pivot.rotation = Vector3(0.15 + sin(t * 0.9) * 0.08, sin(t * 0.37) * 0.35, sin(t * 1.3 + phase) * 0.22 + swoop * 1.1)
+	# String from the kite's nose-down bridle point to its rooftop anchor.
+	var from := pivot.position + pivot.basis * Vector3(0, -0.2, 0.05)
+	var run := anchor - from
+	line.position = from + run * 0.5
+	line.basis = Basis(Quaternion(Vector3.UP, run.normalized()))
+	line.scale = Vector3(1, run.length(), 1)
+
 func _ambience() -> void:
 	var spec: Array = AMBIENCE[current_round]
+	if spec[0] == "none":
+		return
 	var particles := CPUParticles3D.new()
 	particles.name = "Ambience"
 	particles.amount = spec[2]
