@@ -10,24 +10,36 @@ var next_button: Button
 var result_detail: Label
 var stamina_bars: Array[ProgressBar] = []
 var callout_style := false
+## Hand-drawn gauges and clock plate (hud_gauges.gd); the ProgressBars
+## below stay as invisible data holders for combat code and tests.
+var gauges: Control
 
 func _ready() -> void:
 	arena = get_parent()
 	var layer: CanvasLayer = arena.get_node("UI")
-	var backdrop := UI.panel(layer, Vector2(20, 12), Vector2(920, 64), Color("0e1320dd"))
-	layer.move_child(backdrop, 0)
-	var timer_plate := UI.panel(layer, Vector2(427, 12), Vector2(106, 64), UI.PANEL, UI.LIME)
-	layer.move_child(timer_plate, 1)
-	UI.panel(layer, Vector2(0, 504), Vector2(960, 36), UI.INK).z_index = -1
+	gauges = preload("res://scripts/hud_gauges.gd").new()
+	gauges.hud = self
+	gauges.arena = arena
+	layer.add_child(gauges)
+	layer.move_child(gauges, 0)
+	UI.panel(layer, Vector2(0, 506), Vector2(960, 34), Color(0.0, 0.0, 0.02, 0.5)).z_index = -1
 	for i in 2:
 		var color := UI.LIME if i == 0 else UI.VIOLET
 		var x := 36.0 if i == 0 else 552.0
 		var bar: ProgressBar = arena.health_bar1 if i == 0 else arena.health_bar2
 		var name_label: Label = layer.get_node("P1Label" if i == 0 else "P2Label")
-		name_label.position = Vector2(x, 13)
-		name_label.size = Vector2(372, 24)
-		name_label.add_theme_font_size_override("font_size", 17)
-		name_label.add_theme_color_override("font_color", color)
+		# Big italic fighter name under the gauge, outer-aligned.
+		name_label.position = Vector2(34 if i == 0 else 546, 52)
+		name_label.size = Vector2(380, 34)
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if i == 0 else HORIZONTAL_ALIGNMENT_RIGHT
+		name_label.add_theme_font_override("font", UI.display_font())
+		name_label.add_theme_font_size_override("font_size", 25)
+		name_label.add_theme_color_override("font_color", UI.WHITE)
+		name_label.add_theme_color_override("font_shadow_color", Color("d7263d") if i == 0 else Color("2f6fd1"))
+		name_label.add_theme_constant_override("shadow_offset_x", 3)
+		name_label.add_theme_constant_override("shadow_offset_y", 3)
+		name_label.add_theme_color_override("font_outline_color", UI.INK)
+		name_label.add_theme_constant_override("outline_size", 6)
 		bar.position = Vector2(x, 36)
 		bar.size = Vector2(372, 18)
 		bar.fill_mode = ProgressBar.FILL_BEGIN_TO_END if i == 0 else ProgressBar.FILL_END_TO_BEGIN
@@ -48,6 +60,8 @@ func _ready() -> void:
 		damage.set_deferred("size", Vector2(372, 18))
 		layer.move_child(damage, bar.get_index())
 		bar.add_theme_stylebox_override("background", StyleBoxEmpty.new())
+		bar.modulate.a = 0.0
+		damage.modulate.a = 0.0
 		damage_bars.append(damage)
 		damage_tweens.append(null)
 		var pips: Label = arena.pips1 if i == 0 else arena.pips2
@@ -55,6 +69,7 @@ func _ready() -> void:
 		pips.size = Vector2(372, 22)
 		pips.add_theme_color_override("font_color", color)
 		pips.add_theme_font_size_override("font_size", 15)
+		pips.hide()
 		var health := UI.label(layer, "100 / 100", Vector2(x + 245 if i == 0 else x, 70), Vector2(127, 20), 11, UI.MUTED)
 		health.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if i == 0 else HORIZONTAL_ALIGNMENT_LEFT
 		health.hide()
@@ -69,6 +84,7 @@ func _ready() -> void:
 		stamina_bar.add_theme_stylebox_override("fill", UI.box(Color("56cbbc"), Color("56cbbc"), 0))
 		layer.add_child(stamina_bar)
 		stamina_bar.set_deferred("size", Vector2(145, 6))
+		stamina_bar.visible = false
 		stamina_bars.append(stamina_bar)
 		UI.label(layer, "", Vector2(x + 90, 66), Vector2(145, 13), 8, UI.MUTED)
 		fighter.health_changed.connect(_health_changed.bind(i))
@@ -77,13 +93,25 @@ func _ready() -> void:
 		arena.combo_labels[i].add_theme_color_override("font_color", color)
 		arena.combo_labels[i].add_theme_color_override("font_outline_color", UI.INK)
 		arena.combo_labels[i].add_theme_constant_override("outline_size", 5)
-	arena.timer_label.position = Vector2(431, 9)
-	arena.timer_label.size = Vector2(98, 49)
-	arena.timer_label.add_theme_font_size_override("font_size", 38)
-	arena.round_label.position = Vector2(431, 54)
-	arena.round_label.size = Vector2(98, 20)
-	arena.round_label.add_theme_font_size_override("font_size", 11)
-	arena.round_label.add_theme_color_override("font_color", UI.LIME)
+	# Countdown in the shield plate: big italic numerals, red when low.
+	arena.timer_label.position = Vector2(426, 6)
+	arena.timer_label.size = Vector2(108, 56)
+	arena.timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	arena.timer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	arena.timer_label.add_theme_font_override("font", UI.display_font())
+	arena.timer_label.add_theme_font_size_override("font_size", 46)
+	arena.timer_label.add_theme_color_override("font_shadow_color", UI.CRIMSON)
+	arena.timer_label.add_theme_constant_override("shadow_offset_x", 2)
+	arena.timer_label.add_theme_constant_override("shadow_offset_y", 3)
+	arena.timer_label.add_theme_color_override("font_outline_color", UI.INK)
+	arena.timer_label.add_theme_constant_override("outline_size", 5)
+	arena.timer_label.pivot_offset = arena.timer_label.size * 0.5
+	arena.round_label.position = Vector2(430, 58)
+	arena.round_label.size = Vector2(100, 16)
+	arena.round_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	arena.round_label.add_theme_font_override("font", UI.strong_font())
+	arena.round_label.add_theme_font_size_override("font_size", 10)
+	arena.round_label.add_theme_color_override("font_color", UI.GOLD)
 	# No backing box: a big italic round call and one comment line float over
 	# the fight, outlined so they read against any arena.
 	arena.banner.color = Color(0, 0, 0, 0)
@@ -109,7 +137,7 @@ func _ready() -> void:
 	for child in layer.get_children():
 		if child is Button:
 			child.theme = UI.theme()
-			child.position = Vector2(815, 81)
+			child.position = Vector2(815, 92)
 			child.add_theme_font_size_override("font_size", 12)
 	arena.move_guide.theme = UI.theme()
 	arena.move_guide.add_theme_stylebox_override("panel", UI.box(UI.PANEL, UI.LIME))
@@ -141,6 +169,8 @@ func _ready() -> void:
 	hint.position = Vector2(12, 505)
 	hint.size = Vector2(936, 34)
 	hint.add_theme_font_size_override("font_size", 11)
+	hint.add_theme_font_override("font", UI.strong_font())
+	hint.add_theme_color_override("font_color", Color(UI.WHITE, 0.7))
 
 func _health_changed(health: int, maximum: int, player: int) -> void:
 	health_labels[player].text = "%d / %d" % [health, maximum]
@@ -218,4 +248,8 @@ func _process(_delta: float) -> void:
 			next_button.text = ("NEW RUN / R" if MatchSetup.is_final_boss() else "NEXT RIVAL / R") if won else "RETRY RIVAL / R"
 			if won and MatchSetup.is_final_boss():
 				result_detail.text = "ANANTA DEFEATED / ARCADE COMPLETE"
-	arena.timer_label.add_theme_color_override("font_color", UI.RED if arena.time_remaining <= 10 else UI.WHITE)
+	var low: bool = arena.time_remaining <= 10 and arena.round_active
+	arena.timer_label.add_theme_color_override("font_color", Color("ff5a4a") if low else UI.WHITE)
+	# The last ten seconds throb once per second.
+	var beat := fposmod(arena.time_remaining, 1.0)
+	arena.timer_label.scale = Vector2.ONE * (1.0 + (0.18 * beat * beat if low else 0.0))

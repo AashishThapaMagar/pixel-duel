@@ -24,6 +24,9 @@ var difficulty_picker: OptionButton
 var backdrop: Control
 ## Tekken-style portrait tiles behind each roster card.
 var tiles: Array[ColorRect] = []
+## Lightning-swirl backdrops behind the two big previews, in the chosen
+## fighter's colour.
+var preview_glows: Array[ColorRect] = []
 const TILE_SHADER := """shader_type canvas_item;
 // Arcade select-screen tile: a bright vertical gradient in the fighter's
 // colour with drifting purple lightning behind the portrait.
@@ -79,13 +82,13 @@ func _ready() -> void:
 	for player in 2:
 		_build_player(player)
 	if not MatchSetup.arcade:
-		UI.heading(self, "VS", Vector2(390, 112), Vector2(180, 100), 96, UI.GOLD, UI.CRIMSON).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		UI.heading(self, "VS", Vector2(390, 96), Vector2(180, 100), 90, UI.GOLD, UI.CRIMSON).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		if mode_id == "ai":
-			UI.label(self, "DIFFICULTY", Vector2(365, 211), Vector2(230, 20), 11, mode_accent).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			UI.label(self, "DIFFICULTY", Vector2(365, 214), Vector2(230, 20), 12, mode_accent).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			difficulty_picker = OptionButton.new()
 			for difficulty in ["RELAXED", "STANDARD", "CHALLENGING"]:
 				difficulty_picker.add_item(difficulty)
-			difficulty_picker.position = Vector2(370, 236)
+			difficulty_picker.position = Vector2(370, 238)
 			difficulty_picker.size = Vector2(220, 32)
 			difficulty_picker.select(MatchSetup.ai_difficulty)
 			difficulty_picker.item_selected.connect(func(index: int): MatchSetup.ai_difficulty = index)
@@ -165,6 +168,19 @@ func _build_player(player: int) -> void:
 	var color := UI.RED if player == 0 else UI.VIOLET
 	var frame := UI.panel(self, pos, dimensions, Color(color.darkened(0.7), 0.55), color, 0.08)
 	frame.visible = not (compact and mode_id == "story")
+	var glow := ColorRect.new()
+	glow.position = pos + Vector2(3, 3)
+	glow.size = dimensions - Vector2(6, 6)
+	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var look := ShaderMaterial.new()
+	look.shader = Shader.new()
+	look.shader.code = TILE_SHADER
+	look.set_shader_parameter("seed", 3.0 + player * 5.0)
+	glow.material = look
+	glow.modulate.a = 0.6
+	glow.visible = frame.visible
+	add_child(glow)
+	preview_glows.append(glow)
 	var portrait := PORTRAIT.new()
 	portrait.index = selections[player]
 	portrait.facing_left = player == 1
@@ -284,6 +300,9 @@ func _refresh() -> void:
 	for player in 2:
 		var profile := ROSTER.profile(selections[player])
 		portraits[player].show_fighter(selections[player])
+		var tint: Color = profile.color
+		preview_glows[player].material.set_shader_parameter("top_color", tint.lightened(0.25))
+		preview_glows[player].material.set_shader_parameter("bottom_color", tint.darkened(0.55))
 		names[player].text = profile.name
 		details[player].text = profile.title + "\n" + profile.trait
 		player_tabs[player].text = "P%d / %s" % [player + 1, "SELECTING" if editing_player == player else "SELECT"]

@@ -7,6 +7,10 @@ var facing_left := false
 var closeup := false
 ## Tekken-style head-and-shoulders shot from three-quarters front.
 var bust := false
+## Where the bust camera looks; follows the animated fighter's head bone,
+## since stances crouch or lean the head well away from a fixed height.
+var bust_target := Vector3(0, 104, 0)
+var bust_tracking := false
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -38,7 +42,8 @@ func _ready() -> void:
 	camera.far = 600
 	world.add_child(camera)
 	var height := 94.0 if closeup else 66.0
-	camera.position = Vector3(100, height + 15, 230)
+	# Mirrored for the right-hand preview so that fighter is seen from the front.
+	camera.position = Vector3(-100 if facing_left else 100, height + 15, 230)
 	camera.look_at(Vector3(0, height, 0))
 	if bust:
 		# Swing round to face the fighter, a little off-centre and just above
@@ -73,7 +78,27 @@ func _ready() -> void:
 	fighter.hurtbox.collision_layer = 0
 	show_fighter(index)
 
+func _process(_delta: float) -> void:
+	if not bust or fighter == null or camera == null:
+		return
+	var animated = fighter.get_node("Visual").animated
+	if not animated.active or animated.skeleton == null:
+		return
+	var head: int = animated.skeleton.find_bone("mixamorig_Head")
+	if head < 0:
+		return
+	var at: Vector3 = animated.skeleton.global_transform * animated.skeleton.get_bone_global_pose(head).origin
+	# Frame the face slightly above centre, with the shoulders below.
+	var goal := at + Vector3(0, -5, 0)
+	bust_target = goal if not bust_tracking else bust_target.lerp(goal, 0.15)
+	bust_tracking = true
+	var turn := deg_to_rad(30.0)
+	var facing := -1.0 if facing_left else 1.0
+	camera.position = bust_target + Vector3(facing * cos(turn) * 230, 10, sin(turn) * 230)
+	camera.look_at(bust_target)
+
 func show_fighter(value: int) -> void:
+	bust_tracking = false
 	index = value
 	if fighter != null:
 		fighter.apply_character(value)
