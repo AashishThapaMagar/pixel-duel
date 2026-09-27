@@ -176,7 +176,14 @@ func _build_player(player: int) -> void:
 		pos = Vector2(585, 88)
 		dimensions = Vector2(310, 210)
 	var color := UI.RED if player == 0 else UI.VIOLET
-	var frame := UI.panel(self, pos, dimensions, Color(color.darkened(0.7), 0.55), color, 0.08)
+	# A square frame that matches the picture inside it, with a thick player
+	# colour bar on the top edge and a thin one closing the bottom corner.
+	var frame := UI.panel(self, pos - Vector2(3, 3), dimensions + Vector2(6, 6), Color(0.02, 0.025, 0.05, 0.95), Color.TRANSPARENT)
+	var border := StyleBoxFlat.new()
+	border.bg_color = Color(0.02, 0.025, 0.05, 0.95)
+	border.border_color = color
+	border.set_border_width_all(2)
+	frame.add_theme_stylebox_override("panel", border)
 	# Arcade shows its rivals on the ladder instead of a second preview.
 	frame.visible = not compact
 	var glow := ColorRect.new()
@@ -189,7 +196,6 @@ func _build_player(player: int) -> void:
 	look.set_shader_parameter("seed", 3.0 + player * 5.0)
 	look.set_shader_parameter("aspect", dimensions.x / dimensions.y)
 	glow.material = look
-	glow.modulate.a = 0.85
 	glow.visible = frame.visible
 	add_child(glow)
 	preview_glows.append(glow)
@@ -197,19 +203,29 @@ func _build_player(player: int) -> void:
 	portrait.index = selections[player]
 	portrait.facing_left = player == 1
 	portrait.hero = not compact
-	portrait.position = pos - Vector2(0, 7)
+	portrait.position = pos
 	portrait.size = dimensions
+	portrait.clip_contents = true
 	add_child(portrait)
 	portrait.visible = not compact
 	portraits.append(portrait)
 	# The name sits in the corner away from the fighter, who stands toward
 	# the outside edge of the showcase.
 	var label := UI.heading(self, "", pos + Vector2(18, dimensions.y - 50), Vector2(dimensions.x - 36, 48), 18 if compact else 44, UI.WHITE, color.darkened(0.2))
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if compact else (HORIZONTAL_ALIGNMENT_LEFT if player == 0 else HORIZONTAL_ALIGNMENT_RIGHT)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if compact else (HORIZONTAL_ALIGNMENT_RIGHT if player == 0 else HORIZONTAL_ALIGNMENT_LEFT)
 	label.visible = not compact
 	names.append(label)
 	if not compact:
-		_build_stats(player, pos + (Vector2(16, 16) if player == 0 else Vector2(dimensions.x - STAT_WIDTH - 22, 16)))
+		# The fighter stands on the inner side facing out across the frame;
+		# stats take the far top corner and the name the far bottom corner.
+		_build_stats(player, pos + (Vector2(dimensions.x - STAT_WIDTH - 22, 16) if player == 0 else Vector2(16, 16)))
+		for bar in [[Vector2(0, -3), Vector2(dimensions.x * 0.4, 5)], [Vector2(dimensions.x * 0.75, dimensions.y), Vector2(dimensions.x * 0.25, 3)]]:
+			var accent := ColorRect.new()
+			accent.color = color
+			accent.position = pos + (bar[0] as Vector2) if player == 0 else pos + Vector2(dimensions.x - (bar[0] as Vector2).x - (bar[1] as Vector2).x, (bar[0] as Vector2).y)
+			accent.size = bar[1]
+			accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(accent)
 	var detail := UI.label(self, "", pos + Vector2(0, dimensions.y + 5), Vector2(dimensions.x, 42), 11, UI.WHITE)
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

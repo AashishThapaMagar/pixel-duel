@@ -51,10 +51,12 @@ func _ready() -> void:
 	camera.position = Vector3(-100 if facing_left else 100, height + 15, 230)
 	camera.look_at(Vector3(0, height, 0))
 	if hero:
-		camera.size = 118
-		camera.position = Vector3(-100 if facing_left else 100, 70, 230)
-		camera.look_at(Vector3(0, 56, 0))
-		camera.h_offset = 36.0 if facing_left else -36.0
+		# Three-quarters front with headroom above the tallest stance; the
+		# view slides so the fighter stands on the inner side of the frame.
+		camera.size = 128
+		camera.position = Vector3(-190 if facing_left else 190, 72, 160)
+		camera.look_at(Vector3(0, 60, 0))
+		camera.h_offset = -40.0 if facing_left else 40.0
 	if bust:
 		# Swing round to face the fighter, a little off-centre and just above
 		# eye level, as on an arcade select screen.
