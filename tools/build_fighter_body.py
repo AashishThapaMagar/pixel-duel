@@ -14,6 +14,7 @@ import os
 import sys
 
 import bmesh
+import numpy
 import bpy
 from mathutils import Matrix, Vector
 from mathutils.bvhtree import BVHTree
@@ -38,7 +39,11 @@ FIGHTERS = {
             "cap": "e3d6b4", "cap_panel": "16171b", "hair": "1a1512", "frame": "2a2a2e",
         },
         "build": {"chest": 0.2, "waist": 0.18, "arm": 0.078, "forearm": 0.064, "thigh": 0.086, "calf": 0.074},
-        "outfit": ["vest", "belt", "sash", "cap", "glasses", "moustache"],
+        "outfit": ["vest", "belt", "sash", "cap"],
+        # Face projected from the concept art: photo pixels of the eye line
+        # centre, the chin, the cheeks (for the skin tone) and the oval kept.
+        "face": {"photo": "tools/faces/anug.png", "centre_x": 327, "eye_y": 130, "chin_y": 197,
+                 "x_scale": 650, "cheeks": [(282, 158), (372, 158)], "oval": (327, 160, 62, 56)},
     },
 }
 
@@ -64,6 +69,69 @@ def bone_points(arm):
         name = bone.name.split(":")[-1]
         points[name] = (arm.matrix_world @ bone.head_local, arm.matrix_world @ bone.tail_local)
     return points
+
+
+def load_photo(face):
+    image = bpy.data.images.load(os.path.join(ROOT, face["photo"]))
+    width, height = image.size
+    pixels = numpy.array(image.pixels[:], dtype=numpy.float32).reshape(height, width, 4)[::-1]
+    return pixels
+
+
+def photo_skin(face, pixels):
+    """Average cheek colour of the photo, as hex, for the body's skin."""
+    patches = [pixels[y - 4:y + 4, x - 4:x + 4, :3].reshape(-1, 3) for x, y in face["cheeks"]]
+    # Cheeks catch the light; the face overall reads a little darker.
+    mean = numpy.concatenate(patches).mean(axis=0) * 0.9
+    return "".join("%02x" % int(round(c * 255)) for c in mean)
+
+
+def face_image(face, pixels, skin_hex, size=192):
+    """Square crop around the face, faded to skin colour outside the oval."""
+    x0 = face["centre_x"] - size // 2
+    y0 = face["eye_y"] - int(size * 0.35)
+    crop = pixels[y0:y0 + size, x0:x0 + size].copy()
+    skin = numpy.array([int(skin_hex[i:i + 2], 16) / 255.0 for i in (0, 2, 4)] + [1.0], dtype=numpy.float32)
+    cx, cy, rx, ry = face["oval"]
+    ys, xs = numpy.mgrid[y0:y0 + size, x0:x0 + size]
+    d = numpy.sqrt(((xs - cx) / rx) ** 2 + ((ys - cy) / ry) ** 2)
+    weight = numpy.clip((1.15 - d) / 0.3, 0.0, 1.0)[..., None] * crop[..., 3:4].clip(0, 1)
+    out = crop * weight + skin * (1.0 - weight)
+    out[..., 3] = 1.0
+    image = bpy.data.images.new("face", size, size, alpha=False)
+    image.pixels.foreach_set(numpy.ascontiguousarray(out[::-1], dtype=numpy.float32).reshape(-1))
+    image.pack()
+    return image, x0, y0, size
+
+
+def face_material(image):
+    mat = bpy.data.materials.new("face")
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    bsdf = nodes.get("Principled BSDF")
+    tex = nodes.new("ShaderNodeTexImage")
+    tex.image = image
+    tex.extension = "EXTEND"
+    mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    bsdf.inputs["Roughness"].default_value = 0.6
+    return mat
+
+
+def project_face(obj, face, crop, eye_z, chin_z):
+    """Front projection of the photo onto the head; the back of the head
+    samples a corner of the texture, which is plain skin."""
+    _, x0, y0, size = crop
+    scale = (face["chin_y"] - face["eye_y"]) / (eye_z - chin_z)
+    uv = obj.data.uv_layers[0] if obj.data.uv_layers else obj.data.uv_layers.new(name="UVMap")
+    for loop in obj.data.loops:
+        vert = obj.data.vertices[loop.vertex_index]
+        co = obj.matrix_world @ vert.co
+        if vert.normal.y > 0.15:
+            uv.data[loop.index].uv = (0.01, 0.01)
+            continue
+        px = face["centre_x"] + co.x * face["x_scale"]
+        py = face["eye_y"] - (co.z - eye_z) * scale
+        uv.data[loop.index].uv = ((px - x0) / size, 1.0 - (py - y0) / size)
 
 
 def material(name, color, roughness=0.7, metallic=0.0):
@@ -221,6 +289,10 @@ def build(fighter_id):
     col = spec["colors"]
     b = spec["build"]
     outfit = spec["outfit"]
+    face = spec.get("face")
+    if face:
+        pixels = load_photo(face)
+        col = dict(col, skin=photo_skin(face, pixels))
     mats = {
         "skin": material("skin", col["skin"], 0.6),
         "shirt": material("shirt", col["shirt"], 1.0),
@@ -315,25 +387,45 @@ def build(fighter_id):
     transfer_weights(body, source)
     parts.append(body)
 
-    # Head: skull, ears, nose and eyes, all on the head bone.
+    # Head: skull and ears on the head bone, with either the photo face
+    # projected on the front or simple modelled features.
     hc = head + Vector((0, -0.012, 0.09))
-    skull = primitive("sphere", "head", hc, (0.102, 0.112, 0.124))
-    jaw = primitive("sphere", "jaw", hc + Vector((0, -0.02, -0.05)), (0.085, 0.085, 0.07))
-    nose = primitive("sphere", "nose", hc + Vector((0, -0.106, -0.012)), (0.015, 0.017, 0.022))
-    ears = [primitive("sphere", "ear", hc + Vector((s * 0.098, 0.005, 0.0)), (0.016, 0.026, 0.034)) for s in (1, -1)]
-    face = [skull, jaw, nose] + ears
-    for piece in face:
+    skull = primitive("sphere", "head", hc, (0.104, 0.112, 0.124), segments=48, ring_count=24)
+    jaw = primitive("sphere", "jaw", hc + Vector((0, -0.02, -0.05)), (0.09, 0.088, 0.072), segments=48, ring_count=24)
+    ears = [primitive("sphere", "ear", hc + Vector((s * 0.1, 0.005, 0.0)), (0.016, 0.026, 0.034)) for s in (1, -1)]
+    for piece in ears:
         paint(piece, mats, lambda c: "skin")
     eyes = []
-    for s in (1, -1):
-        white = primitive("sphere", "eye_white", hc + Vector((s * 0.037, -0.093, 0.018)), (0.018, 0.01, 0.013))
-        paint(white, mats, lambda c: "white")
-        pupil = primitive("sphere", "pupil", hc + Vector((s * 0.037, -0.101, 0.018)), (0.009, 0.006, 0.009))
-        paint(pupil, mats, lambda c: "eye")
-        brow = primitive("cube", "brow", hc + Vector((s * 0.038, -0.1, 0.046)), (0.024, 0.008, 0.006), rotation=(0, s * 0.12, 0))
-        paint(brow, mats, lambda c: "hair")
-        eyes += [white, pupil, brow]
-    hair = primitive("sphere", "hair", hc + Vector((0, 0.012, 0.012)), (0.102, 0.108, 0.118))
+    if face:
+        # One smooth egg for the photo to sit on: the lower half narrows
+        # into a jaw, so there is no crease where two shapes would meet.
+        bpy.data.objects.remove(jaw, do_unlink=True)
+        for vert in skull.data.vertices:
+            drop = min(max((hc.z - vert.co.z) / 0.124, 0.0), 1.0)
+            vert.co.x = hc.x + (vert.co.x - hc.x) * (1.0 - 0.16 * drop * drop)
+            vert.co.y = hc.y + (vert.co.y - hc.y) * (1.0 - 0.1 * drop * drop) - 0.012 * drop
+            vert.co.z -= 0.012 * drop
+        for poly in skull.data.polygons:
+            poly.use_smooth = True
+        crop = face_image(face, pixels, col["skin"])
+        mats["face"] = face_material(crop[0])
+        paint(skull, mats, lambda c: "face")
+        project_face(skull, face, crop, hc.z + 0.004, hc.z - 0.125)
+        face_parts = [skull] + ears
+    else:
+        nose = primitive("sphere", "nose", hc + Vector((0, -0.106, -0.012)), (0.015, 0.017, 0.022))
+        for piece in (skull, jaw, nose):
+            paint(piece, mats, lambda c: "skin")
+        face_parts = [skull, jaw, nose] + ears
+        for s in (1, -1):
+            white = primitive("sphere", "eye_white", hc + Vector((s * 0.037, -0.093, 0.018)), (0.018, 0.01, 0.013))
+            paint(white, mats, lambda c: "white")
+            pupil = primitive("sphere", "pupil", hc + Vector((s * 0.037, -0.101, 0.018)), (0.009, 0.006, 0.009))
+            paint(pupil, mats, lambda c: "eye")
+            brow = primitive("cube", "brow", hc + Vector((s * 0.038, -0.1, 0.046)), (0.024, 0.008, 0.006), rotation=(0, s * 0.12, 0))
+            paint(brow, mats, lambda c: "hair")
+            eyes += [white, pupil, brow]
+    hair = primitive("sphere", "hair", hc + Vector((0, 0.012, 0.012)), (0.108, 0.114, 0.12))
     # Keep only the back and sides of the hair shell below the cap.
     bm = bmesh.new()
     bm.from_mesh(hair.data)
@@ -341,7 +433,7 @@ def build(fighter_id):
     bm.to_mesh(hair.data)
     bm.free()
     paint(hair, mats, lambda c: "hair")
-    head_parts = face + eyes + [hair]
+    head_parts = face_parts + eyes + [hair]
     if "moustache" in outfit:
         tache = primitive("cube", "moustache", hc + Vector((0, -0.104, -0.045)), (0.03, 0.008, 0.008))
         rounded(tache, 0.006, 2, 0)
@@ -442,7 +534,7 @@ def preview(path, arm, body):
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_WORKBENCH"
     scene.display.shading.light = "STUDIO"
-    scene.display.shading.color_type = "MATERIAL"
+    scene.display.shading.color_type = "TEXTURE"
     scene.render.resolution_x = 900
     scene.render.resolution_y = 900
     scene.render.film_transparent = False
