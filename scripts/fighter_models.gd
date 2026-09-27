@@ -92,7 +92,7 @@ const STYLES := {
 	},
 	"anant": {
 		"height": 1.86, "width": 1.02, "tint": [Color("5a2f6a"), Color("d3ac62")],
-		"clips": {"idle": "kungfu_idle", "kick": "martial_arts_kick", "kick_spin": "martial_arts_kick", "victory": "fireball"},
+		"clips": {"idle": "mma_idle", "kick": "martial_arts_kick", "kick_spin": "martial_arts_kick", "victory": "fireball"},
 		"timing": {"kick": [0.2, 0.73, 1.5], "kick_spin": [0.2, 0.73, 1.5]},
 	},
 }
