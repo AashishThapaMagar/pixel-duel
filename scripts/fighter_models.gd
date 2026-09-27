@@ -52,11 +52,16 @@ const SHARED_TIMING := {
 	"jab": [0.0, 0.5, 1.2], "punch_heavy": [0.45, 0.7, 1.5],
 	"kick": [0.25, 0.6, 1.3], "kick_front": [0.2, 0.6, 1.2], "kick_spin": [0.3, 0.7, 1.4],
 }
-## Everyone's own walk, back-step, strafes and run from their style folder.
+## Everyone moves the same way: one idle, walk, back-step, strafes and run
+## for the whole roster (the shared clips above plus these from
+## MOVES_FOLDER). Fighters differ only in their strikes (STRIKES).
+const MOVES_FOLDER := "res://assets/fighters/anug/style/"
 const STYLE_MOVES := {
 	"walk": "walk_forward", "walk_back": "walk_back", "sidestep_left": "strafe_left",
 	"sidestep_right": "strafe_right", "run": "run",
 }
+## The only clips a fighter's style folder may override.
+const STRIKES := ["jab", "punch_heavy", "uppercut", "kick", "kick_front", "kick_spin", "grapple", "taunt", "victory"]
 ## Per-fighter style: body build and tint, plus style clips (file in
 ## style/ -> logical clip) and their timing. Impact times were measured
 ## from each download (peak extension of the striking hand, foot or head).
@@ -130,11 +135,15 @@ static func _mixamo(fighter_id: String) -> Dictionary:
 	for key in SHARED_FILES:
 		files[key] = SHARED + SHARED_FILES[key] + ".fbx"
 	var clips: Dictionary = SHARED_CLIPS.duplicate()
-	var own: Dictionary = STYLE_MOVES.duplicate()
-	own.merge(style.get("clips", {}), true)
+	for logical in STYLE_MOVES:
+		var path: String = MOVES_FOLDER + STYLE_MOVES[logical] + ".fbx"
+		if ResourceLoader.exists(path):
+			files["move_" + logical] = path
+			clips[logical] = "move_" + logical
+	var own: Dictionary = style.get("clips", {})
 	for logical in own:
 		var path: String = folder + own[logical] + ".fbx"
-		if ResourceLoader.exists(path):
+		if logical in STRIKES and ResourceLoader.exists(path):
 			files["style_" + logical] = path
 			clips[logical] = "style_" + logical
 	var timing: Dictionary = SHARED_TIMING.duplicate()

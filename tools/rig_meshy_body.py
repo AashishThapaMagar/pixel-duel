@@ -19,6 +19,7 @@ import os
 import sys
 
 import bpy
+import numpy
 from mathutils import Matrix, Vector
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -202,6 +203,88 @@ def claim_the_arms(model, arm):
                 model.vertex_groups["mixamorig:%sHand" % name].add([vert.index], 1.0, "REPLACE")
 
 
+FINGERS = ("Thumb", "Index", "Middle", "Ring", "Pinky")
+
+
+def _segment_distance(point, head, tail):
+    line = tail - head
+    t = max(0.0, min(1.0, (point - head).dot(line) / max(line.length_squared, 1e-9)))
+    return (point - (head + line * t)).length
+
+
+def rig_the_hands(model, arm):
+    """Generated hands never line up with the skeleton's finger bones, so a
+    clip that curls the fingers pulls the mesh out into spikes. Every
+    finger weight is folded into its hand bone: hands keep their modelled
+    (fisted) shape and just follow the wrist."""
+    names = {g.index: g.name for g in model.vertex_groups}
+    for side in ("Left", "Right"):
+        hand = "mixamorig:%sHand" % side
+        if hand not in model.vertex_groups:
+            model.vertex_groups.new(name=hand)
+        target = model.vertex_groups[hand]
+        fingers = {i for i, n in names.items() if n.startswith(hand) and n != hand}
+        for vert in model.data.vertices:
+            moved = 0.0
+            for element in vert.groups:
+                if element.group in fingers and element.weight > 0.0:
+                    moved += element.weight
+                    element.weight = 0.0
+            if moved > 0.0:
+                target.add([vert.index], moved, "ADD")
+    for group in list(model.vertex_groups):
+        if any(f in group.name for f in FINGERS):
+            model.vertex_groups.remove(group)
+
+
+def make_fists(model, arm):
+    """Curls each open hand into a loose fist: vertices past the knuckles are
+    bent round an axis across the palm, fingertips folding toward it. Runs
+    in the fitted pose (model and skeleton aligned), on vertices the hand's
+    bones own, before rig_the_hands makes the hand rigid."""
+    names = {g.index: g.name for g in model.vertex_groups}
+    for name in ("Left", "Right"):
+        pose = arm.pose.bones["mixamorig:%sHand" % name]
+        wrist = arm.matrix_world @ pose.head
+        along = ((arm.matrix_world @ pose.tail) - wrist).normalized()
+        hand = []
+        for vert in model.data.vertices:
+            owned = sum(e.weight for e in vert.groups if names.get(e.group, "").startswith("mixamorig:%sHand" % name))
+            if owned >= 0.5:
+                hand.append(vert)
+        if len(hand) < 50:
+            continue
+        rel = {v.index: model.matrix_world @ v.co - wrist for v in hand}
+        length = max(r.dot(along) for r in rel.values())
+        knuckle = length * 0.52
+        # The palm is a flat slab: its thinnest direction is the palm normal.
+        slab = [r - along * r.dot(along) for r in rel.values() if 0.02 < r.dot(along) < knuckle]
+        if len(slab) < 20:
+            continue
+        values, vectors = numpy.linalg.eigh(numpy.cov(numpy.array([tuple(v) for v in slab]).T))
+        palm = Vector(vectors[:, 0])
+        palm = (palm - along * palm.dot(along)).normalized()
+        # Relaxed fingers already curl slightly toward the palm side.
+        tips = [r.dot(palm) for r in rel.values() if r.dot(along) > length * 0.8]
+        if tips and sum(tips) / len(tips) < 0.0:
+            palm = -palm
+        finger = length - knuckle
+        radius = finger / (math.pi * 0.75)
+        inverse = model.matrix_world.inverted()
+        for vert in hand:
+            r = rel[vert.index]
+            s_along = r.dot(along)
+            if s_along <= knuckle:
+                continue
+            h = r.dot(palm)
+            lateral = r - along * s_along - palm * h
+            theta = min((s_along - knuckle) / radius, math.pi * 0.75)
+            bend = max(radius - h, 0.004)
+            centre = wrist + along * knuckle + palm * radius + lateral
+            vert.co = inverse @ (centre + (-palm * math.cos(theta) + along * math.sin(theta)) * bend)
+        print("FIST %s length %.3f moved %d" % (name, length, sum(1 for v in hand if rel[v.index].dot(along) > knuckle)))
+
+
 def free_the_sides(model, arm):
     """Hands the clothing hanging between the arms and the body (coat sides,
     under-sleeves) to the spine, so raising the arms doesn't drag it up like
@@ -329,6 +412,8 @@ def main():
     # Coat first, then the arms have the final say over what rides on them.
     free_the_sides(model, fit_arm)
     claim_the_arms(model, fit_arm)
+    make_fists(model, fit_arm)
+    rig_the_hands(model, fit_arm)
     unbend(model, fit_arm, rest_arm)
     bpy.data.objects.remove(source, do_unlink=True)
     bpy.data.objects.remove(fit_arm, do_unlink=True)

@@ -3,7 +3,7 @@ extends Node3D
 ## weathered materials, atmospheric skies and animated practical details.
 ## Procedural construction helpers remain below for future scenery edits.
 const ROUNDS := [
-	{"name": "HERITAGE SQUARE", "night": false, "detail": "DAY / Brick courtyards, carved windows and a three-tier pagoda"},
+	{"name": "HERITAGE SQUARE", "night": true, "detail": "NIGHT / Temple lamps light the carved square and its three-tier pagoda"},
 	{"name": "LANTERN SQUARE", "night": true, "detail": "NIGHT / Paper lanterns glow across the old square"},
 	{"name": "TERRACE OVERLOOK", "night": false, "detail": "SUNSET / Terraced hills and the Himalaya turning gold"},
 	{"name": "MOONLIT STUPA", "night": true, "detail": "FINAL NIGHT / Prayer flags stream from a white stupa"},
@@ -42,7 +42,7 @@ const IMPORTED_SURFACE := preload("res://scripts/arena_surface.gdshader")
 const FLAG_COLORS := [Color("2f6fc4"), Color("f1ede2"), Color("c8342c"), Color("2f8f4e"), Color("e6b62f")]
 ## Per-round ambient life: [kind, colour, amount].
 const AMBIENCE := [
-	["none", Color(0, 0, 0, 0), 0],
+	["embers", Color(1.0, 0.74, 0.4, 0.85), 22],
 	["embers", Color(1.0, 0.7, 0.32, 0.9), 34],
 	["petals", Color(0.86, 0.2, 0.27, 0.95), 40],
 	["sky_lanterns", Color(1.0, 0.66, 0.3, 0.95), 16],
@@ -50,7 +50,7 @@ const AMBIENCE := [
 ## Sky and light per round: [sky top, horizon, sun colour, sun energy,
 ## ambient colour, ambient energy, sun pitch, sun yaw, mountain tint].
 const MOODS := [
-	[Color("3f7fd0"), Color("cfe2f2"), Color("fff1dc"), 0.68, Color("b9c9dc"), 0.34, -48.0, -35.0, Color(1, 1, 1)],
+	[Color("050a1c"), Color("22305a"), Color("c4d3ff"), 0.36, Color("4b5684"), 0.48, -38.0, -40.0, Color(0.42, 0.47, 0.68)],
 	[Color("070b1c"), Color("1d2442"), Color("9fb4ec"), 0.32, Color("5b6690"), 0.55, -40.0, 30.0, Color(0.32, 0.36, 0.55)],
 	[Color("46558f"), Color("f4a45e"), Color("ffb070"), 0.95, Color("c79a86"), 0.42, -16.0, 28.0, Color(1.0, 0.78, 0.62)],
 	[Color("050817"), Color("18223e"), Color("b7c8f5"), 0.3, Color("5d6a96"), 0.42, -35.0, -25.0, Color(0.36, 0.42, 0.62)],
@@ -443,7 +443,7 @@ func _fight_lighting() -> void:
 			var wash := OmniLight3D.new()
 			wash.position = Vector3(side * 7.5, 3.5, -17)
 			wash.omni_range = 15
-			wash.light_color = Color("ffaf68") if current_round == 1 else Color("adc7ff")
+			wash.light_color = Color("ffaf68") if current_round in [0, 1] else Color("adc7ff")
 			wash.light_energy = 1.25
 			content.add_child(wash)
 
@@ -662,6 +662,17 @@ func _dress_heritage(folder: String) -> void:
 		node.free()
 	var floor_y := -0.12
 	_place_prop(folder + "pagoda.glb", Vector3(0, floor_y, -24.4), 0.0)
+	# The real range rises beyond the rooftops, hazed by distance fog.
+	var range_path: String = folder + "himalaya.glb"
+	if ResourceLoader.exists(range_path):
+		var peaks := (load(range_path) as PackedScene).instantiate() as Node3D
+		peaks.position = Vector3(0, -4.0, -175.0)
+		peaks.scale = Vector3(1.6, 1.5, 1.0)
+		for mesh: MeshInstance3D in peaks.find_children("*", "MeshInstance3D", true, false):
+			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		content.add_child(peaks)
+	if night:
+		_heritage_night(floor_y)
 	for side in [-1.0, 1.0]:
 		_place_prop(folder + "shikhara.glb", Vector3(side * 8.2, floor_y, -19.5), 0.0)
 		_place_prop(folder + "lion.glb", Vector3(side * 3.0, floor_y, -19.0), 0.0)
@@ -703,6 +714,34 @@ var _tinted: Dictionary = {}
 
 ## Facade pieces (tinted) sit flat on walls: their shadows would only fall
 ## on the wall behind, so they skip the shadow pass.
+## Night in the square: warm pools under each lamp post, golden light up
+## the pagoda's tiers and the towers, and a moonlit rim on the lions.
+func _heritage_night(floor_y: float) -> void:
+	var lights := [
+		# [position, colour, energy, range]
+		[Vector3(0, floor_y + 0.6, -18.2), Color("ffb25c"), 2.6, 9.0],   # pagoda steps, up the facade
+		[Vector3(0, floor_y + 7.5, -18.5), Color("ffc27a"), 1.4, 7.0],   # upper tiers
+	]
+	for side in [-1.0, 1.0]:
+		lights.append([Vector3(side * 6.9, floor_y + 0.6, -17.6), Color("ffb868"), 1.6, 6.5])  # tower base
+		for z in [-15.0, -8.0]:
+			lights.append([Vector3(side * 6.7, floor_y + 3.0, z), Color("ffb45a"), 1.8, 6.0])  # lamp posts
+	for spec in lights:
+		var lamp := OmniLight3D.new()
+		lamp.position = spec[0]
+		lamp.light_color = spec[1]
+		lamp.light_energy = spec[2]
+		lamp.omni_range = spec[3]
+		lamp.omni_attenuation = 1.4
+		lamp.set_meta("base", spec[2])
+		content.add_child(lamp)
+		lamp_lights.append(lamp)
+	# A glowing lantern flame in each lamp post head.
+	var flame := _flat("post_flame", Color("ffc46a"), 5.0)
+	for side in [-1.0, 1.0]:
+		for z in [-15.0, -8.0]:
+			_ball(0.07, Vector3(side * 6.9, floor_y + 3.05, z), flame, 1.0).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
 func _place_prop(path: String, at: Vector3, turn: float, scale := 1.0, tint := Color.WHITE) -> void:
 	if not ResourceLoader.exists(path):
 		return
@@ -747,6 +786,13 @@ func _lighting() -> void:
 	environment.environment.fog_light_energy = 0.65
 	environment.environment.fog_density = 0.0025 if night else 0.0018
 	environment.environment.fog_sky_affect = 0.12
+	# Bloom on flames, lanterns and lit windows makes the night read.
+	environment.environment.glow_enabled = night
+	environment.environment.glow_intensity = 0.9
+	environment.environment.glow_strength = 1.0
+	environment.environment.glow_bloom = 0.05
+	environment.environment.glow_hdr_threshold = 0.9
+	environment.environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 
 func _ground() -> void:
 	# Brick plaza one step below the flagstone fighting dais.

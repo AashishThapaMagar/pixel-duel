@@ -30,6 +30,8 @@ PROPS = {
     "window": ("Newari_Windo", 1.15, 3500, 1024, "facade"),
     "lamp_post": ("Brass_Lamp_P", 3.4, 3000, 1024, ""),
     "diyo_stand": ("Brass_Diyo_S", 1.15, 6000, 1024, ""),
+    # A relief of the range, laid out as a real skyline far behind the square.
+    "himalaya": ("Himalayan_Ri", 26.0, 30000, 2048, ""),
 }
 
 

@@ -67,14 +67,14 @@ func run() -> void:
 			await frames(40)
 			await RenderingServer.frame_post_draw
 			root.get_texture().get_image().save_png("res://.godot/nepal-round-%d.png" % (index + 1))
-	check(nights == 2, "Exactly two day rounds and two night rounds")
+	check(nights == 3, "Three night rounds and the sunset terrace")
 	arena._toggle_move_guide()
 	var clock_before: float = arena.nepal_stage.elapsed
 	await frames(5)
 	check(is_equal_approx(clock_before, arena.nepal_stage.elapsed), "Move guide pauses the stage clock")
 	arena._toggle_move_guide()
 	arena._begin_round(0)
-	check(not arena.nepal_stage.night, "Rematch returns to the daytime opening")
+	check(arena.nepal_stage.night and arena.nepal_stage.current_round == 0, "Rematch returns to the night-time Heritage Square opening")
 	# A versus arena choice holds every round in that arena.
 	var setup: Node = root.get_node("MatchSetup")
 	setup.stage_choice = 2
