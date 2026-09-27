@@ -11,6 +11,9 @@ var bust := false
 ## since stances crouch or lean the head well away from a fixed height.
 var bust_target := Vector3(0, 104, 0)
 var bust_tracking := false
+## Full-body showcase for the big select-screen frames: a wider render, the
+## fighter larger and set off-centre toward the outside edge.
+var hero := false
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -18,6 +21,8 @@ func _ready() -> void:
 	stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(320, 320) if not (closeup or bust) else Vector2i(200, 200)
+	if hero:
+		viewport.size = Vector2i(544, 336)
 	viewport.transparent_bg = true
 	viewport.own_world_3d = true
 	viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
@@ -45,6 +50,11 @@ func _ready() -> void:
 	# Mirrored for the right-hand preview so that fighter is seen from the front.
 	camera.position = Vector3(-100 if facing_left else 100, height + 15, 230)
 	camera.look_at(Vector3(0, height, 0))
+	if hero:
+		camera.size = 118
+		camera.position = Vector3(-100 if facing_left else 100, 70, 230)
+		camera.look_at(Vector3(0, 56, 0))
+		camera.h_offset = 36.0 if facing_left else -36.0
 	if bust:
 		# Swing round to face the fighter, a little off-centre and just above
 		# eye level, as on an arcade select screen.

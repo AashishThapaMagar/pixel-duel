@@ -24,31 +24,37 @@ var difficulty_picker: OptionButton
 var backdrop: Control
 ## Tekken-style portrait tiles behind each roster card.
 var tiles: Array[ColorRect] = []
-## Lightning-swirl backdrops behind the two big previews, in the chosen
-## fighter's colour.
+## Spotlight backdrops behind the two big previews, in the chosen fighter's
+## colour.
 var preview_glows: Array[ColorRect] = []
+## Arcade ladder: one card per rival in fight order, then the final boss.
+var ladder_tiles: Array[ColorRect] = []
+var ladder_faces: Array[TextureRect] = []
+var ladder_names: Array[Label] = []
+## Per player: [name, fill ColorRect] rows of the showcase stat bars.
+var stat_bars: Array = [[], []]
+const STAT_NAMES := ["POWER", "SPEED", "STAMINA", "KICKS"]
+const STAT_WIDTH := 92.0
 const TILE_SHADER := """shader_type canvas_item;
-// Arcade select-screen tile: a bright vertical gradient in the fighter's
-// colour with drifting purple lightning behind the portrait.
+// Select-screen tile: the fighter's colour lit by a spotlight behind the
+// portrait, fine diagonal pinstripes and a slow glossy sweep. Smooth maths
+// only, so it stays clean on every GPU.
 uniform vec4 top_color : source_color;
 uniform vec4 bottom_color : source_color;
 uniform float seed = 0.0;
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float noise(vec2 p) {
-	vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
-	return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
-}
+uniform float aspect = 1.0;
 void fragment() {
-	vec3 col = mix(top_color.rgb, bottom_color.rgb, UV.y);
-	vec2 p = UV * vec2(2.4, 3.0) + vec2(seed * 3.1, seed * 1.7);
-	float bolts = 0.0;
-	for (int k = 0; k < 2; k++) {
-		float n = noise(p * (2.0 + float(k)) + vec2(TIME * 0.12, -TIME * 0.05));
-		n += 0.5 * noise(p * (5.0 + float(k) * 2.0) - vec2(TIME * 0.08, 0.0));
-		bolts += smoothstep(0.05, 0.0, abs(n / 1.5 - 0.5)) * (0.9 - 0.3 * float(k));
-	}
-	col = mix(col, vec3(0.78, 0.6, 1.0), clamp(bolts, 0.0, 1.0) * 0.55);
-	col *= 1.0 - 0.35 * pow(length(UV - vec2(0.5, 0.45)), 2.0);
+	vec2 uv = UV;
+	vec3 col = mix(top_color.rgb, bottom_color.rgb, smoothstep(0.0, 1.0, uv.y));
+	float spot = 1.0 - smoothstep(0.0, 0.8, length((uv - vec2(0.5, 0.36)) * vec2(aspect, 1.2)));
+	col += top_color.rgb * spot * 0.4;
+	float stripe = smoothstep(0.3, 0.5, abs(fract((uv.x * aspect + uv.y) * 38.0) - 0.5));
+	col *= 1.0 - 0.08 * stripe;
+	float sweep = fract(TIME * 0.1 + seed * 0.137) * 3.0 - 1.0;
+	float band = abs(uv.x * 0.8 + uv.y * 0.5 - sweep);
+	col += vec3(0.16) * (1.0 - smoothstep(0.0, 0.09, band));
+	col *= 1.0 - 0.5 * smoothstep(0.55, 1.0, uv.y);
+	col *= 1.0 - 0.35 * pow(length(uv - vec2(0.5)), 2.0);
 	COLOR = vec4(col, 1.0);
 }
 """
@@ -94,12 +100,13 @@ func _ready() -> void:
 			difficulty_picker.item_selected.connect(func(index: int): MatchSetup.ai_difficulty = index)
 			add_child(difficulty_picker)
 			selectors.append(difficulty_picker)
-	status_label = UI.label(self, "", Vector2(350, 277) if not MatchSetup.arcade else (Vector2(70, 305) if mode_id == "story" else Vector2(510, 318)), Vector2(260, 39) if not MatchSetup.arcade else Vector2(400, 35), 12, UI.WHITE)
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_label = UI.label(self, "", Vector2(350, 277) if not MatchSetup.arcade else (Vector2(70, 305) if mode_id == "story" else Vector2(470, 330)), Vector2(260, 39) if not MatchSetup.arcade else (Vector2(400, 35) if mode_id == "story" else Vector2(230, 40)), 12, UI.WHITE)
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if mode_id != "arcade" else HORIZONTAL_ALIGNMENT_LEFT
+	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	start_button = UI.button(self, {"local": "START DUEL", "ai": "CHALLENGE CPU", "arcade": "BEGIN THE CLIMB", "story": "BEGIN CHAPTER ONE"}[mode_id], Vector2(361, 327) if not MatchSetup.arcade else (Vector2(146, 351) if mode_id == "story" else Vector2(550, 360)), Vector2(238, 36), true)
+	start_button = UI.button(self, {"local": "START DUEL", "ai": "CHALLENGE CPU", "arcade": "BEGIN THE CLIMB", "story": "BEGIN CHAPTER ONE"}[mode_id], Vector2(361, 327) if not MatchSetup.arcade else (Vector2(146, 351) if mode_id == "story" else Vector2(700, 328)), Vector2(238, 36) if mode_id != "arcade" else Vector2(222, 44), true)
 	start_button.add_theme_font_override("font", UI.display_font())
-	start_button.add_theme_font_size_override("font_size", 20)
+	start_button.add_theme_font_size_override("font_size", 20 if mode_id != "arcade" else 24)
 	start_button.pressed.connect(_start_match)
 	var tile_shader := Shader.new()
 	tile_shader.code = TILE_SHADER
@@ -118,6 +125,7 @@ func _ready() -> void:
 		look.set_shader_parameter("top_color", base.lightened(0.3))
 		look.set_shader_parameter("bottom_color", base.darkened(0.25))
 		look.set_shader_parameter("seed", float(i))
+		look.set_shader_parameter("aspect", 104.0 / 98.0)
 		tile.material = look
 		add_child(tile)
 		tiles.append(tile)
@@ -139,6 +147,8 @@ func _ready() -> void:
 		marker.add_theme_constant_override("outline_size", 4)
 		marker.add_theme_font_override("font", UI.strong_font())
 		markers.append(marker)
+	if mode_id == "arcade":
+		_build_ladder(tile_shader)
 	var hint := "P1: A/D select, F ready    |    P2: arrows select, K ready    |    Enter fight"
 	if MatchSetup.arcade:
 		hint = "A/D choose your fighter    |    F lock in    |    Enter begin    |    Esc back"
@@ -167,7 +177,8 @@ func _build_player(player: int) -> void:
 		dimensions = Vector2(310, 210)
 	var color := UI.RED if player == 0 else UI.VIOLET
 	var frame := UI.panel(self, pos, dimensions, Color(color.darkened(0.7), 0.55), color, 0.08)
-	frame.visible = not (compact and mode_id == "story")
+	# Arcade shows its rivals on the ladder instead of a second preview.
+	frame.visible = not compact
 	var glow := ColorRect.new()
 	glow.position = pos + Vector2(3, 3)
 	glow.size = dimensions - Vector2(6, 6)
@@ -176,23 +187,29 @@ func _build_player(player: int) -> void:
 	look.shader = Shader.new()
 	look.shader.code = TILE_SHADER
 	look.set_shader_parameter("seed", 3.0 + player * 5.0)
+	look.set_shader_parameter("aspect", dimensions.x / dimensions.y)
 	glow.material = look
-	glow.modulate.a = 0.6
+	glow.modulate.a = 0.85
 	glow.visible = frame.visible
 	add_child(glow)
 	preview_glows.append(glow)
 	var portrait := PORTRAIT.new()
 	portrait.index = selections[player]
 	portrait.facing_left = player == 1
+	portrait.hero = not compact
 	portrait.position = pos - Vector2(0, 7)
 	portrait.size = dimensions
 	add_child(portrait)
-	portrait.visible = not (compact and mode_id == "story")
+	portrait.visible = not compact
 	portraits.append(portrait)
-	var label := UI.heading(self, "", pos + Vector2(0, dimensions.y - 44), Vector2(dimensions.x, 48), 18 if compact else 40, UI.WHITE, color.darkened(0.2))
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.visible = not (compact and mode_id == "story")
+	# The name sits in the corner away from the fighter, who stands toward
+	# the outside edge of the showcase.
+	var label := UI.heading(self, "", pos + Vector2(18, dimensions.y - 50), Vector2(dimensions.x - 36, 48), 18 if compact else 44, UI.WHITE, color.darkened(0.2))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if compact else (HORIZONTAL_ALIGNMENT_LEFT if player == 0 else HORIZONTAL_ALIGNMENT_RIGHT)
+	label.visible = not compact
 	names.append(label)
+	if not compact:
+		_build_stats(player, pos + (Vector2(16, 16) if player == 0 else Vector2(dimensions.x - STAT_WIDTH - 22, 16)))
 	var detail := UI.label(self, "", pos + Vector2(0, dimensions.y + 5), Vector2(dimensions.x, 42), 11, UI.WHITE)
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -207,6 +224,34 @@ func _build_player(player: int) -> void:
 	lock.visible = not compact and not (MatchSetup.vs_ai and player == 1)
 	ready_buttons.append(lock)
 
+## Stat bars in the showcase corner, filled from the fighter's profile.
+func _build_stats(player: int, at: Vector2) -> void:
+	UI.panel(self, at - Vector2(8, 6), Vector2(STAT_WIDTH + 16, STAT_NAMES.size() * 22 + 8), Color(0.02, 0.025, 0.05, 0.62), Color.TRANSPARENT)
+	for row in STAT_NAMES.size():
+		var y := at.y + row * 22
+		var caption := UI.label(self, STAT_NAMES[row], Vector2(at.x, y), Vector2(STAT_WIDTH, 12), 9, UI.MUTED)
+		caption.add_theme_font_override("font", UI.strong_font())
+		var track := ColorRect.new()
+		track.position = Vector2(at.x, y + 13)
+		track.size = Vector2(STAT_WIDTH, 5)
+		track.color = Color(1, 1, 1, 0.12)
+		track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(track)
+		var fill := ColorRect.new()
+		fill.position = track.position
+		fill.size = Vector2(0, 5)
+		fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(fill)
+		stat_bars[player].append(fill)
+
+static func _stat_values(profile: Dictionary) -> Array[float]:
+	return [
+		clampf((float(profile.get("punch_bonus", 0)) + 3.0) / 7.0, 0.1, 1.0),
+		clampf((float(profile.get("speed", 1.0)) - 0.8) / 0.45, 0.1, 1.0),
+		clampf(float(profile.get("stamina", 100.0)) / 140.0, 0.1, 1.0),
+		clampf((float(profile.get("kick_bonus", 0)) + 3.0) / 4.5, 0.1, 1.0),
+	]
+
 func _build_campaign() -> void:
 	UI.panel(self, Vector2(38, 88) if mode_id == "story" else Vector2(453, 88), Vector2(507, 310) if mode_id == "story" else Vector2(470, 222), Color(0.06, 0.04, 0.09, 0.9), mode_accent.darkened(0.5))
 	if mode_id == "story":
@@ -217,13 +262,59 @@ func _build_campaign() -> void:
 		prose.size = Vector2(448, 75)
 		UI.label(self, "PROLOGUE   /   RIVALS   /   FINALE", Vector2(65, 273), Vector2(415, 22), 11, mode_accent)
 	else:
-		UI.label(self, "THE CHAMPION'S LADDER", Vector2(478, 107), Vector2(306, 23), 16, mode_accent)
-		route_label = UI.label(self, "", Vector2(478, 146), Vector2(300, 101), 15, UI.WHITE)
-		route_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		UI.label(self, "4 ROUNDS PER RIVAL  /  " + ROSTER.profile(6).name + " AWAITS", Vector2(478, 277), Vector2(422, 22), 11, mode_accent)
-	var rival_caption := UI.label(self, "FIRST RIVAL", Vector2(796, 208), Vector2(102, 21), 10, mode_accent)
-	rival_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rival_caption.visible = mode_id != "story"
+		UI.heading(self, "THE CHAMPION'S LADDER", Vector2(474, 96), Vector2(430, 34), 24, UI.GOLD, UI.CRIMSON)
+		UI.eyebrow(self, "5 RIVALS  /  4 ROUNDS EACH  /  1 FINAL BOSS", Vector2(476, 128), Vector2(430, 18), UI.WHITE)
+
+## The arcade route as portrait cards: five numbered rivals, then the boss.
+func _build_ladder(tile_shader: Shader) -> void:
+	# Progress track the cards sit on.
+	var track := ColorRect.new()
+	track.position = Vector2(478, 262)
+	track.size = Vector2(430, 2)
+	track.color = Color(UI.GOLD, 0.45)
+	track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(track)
+	for k in 6:
+		var boss := k == 5
+		var pos := Vector2(478 + k * 67, 156) if not boss else Vector2(818, 146)
+		var dimensions := Vector2(61, 96) if not boss else Vector2(92, 110)
+		var edge: Color = UI.CRIMSON if boss else (UI.GOLD if k == 0 else Color("3b3f58"))
+		UI.panel(self, pos - Vector2(2, 2), dimensions + Vector2(4, 4), Color(0, 0, 0, 0.6), edge)
+		var tile := ColorRect.new()
+		tile.position = pos
+		tile.size = dimensions
+		tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var look := ShaderMaterial.new()
+		look.shader = tile_shader
+		look.set_shader_parameter("seed", 10.0 + k)
+		look.set_shader_parameter("aspect", dimensions.x / dimensions.y)
+		tile.material = look
+		add_child(tile)
+		ladder_tiles.append(tile)
+		# Shares the roster card's live bust render, so it costs nothing.
+		var face := TextureRect.new()
+		face.position = pos
+		face.size = dimensions
+		face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		face.clip_contents = true
+		add_child(face)
+		ladder_faces.append(face)
+		var stage := UI.heading(self, "BOSS" if boss else "%02d" % (k + 1), pos + Vector2(4, 1), Vector2(60, 20), 13 if boss else 14, UI.GOLD if not boss else UI.WHITE, UI.CRIMSON if boss else UI.INK)
+		stage.add_theme_constant_override("outline_size", 5)
+		var name_label := UI.heading(self, "", pos + Vector2(0, dimensions.y - 22), Vector2(dimensions.x, 22), 13 if not boss else 17, UI.WHITE, Color(0, 0, 0, 0.9))
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ladder_names.append(name_label)
+		# Diamond marker where the card meets the track.
+		var pip := UI.label(self, "◆", Vector2(pos.x + dimensions.x * 0.5 - 7, 254), Vector2(14, 16), 12, UI.GOLD if k == 0 else (UI.CRIMSON if boss else Color("6d7389")))
+		pip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var first := UI.eyebrow(self, "FIRST RIVAL", Vector2(476, 272), Vector2(140, 16), UI.GOLD)
+	first.add_theme_font_size_override("font_size", 10)
+	var boss_caption := UI.eyebrow(self, "FINAL BOSS", Vector2(816, 272), Vector2(110, 16), UI.RED)
+	boss_caption.add_theme_font_size_override("font_size", 10)
+	var awaits := UI.label(self, ROSTER.profile(6).title.to_upper() + "  /  " + ROSTER.profile(6).name + " AWAITS AT THE TOP", Vector2(476, 290), Vector2(430, 18), 11, UI.MUTED)
+	awaits.add_theme_font_override("font", UI.strong_font())
 
 ## Versus modes choose their arena here; Arcade and Story keep the journey.
 func _build_stage_picker() -> void:
@@ -304,23 +395,49 @@ func _refresh() -> void:
 		preview_glows[player].material.set_shader_parameter("top_color", tint.lightened(0.25))
 		preview_glows[player].material.set_shader_parameter("bottom_color", tint.darkened(0.55))
 		names[player].text = profile.name
+		var values := _stat_values(profile)
+		for row in stat_bars[player].size():
+			var fill: ColorRect = stat_bars[player][row]
+			fill.color = UI.GOLD if values[row] >= 0.75 else (profile.accent as Color).lerp(UI.WHITE, 0.3)
+			var tween := fill.create_tween() if fill.is_inside_tree() else null
+			if tween != null:
+				tween.tween_property(fill, "size:x", STAT_WIDTH * values[row], 0.25).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+			else:
+				fill.size.x = STAT_WIDTH * values[row]
 		details[player].text = profile.title + "\n" + profile.trait
 		player_tabs[player].text = "P%d / %s" % [player + 1, "SELECTING" if editing_player == player else "SELECT"]
-		ready_buttons[player].text = "READY" if ready_players[player] else "LOCK IN"
+		ready_buttons[player].text = "✓  READY" if ready_players[player] else "LOCK IN"
+		if ready_players[player]:
+			ready_buttons[player].add_theme_stylebox_override("normal", UI.blade(UI.GOLD, UI.CRIMSON, 6))
+			ready_buttons[player].add_theme_color_override("font_color", UI.INK)
+		else:
+			ready_buttons[player].remove_theme_stylebox_override("normal")
+			ready_buttons[player].remove_theme_color_override("font_color")
 		if MatchSetup.vs_ai and player == 1:
 			player_tabs[player].text = "CHOOSE CPU RIVAL"
 		if MatchSetup.arcade and player == 1:
 			player_tabs[player].text = "CPU / FIRST RIVAL"
 			player_tabs[player].disabled = true
 			ready_buttons[player].disabled = true
-	if is_instance_valid(route_label):
-		var rivals: PackedStringArray = []
+	if not ladder_tiles.is_empty():
+		var route: Array[int] = []
 		for i in range(ROSTER.PROFILES.size() - 1):
 			if i != selections[0]:
-				rivals.append(ROSTER.profile(i).name)
-		route_label.text = "  >  ".join(rivals) + "\n\nFINAL BOSS  /  " + ROSTER.profile(6).name
+				route.append(i)
+		route.append(ROSTER.PROFILES.size() - 1)
+		for k in route.size():
+			var rival := ROSTER.profile(route[k])
+			var rival_tint: Color = rival.color
+			ladder_tiles[k].material.set_shader_parameter("top_color", rival_tint.lightened(0.3))
+			ladder_tiles[k].material.set_shader_parameter("bottom_color", rival_tint.darkened(0.5))
+			ladder_faces[k].texture = previews[route[k]].texture
+			ladder_names[k].text = rival.name
 	start_button.disabled = not (ready_players[0] and ready_players[1])
-	status_label.text = "READY TO FIGHT" if not start_button.disabled else "CHOOSE YOUR FIGHTER\nLOCK IN TO CONTINUE"
+	if mode_id == "arcade":
+		status_label.text = "LOCKED IN.\nPRESS ENTER TO BEGIN." if not start_button.disabled else "CHOOSE YOUR FIGHTER,\nTHEN PRESS F TO LOCK IN."
+		status_label.add_theme_color_override("font_color", UI.GOLD if not start_button.disabled else UI.WHITE)
+	else:
+		status_label.text = "READY TO FIGHT" if not start_button.disabled else "CHOOSE YOUR FIGHTER\nLOCK IN TO CONTINUE"
 
 func _input(event: InputEvent) -> void:
 	if transitioning or (event is InputEventKey and event.echo):
