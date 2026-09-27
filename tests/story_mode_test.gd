@@ -61,10 +61,11 @@ func _test_phase_machine() -> void:
 
 	# resolve() must skip forward through every beat story_script.gd left
 	# empty and land on a real destination.
-	director.begin_intro("sup")
-	check(STORY.CHAPTERS.sup.defeat.is_empty(), "This check assumes sup's defeat beat is still empty in story_script.gd")
+	# An opponent with no chapter written has only empty beats.
+	director.begin_intro("unwritten")
+	check(not STORY.CHAPTERS.has("unwritten"), "This check needs an opponent id with no chapter in story_script.gd")
 	director.phase = director.Phase.DEFEAT
-	director.opponent_id = "sup"
+	director.opponent_id = "unwritten"
 	check(director.resolve() == director.Destination.ARENA, "An empty defeat beat resolves straight to the fight")
 
 	director.opponent_id = "anant"

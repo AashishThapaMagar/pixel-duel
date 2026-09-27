@@ -63,6 +63,9 @@ var guard_clip: Animation
 ## [track, bone] pairs of the idle clip's upper-body rotation tracks.
 var guard_tracks: Array = []
 var guard_weight := 0.0
+## Cutscenes (story_dialogue.gd) pose a fighter directly: this logical clip
+## plays as-is whatever the fight state says. Empty leaves the fight in charge.
+var pose_override := ""
 var guard_time := 0.0
 
 func configure(owner_visual: Node, profile: Dictionary) -> void:
@@ -350,12 +353,14 @@ func update(delta: float) -> void:
 	var rival = fighter.get("opponent")
 	if state == S.IDLE and rival != null and rival.state == rival.State.KO:
 		logical = "victory"
+	if pose_override != "":
+		logical = pose_override
 	var clip: String = clip_names.get(logical, clip_names.get("idle", ""))
 	if clip.is_empty():
 		return
 	var entered := state != _last_state
 	_last_state = state
-	if logical in SCRUBBED:
+	if logical in SCRUBBED and pose_override == "":
 		guard_weight = 0.0
 		_scrub_attack(fighter, logical, clip)
 		return
