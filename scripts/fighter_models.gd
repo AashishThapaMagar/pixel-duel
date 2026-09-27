@@ -87,7 +87,7 @@ const STYLES := {
 	},
 	"sup": {
 		"height": 1.8, "width": 1.0, "tint": [Color("c29a3c"), Color("2f8a86")],
-		"clips": {"idle": "capoeira_ginga", "kick": "roundhouse_kick", "kick_spin": "flip_kick"},
+		"clips": {"idle": "idle", "kick": "roundhouse_kick", "kick_spin": "flip_kick"},
 		"timing": {"kick": [0.45, 1.07, 1.9], "kick_spin": [0.4, 1.0, 1.8]},
 	},
 	"anant": {

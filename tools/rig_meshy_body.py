@@ -24,6 +24,7 @@ from mathutils import Matrix, Vector
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKELETON = os.path.join(ROOT, "assets", "fighters", "anug", "idle.fbx")
 TEXTURE_SIZE = 2048
+TRIANGLE_BUDGET = 32000
 
 
 def import_any(path):
@@ -60,6 +61,15 @@ def load_model(path):
         bpy.ops.object.join()
     model = bpy.context.view_layer.objects.active
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    # High-detail exports run to millions of triangles; a fighter needs
+    # about 30k (the normal map keeps the fine detail).
+    tris = sum(len(p.vertices) - 2 for p in model.data.polygons)
+    if tris > TRIANGLE_BUDGET * 1.3:
+        mod = model.modifiers.new("decimate", "DECIMATE")
+        mod.ratio = TRIANGLE_BUDGET / tris
+        mod.use_collapse_triangulate = True
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+        print("DECIMATED %d -> %d" % (tris, sum(len(p.vertices) - 2 for p in model.data.polygons)))
     for obj in [o for o in objects if o.name in bpy.data.objects and o != model]:
         bpy.data.objects.remove(obj, do_unlink=True)
     # Feet on the floor, centred over the origin.

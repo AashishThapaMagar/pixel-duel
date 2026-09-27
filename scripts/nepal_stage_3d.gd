@@ -19,6 +19,12 @@ const ARENA_MODELS := [
 static var arena_cache: Dictionary = {}
 const PHOTO_SURFACE := preload("res://scripts/arena_photo_surface.gdshader")
 const HIMALAYA := preload("res://scripts/himalaya_backdrop.gd")
+## Sculpted Meshy props (tools/prepare_meshy_props.py) that replace the
+## arena model's block-built landmarks, per round. Missing files keep the
+## original pieces.
+const PROPS := {
+	0: "res://assets/arenas/props/heritage/",
+}
 ## Photo-scanned surfaces from Poly Haven (CC0), in assets/arenas/textures/:
 ## kind -> [texture folder, metres per repeat, tint, normal strength, saturation].
 const PHOTO_TEXTURES := {
@@ -217,6 +223,8 @@ func show_round(index: int) -> void:
 	elapsed = 0
 	_lighting()
 	_import_arena(index)
+	if PROPS.has(index) and ResourceLoader.exists(PROPS[index] + "pagoda.glb"):
+		_dress_heritage(PROPS[index])
 	content.add_child(HIMALAYA.build(MOODS[index][1], night, index == 2))
 	_fight_lighting()
 	_arena_inlay()
@@ -612,6 +620,110 @@ func _ball(radius: float, at: Vector3, material: Material, squash := 1.0) -> Mes
 	return node
 
 # --- sky, light and ground ----------------------------------------------
+
+## Heritage Square: swaps the block pagoda, stone towers, temple lions,
+## plank windows and doorways and the corner lamp boxes for Meshy props.
+## Pieces are recognised by position and shape in the arena model, so the
+## model file itself stays as supplied.
+func _dress_heritage(folder: String) -> void:
+	var model := content.get_node_or_null("ArenaModel") as Node3D
+	if model == null:
+		return
+	var to_content := content.global_transform.affine_inverse()
+	var windows: Array = []  # [centre, width, facing]
+	var doors: Array = []
+	var doomed: Array[Node] = []
+	for node: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		var box: AABB = (to_content * node.global_transform) * node.get_aabb()
+		var centre := box.get_center()
+		var size := box.size
+		var facing := 1.0 if centre.x < 0.0 else -1.0
+		var square := absf(size.x - size.z) < 0.05
+		if absf(centre.x) < 4.4 and centre.z < -19.0 and centre.z > -33.0 and size.x < 14.0:
+			doomed.append(node)  # pagoda, its stairs and lions
+		elif absf(centre.x) > 6.2 and absf(centre.x) < 10.3 and centre.z > -21.7 and centre.z < -17.3 and square:
+			doomed.append(node)  # stone towers
+		elif absf(centre.x) > 5.0 and absf(centre.x) < 6.0 and absf(centre.z + 1.55) < 0.5 and box.end.y < 0.5:
+			doomed.append(node)  # lamp box and its clay bowls
+		elif size.x < 0.3 and absf(centre.x) > 7.9 and absf(centre.x) < 8.8:
+			var wall := box.position.x if facing > 0.0 else box.end.x
+			if size.distance_to(Vector3(0.12, 1.5, 1.1)) < 0.05:
+				doors.append([Vector3(wall, box.position.y, centre.z), facing])
+				doomed.append(node)
+			elif size.distance_to(Vector3(0.16, 0.16, 1.5)) < 0.05:
+				doomed.append(node)  # door lintel
+			elif absf(size.y - 1.05) < 0.03 and size.x < 0.2 and (absf(size.z - 0.96) < 0.03 or absf(size.z - 2.44) < 0.03):
+				windows.append([Vector3(wall, centre.y, centre.z), size.z, facing])
+				doomed.append(node)
+			elif absf(size.y - 0.84) < 0.03 or (absf(size.y - 0.1) < 0.02 and size.z > 1.0):
+				doomed.append(node)  # window pane and sill
+	for node in doomed:
+		node.get_parent().remove_child(node)
+		node.free()
+	var floor_y := -0.12
+	_place_prop(folder + "pagoda.glb", Vector3(0, floor_y, -24.4), 0.0)
+	for side in [-1.0, 1.0]:
+		_place_prop(folder + "shikhara.glb", Vector3(side * 8.2, floor_y, -19.5), 0.0)
+		_place_prop(folder + "lion.glb", Vector3(side * 3.0, floor_y, -19.0), 0.0)
+		_place_prop(folder + "diyo_stand.glb", Vector3(side * 5.5, 0.0, -1.55), 0.0)
+		for z in [-15.0, -8.0]:
+			_place_prop(folder + "lamp_post.glb", Vector3(side * 6.9, floor_y, z), -side * PI / 2.0)
+	for door in doors:
+		_place_prop(folder + "doorway.glb", door[0], door[1] * PI / 2.0, 1.35 / 1.75, CARVED_WOOD)
+	# Newari windows come in pairs: each run of three small panes, or one
+	# wide pane, becomes two carved windows side by side.
+	windows.sort_custom(func(a, b): return [a[0].x, a[0].y, a[0].z] < [b[0].x, b[0].y, b[0].z])
+	var runs: Array = []
+	for window in windows:
+		var last: Array = runs.back() if not runs.is_empty() else []
+		var joined := false
+		if not last.is_empty():
+			var prev: Array = last.back()
+			joined = absf(prev[0].x - window[0].x) < 0.05 and absf(prev[0].y - window[0].y) < 0.05 				and window[0].z - window[1] * 0.5 - (prev[0].z + prev[1] * 0.5) < 0.2
+		if joined:
+			last.append(window)
+		else:
+			runs.append([window])
+	for run: Array in runs:
+		var low: float = run[0][0].z - run[0][1] * 0.5
+		var high: float = run.back()[0].z + run.back()[1] * 0.5
+		var width := (high - low) / 2.0
+		for part in 2:
+			var at: Vector3 = run[0][0]
+			at.z = low + width * (part + 0.5)
+			var scale := width / 1.28
+			at.y -= 1.15 * scale * 0.5
+			_place_prop(folder + "window.glb", at, run[0][2] * PI / 2.0, scale, CARVED_WOOD)
+
+## Dark carved wood: lifted and warmed so the blue sky light doesn't read it
+## as grey stone.
+const CARVED_WOOD := Color(1.3, 0.98, 0.68)
+## Tinted copies shared by every placement, so repeats batch together.
+var _tinted: Dictionary = {}
+
+## Facade pieces (tinted) sit flat on walls: their shadows would only fall
+## on the wall behind, so they skip the shadow pass.
+func _place_prop(path: String, at: Vector3, turn: float, scale := 1.0, tint := Color.WHITE) -> void:
+	if not ResourceLoader.exists(path):
+		return
+	var prop := (load(path) as PackedScene).instantiate() as Node3D
+	prop.position = at
+	prop.rotation.y = turn
+	prop.scale = Vector3.ONE * scale
+	if tint != Color.WHITE:
+		for mesh: MeshInstance3D in prop.find_children("*", "MeshInstance3D", true, false):
+			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			for surface in mesh.get_surface_override_material_count():
+				var material := mesh.get_active_material(surface)
+				if material is StandardMaterial3D:
+					if not _tinted.has(material):
+						var warm: StandardMaterial3D = material.duplicate()
+						warm.albedo_color = tint
+						warm.metallic = 0.0
+						warm.metallic_texture = null
+						_tinted[material] = warm
+					mesh.set_surface_override_material(surface, _tinted[material])
+	content.add_child(prop)
 
 func _lighting() -> void:
 	var mood: Array = MOODS[current_round]
