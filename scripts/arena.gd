@@ -443,8 +443,6 @@ func _flash_fight() -> void:
 	call.pivot_offset = call.size * 0.5
 	call.scale = Vector2.ONE * 0.4
 	$UI.add_child(call)
-	var nepali := preload("res://scripts/ui_kit.gd").nepali_heading(call, "लडाइँ!", Vector2(0, 112), Vector2(600, 64), 48)
-	nepali.pivot_offset = Vector2(300, 32)
 	preload("res://scripts/sfx.gd").fire("fight")
 	var burst := call.create_tween()
 	burst.tween_property(call, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
