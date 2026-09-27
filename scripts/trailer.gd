@@ -5,10 +5,10 @@ extends Control
 ##
 ##   0-7    Ananta's legs only, walking through dust in a pitch-black void,
 ##          shot the way Kurosawa shoots a walk: long lens, low camera, wind
-##   7-23   the four arenas, four seconds each, joined by dissolves
-##   23-47  every fighter's face on black, four seconds each
-##   47-52  Ananta's face, slowly lit
-##   52-56  COMING SOON
+##   7-15   Heritage Square as a whole, two shots joined by a dissolve
+##   15-39  every fighter's face on black with their name, four seconds each
+##   39-48  Ananta's face, appearing slowly out of black, then his name
+##   48-55  WHO WON?  COMING SOON
 ## Every cut after the opening is a dissolve.
 ##
 ## Built to sit under a voice-over: drop audio/trailer/narration.ogg (or
@@ -349,6 +349,25 @@ func _caption(text: String) -> void:
 	tween.tween_property(label, "modulate:a", 1.0, 0.8)
 
 ## COMING SOON drawn out letter by letter across a gold line, over black.
+## The fighter's name and title, fading in low on the frame beside them.
+func _name(index: int, delay := 0.7, slow := 0.8) -> void:
+	_clear_text()
+	var profile := ROSTER.profile(index)
+	var box := Control.new()
+	box.size = SIZE
+	box.modulate.a = 0.0
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(box)
+	var name_label := UI.heading(box, profile.name, Vector2(90, 350), Vector2(420, 66), 58, UI.WHITE, profile.color)
+	var title := UI.eyebrow(box, String(profile.title).to_upper(), Vector2(94, 416), Vector2(420, 18), UI.GOLD)
+	title.add_theme_font_size_override("font_size", 13)
+	box.position.x = -24.0
+	var tween := box.create_tween()
+	tween.tween_interval(delay)
+	tween.tween_property(box, "modulate:a", 1.0, slow)
+	tween.parallel().tween_property(box, "position:x", 0.0, slow + 0.6).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+
+## WHO WON? burns in, then COMING SOON is drawn out beneath a gold line.
 func _coming_soon() -> void:
 	_clear_text()
 	var box := Control.new()
@@ -360,15 +379,24 @@ func _coming_soon() -> void:
 	rule.position = Vector2(SIZE.x / 2.0, 268)
 	rule.size = Vector2(0, 2)
 	box.add_child(rule)
-	var soon := UI.heading(box, "COMING SOON", Vector2(0, 200), Vector2(SIZE.x, 70), 60, UI.WHITE, UI.CRIMSON)
+	rule.position.y = 286
+	var who := UI.heading(box, "WHO WON?", Vector2(0, 176), Vector2(SIZE.x, 100), 92, UI.GOLD, UI.CRIMSON)
+	who.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	who.pivot_offset = Vector2(SIZE.x / 2.0, 50)
+	who.scale = Vector2.ONE * 1.15
+	who.modulate.a = 0.0
+	var soon := UI.label(box, "C O M I N G     S O O N", Vector2(0, 300), Vector2(SIZE.x, 30), 22, UI.WHITE)
+	soon.add_theme_font_override("font", UI.strong_font())
 	soon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	soon.visible_ratio = 0.0
 	var tween := box.create_tween()
+	tween.tween_property(who, "modulate:a", 1.0, 1.0)
+	tween.parallel().tween_property(who, "scale", Vector2.ONE, 1.8).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	tween.tween_property(rule, "size:x", 460.0, 0.8).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	tween.parallel().tween_property(rule, "position:x", SIZE.x / 2.0 - 230.0, 0.8).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-	tween.tween_property(soon, "visible_ratio", 1.0, 1.1)
-	tween.tween_interval(1.3)
-	tween.tween_property(box, "modulate:a", 0.0, 0.7)
+	tween.tween_property(soon, "visible_ratio", 1.0, 1.2)
+	tween.tween_interval(1.8)
+	tween.tween_property(box, "modulate:a", 0.0, 0.8)
 
 func _fade(to: float, seconds: float) -> void:
 	fade.create_tween().tween_property(fade, "color:a", to, seconds)
@@ -439,22 +467,28 @@ func _build_beats() -> void:
 			# filmed from just below eye level.
 			_pose(index, "walk")
 			_light_face(index, 5.0)
-			_cut({"fov": 22, "follow": index, "portrait": true, "offset": Vector3(0.32, -0.04, 1.6), "offset_to": Vector3(0.26, -0.04, 1.3), "aim": Vector3(0, 0.0, 0), "time": CUT}))
+			_cut({"fov": 22, "follow": index, "portrait": true, "offset": Vector3(0.32, -0.04, 1.6), "offset_to": Vector3(0.26, -0.04, 1.3), "aim": Vector3(0, 0.0, 0), "time": CUT})
+			_name(index))
 		at += CUT
-	# Ananta's face, slowly lit, the camera creeping in.
+	# Ananta: out of full black, his face appears slowly as the light
+	# creeps up and the camera drifts in; his name comes last.
 	_at(at, func():
-		_dissolve()
+		_clear_text()
+		_fade(1.0, 0.8))
+	_at(at + 0.9, func():
 		_hide_all()
 		_place(ANANTA, Vector3.ZERO, Vector3(0, 0, 1))
 		_pose(ANANTA, "walk")
-		_light_face(ANANTA, 5.5, 3.5)
-		_cut({"fov": 20, "follow": ANANTA, "portrait": true, "offset": Vector3(0.08, -0.04, 1.9), "offset_to": Vector3(0.04, -0.03, 1.15), "aim": Vector3(0, 0.0, 0), "time": 5.0}))
-	at += 5.0
+		_light_face(ANANTA, 5.5, 6.0)
+		_fade(0.0, 2.5)
+		_cut({"fov": 20, "follow": ANANTA, "portrait": true, "offset": Vector3(0.08, -0.04, 2.0), "offset_to": Vector3(0.04, -0.03, 1.1), "aim": Vector3(0, 0.0, 0), "time": 8.0})
+		_name(ANANTA, 5.0, 1.4))
+	at += 9.0
 	_at(at - 0.6, func(): _fade(1.0, 0.6))
 	_at(at, func():
 		_hide_all()
 		_coming_soon())
-	length = at + 4.2
+	length = at + 6.8
 	beats.sort_custom(func(a, b): return a[0] < b[0])
 
 func _process(delta: float) -> void:
