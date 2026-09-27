@@ -25,5 +25,7 @@ assets/fighters/*/body.glb.import
 # Textures the glTF export unpacks next to a built body (e.g. its face).
 assets/fighters/*/body_*.png
 assets/fighters/*/body_*.png.import
+assets/fighters/*/body_*.jpg
+assets/fighters/*/body_*.jpg.import
 assets/fighters/*/style/*.fbx
 assets/fighters/*/style/*.fbx.import
