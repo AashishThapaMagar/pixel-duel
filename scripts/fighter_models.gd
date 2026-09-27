@@ -31,7 +31,8 @@ extends RefCounted
 ## clips live in assets/fighters/<id>/style/ ("Without Skin"). Mixamo files
 ## are not redistributable, so they stay local (.gitignore); without them a
 ## fighter falls back to the procedural rig. Dropping a rigged body.fbx in a
-## fighter's folder gives them their own textured model.
+## fighter's folder gives them their own textured model; a body.glb built by
+## tools/build_fighter_body.py is grafted onto the shared skeleton instead.
 const SHARED := "res://assets/fighters/anug/"
 const SHARED_FILES := {
 	"idle": "idle", "walk": "walking", "walk_back": "walking_backwards",
@@ -142,12 +143,15 @@ static func _mixamo(fighter_id: String) -> Dictionary:
 	# "With Skin") replaces the X Bot and keeps its real textures untinted.
 	var body := "res://assets/fighters/%s/body.fbx" % fighter_id
 	var own_body := ResourceLoader.exists(body)
+	var built := "res://assets/fighters/%s/body.glb" % fighter_id
+	var graft := "" if own_body or not ResourceLoader.exists(built) else built
 	return {
 		"scene": body if own_body else SHARED + "idle.fbx",
+		"body": graft,
 		"enabled": ResourceLoader.exists(SHARED + "idle.fbx"),
 		"height": style.get("height", 1.8),
 		"width": style.get("width", 1.0),
-		"tint": [] if own_body else style.get("tint", []),
+		"tint": [] if own_body or graft != "" else style.get("tint", []),
 		"yaw": PI / 2.0,
 		"files": files,
 		"clips": clips,

@@ -19,5 +19,8 @@ Thumbs.db
 # files. Keep them local; fighters without them use the procedural rig.
 assets/fighters/*/*.fbx
 assets/fighters/*/*.fbx.import
+# Bodies built by tools/build_fighter_body.py carry the Mixamo rig too.
+assets/fighters/*/body.glb
+assets/fighters/*/body.glb.import
 assets/fighters/*/style/*.fbx
 assets/fighters/*/style/*.fbx.import

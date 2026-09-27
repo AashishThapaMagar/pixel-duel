@@ -102,6 +102,8 @@ func configure(owner_visual: Node, profile: Dictionary) -> void:
 		character.add_child(player)
 	# Advanced by hand in update(), so the guard overlay lands after the clip.
 	player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	if str(config.get("body", "")) != "":
+		_graft_body(config.body)
 	_add_clip_files()
 	_resolve_clips()
 	_prepare_guard()
@@ -135,6 +137,77 @@ func _fit(height: float) -> void:
 	var width: float = config.get("width", 1.0)
 	character.scale = Vector3(width, 1.0, width) * (height / model_height) * units
 	character.position.y = -bounds.position.y * (height / model_height) * units - (64.0 if visual.world_root == null else 0.0)
+
+## Swaps the shared body's meshes for a generated one (body.glb from
+## tools/build_fighter_body.py). It is skinned to the same Mixamo rig, so its
+## binds are re-expressed against this skeleton's rest pose and every clip
+## plays on it unchanged.
+func _graft_body(path: String) -> void:
+	var packed: PackedScene = load(path) if ResourceLoader.exists(path) else null
+	var targets := character.find_children("*", "Skeleton3D", true, false)
+	if packed == null or targets.is_empty():
+		return
+	var target: Skeleton3D = targets[0]
+	var scene := packed.instantiate()
+	var sources := scene.find_children("*", "Skeleton3D", true, false)
+	if sources.is_empty():
+		scene.free()
+		return
+	var source: Skeleton3D = sources[0]
+	var bones := {}
+	for bone in target.get_bone_count():
+		bones[_bone_key(target.get_bone_name(bone))] = bone
+	# Same rig in both files, so one similarity transform maps the body's
+	# skeleton space onto this one; found from the hips, head and hands.
+	var mapping := _skeleton_mapping(source, target, bones)
+	for mesh in target.find_children("*", "MeshInstance3D", true, false):
+		mesh.get_parent().remove_child(mesh)
+		mesh.free()
+	for mesh: MeshInstance3D in scene.find_children("*", "MeshInstance3D", true, false):
+		if mesh.skin == null:
+			continue
+		var skin := Skin.new()
+		var placed := Transform3D()
+		for i in mesh.skin.get_bind_count():
+			var name := String(mesh.skin.get_bind_name(i))
+			if name == "":
+				name = source.get_bone_name(mesh.skin.get_bind_bone(i))
+			var from := source.find_bone(name)
+			var key := _bone_key(name)
+			if from < 0 or not bones.has(key):
+				continue
+			var to: int = bones[key]
+			var rest_space := mapping * source.get_bone_global_rest(from) * mesh.skin.get_bind_pose(i)
+			placed = rest_space
+			skin.add_named_bind(target.get_bone_name(to), target.get_bone_global_rest(to).affine_inverse() * rest_space)
+		mesh.owner = null
+		mesh.get_parent().remove_child(mesh)
+		target.add_child(mesh)
+		# Skinning ignores the node's own transform; this only places its
+		# bounds, which _fit measures.
+		mesh.transform = placed
+		mesh.skin = skin
+		mesh.skeleton = NodePath("..")
+	scene.free()
+
+static func _bone_key(name: String) -> String:
+	return name.get_slice(":", name.get_slice_count(":") - 1).trim_prefix("mixamorig_").to_lower()
+
+func _skeleton_mapping(source: Skeleton3D, target: Skeleton3D, bones: Dictionary) -> Transform3D:
+	var frames: Array[Transform3D] = []
+	for skeleton: Skeleton3D in [source, target]:
+		var point := func(bone_name: String) -> Vector3:
+			for bone in skeleton.get_bone_count():
+				if _bone_key(skeleton.get_bone_name(bone)) == bone_name:
+					return skeleton.get_bone_global_rest(bone).origin
+			return Vector3.ZERO
+		var hips: Vector3 = point.call("hips")
+		var up: Vector3 = point.call("head") - hips
+		var across: Vector3 = point.call("lefthand") - point.call("righthand")
+		var size := up.length()
+		var basis := Basis(across.normalized(), up.normalized(), across.cross(up).normalized()).orthonormalized()
+		frames.append(Transform3D(basis.scaled(Vector3.ONE * size), hips))
+	return frames[1] * frames[0].affine_inverse()
 
 ## Paints the shared body in the fighter's colours: [body, joints]. Meshes
 ## named like joints or trims take the second colour.
