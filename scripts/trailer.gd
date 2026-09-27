@@ -21,7 +21,7 @@ const SIZE := Vector2(960, 540)
 const BAR := 62.0
 const ANANTA := 6
 const CUT := 4.0
-const DISSOLVE := 1.0
+const DISSOLVE := 1.5
 const OPENING := 7.0
 ## Where each arena is filmed from: [eye from, look from, eye to, look to, fov].
 ## Heritage Square as a whole: a push down the square to the pagoda, then a
@@ -246,9 +246,14 @@ func _face(index: int) -> Vector3:
 	# Skinned bounds sit above the rendered head; measured on the roster.
 	return Vector3(rig.position.x, top - 0.29, rig.position.z)
 
+## Holds a fighter still: their animation stops where it is.
+func _freeze(index: int) -> void:
+	actors[index].fighter.get_node("Visual").set_process(false)
+
 func _hide_all() -> void:
 	walk_start = -1.0
 	for i in actors.size():
+		actors[i].fighter.get_node("Visual").set_process(true)
 		_show(i, false)
 		_pose(i, "")
 
@@ -350,7 +355,7 @@ func _caption(text: String) -> void:
 
 ## COMING SOON drawn out letter by letter across a gold line, over black.
 ## The fighter's name and title, fading in low on the frame beside them.
-func _name(index: int, delay := 0.7, slow := 0.8) -> void:
+func _name(index: int, delay := 0.7, slow := 0.8, hold := -1.0) -> void:
 	_clear_text()
 	var profile := ROSTER.profile(index)
 	var box := Control.new()
@@ -366,6 +371,10 @@ func _name(index: int, delay := 0.7, slow := 0.8) -> void:
 	tween.tween_interval(delay)
 	tween.tween_property(box, "modulate:a", 1.0, slow)
 	tween.parallel().tween_property(box, "position:x", 0.0, slow + 0.6).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	if hold >= 0.0:
+		# Gone before the next dissolve begins, so names never cross-fade.
+		tween.tween_interval(hold)
+		tween.tween_property(box, "modulate:a", 0.0, 0.4)
 
 ## WHO WON? burns in, then COMING SOON is drawn out beneath a gold line.
 func _coming_soon() -> void:
@@ -413,7 +422,7 @@ func _dissolve() -> void:
 	add_child(still)
 	move_child(still, overlay.get_index())
 	var tween := still.create_tween()
-	tween.tween_property(still, "modulate:a", 0.0, DISSOLVE).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(still, "modulate:a", 0.0, DISSOLVE).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tween.tween_callback(still.queue_free)
 
 # ── Camera ───────────────────────────────────────────────────────────────
@@ -463,12 +472,13 @@ func _build_beats() -> void:
 			_end_arena()
 			_hide_all()
 			_place(index, Vector3.ZERO, Vector3(0.25, 0, 1))
-			# Upright (the walk) so the head is up and the fists are down,
-			# filmed from just below eye level.
-			_pose(index, "walk")
+			# A frame of the run holds the head up and the hands low, out of
+			# a head-and-shoulders frame; the pose is then held still.
+			_pose(index, "run")
 			_light_face(index, 5.0)
-			_cut({"fov": 22, "follow": index, "portrait": true, "offset": Vector3(0.32, -0.04, 1.6), "offset_to": Vector3(0.26, -0.04, 1.3), "aim": Vector3(0, 0.0, 0), "time": CUT})
-			_name(index))
+			_cut({"fov": 18, "follow": index, "portrait": true, "offset": Vector3(0.3, -0.05, 1.75), "offset_to": Vector3(0.25, -0.05, 1.45), "aim": Vector3(0, -0.02, 0), "time": CUT + DISSOLVE})
+			_name(index, 0.9, 0.8, CUT - 2.3))
+		_at(at + 0.2, func(): _freeze(index))
 		at += CUT
 	# Ananta: out of full black, his face appears slowly as the light
 	# creeps up and the camera drifts in; his name comes last.
@@ -478,11 +488,12 @@ func _build_beats() -> void:
 	_at(at + 0.9, func():
 		_hide_all()
 		_place(ANANTA, Vector3.ZERO, Vector3(0, 0, 1))
-		_pose(ANANTA, "walk")
+		_pose(ANANTA, "run")
 		_light_face(ANANTA, 5.5, 6.0)
 		_fade(0.0, 2.5)
-		_cut({"fov": 20, "follow": ANANTA, "portrait": true, "offset": Vector3(0.08, -0.04, 2.0), "offset_to": Vector3(0.04, -0.03, 1.1), "aim": Vector3(0, 0.0, 0), "time": 8.0})
+		_cut({"fov": 18, "follow": ANANTA, "portrait": true, "offset": Vector3(0.08, -0.05, 2.1), "offset_to": Vector3(0.04, -0.05, 1.3), "aim": Vector3(0, -0.02, 0), "time": 8.0})
 		_name(ANANTA, 5.0, 1.4))
+	_at(at + 1.1, func(): _freeze(ANANTA))
 	at += 9.0
 	_at(at - 0.6, func(): _fade(1.0, 0.6))
 	_at(at, func():
