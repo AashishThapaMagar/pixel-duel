@@ -31,18 +31,29 @@ func begin_intro(next_opponent_id: String) -> void:
 	opponent_id = next_opponent_id
 	phase = Phase.INTRO
 
+## The chosen fighter's own storyline from story_script.gd ROUTES, or {}
+## when they don't have one yet (the shared story plays instead).
+func route() -> Dictionary:
+	return STORY.ROUTES.get(ROSTER.profile(MatchSetup.selected_fighters[0]).id, {})
+
+## A chapter's beats: the shared ones, with any the route rewrites.
+func chapter(id: String) -> Dictionary:
+	var beats: Dictionary = STORY.CHAPTERS.get(id, {}).duplicate()
+	beats.merge(route().get("chapters", {}).get(id, {}), true)
+	return beats
+
 func current_lines() -> Array:
 	match phase:
 		Phase.PROLOGUE:
-			return STORY.PROLOGUE
+			return route().get("prologue", STORY.PROLOGUE)
 		Phase.FINALE:
-			return STORY.FINALE
+			return route().get("finale", STORY.FINALE)
 		Phase.INTRO:
-			return STORY.CHAPTERS.get(opponent_id, {}).get("intro", [])
+			return chapter(opponent_id).get("intro", [])
 		Phase.VICTORY:
-			return STORY.CHAPTERS.get(opponent_id, {}).get("victory", [])
+			return chapter(opponent_id).get("victory", [])
 		Phase.DEFEAT:
-			return STORY.CHAPTERS.get(opponent_id, {}).get("defeat", [])
+			return chapter(opponent_id).get("defeat", [])
 	return []
 
 ## Skips forward through any beats story_script.gd left empty ([]), landing

@@ -22,6 +22,16 @@ extends RefCounted
 ## that beat entirely — e.g. leave CHAPTERS[id].defeat as [] if you don't
 ## want a loss line for that fighter.
 ##
+## Each fighter can also have their own storyline in ROUTES, keyed by the
+## fighter the player chose. A route can replace the prologue and finale,
+## and rewrite any beat of any chapter (the rest stay shared):
+##   "prologue_arena" / "finale_arena"  arena mood (nepal_stage_3d.gd ROUNDS)
+##   "title" / "subtitle"               the prologue's title card
+##   "finale_title"                     the finale's title card
+## Any line can carry a "banner" that slams a card across the screen before
+## the line plays (a poster, a headline):
+##   {"speaker": "", "text": "...", "banner": {"eyebrow": "...", "title": "...", "subtitle": "...", "red": true}}
+##
 ## The cutscene camera picks its own shot (a close-up on whoever speaks,
 ## wide shots and two-shots for narration). Add a "shot" key to choose one:
 ## "wide", "two", "hero", "close_player" or "close_rival".
@@ -36,7 +46,7 @@ extends RefCounted
 
 const PROLOGUE := [
 	{"speaker": "", "text": "Kathmandu. Old stone, older rivalries."},
-	{"speaker": "", "text": "Seven fighters. One title. Every square in the valley has a name to settle."},
+	{"speaker": "", "text": "Seven fighters. One title. Five crore rupees to whoever beats Ananta.", "banner": {"eyebrow": "OPEN TOURNAMENT", "title": "THE ROAD TO ANANTA", "subtitle": "BEAT ANANTA  /  WIN RS 5 CRORE", "red": true}},
 	{"speaker": "player", "text": "Then I'll settle all of them."},
 	{"speaker": "", "text": "The road to the top starts now.", "shot": "hero"},
 ]
@@ -143,3 +153,101 @@ const FINALE := [
 	{"speaker": "player", "text": "Tell the valley. The title stays here."},
 	{"speaker": "", "text": "THE END.", "shot": "wide"},
 ]
+
+## ── Fighter storylines ─────────────────────────────────────────────────
+const ROUTES := {
+	# Anug: a goalkeeper in a country with no football to pay him.
+	"anug": {
+		"title": "NO PITCH, NO PAY",
+		"subtitle": "THE STORY OF ANUG",
+		"prologue_arena": 1,
+		"finale_arena": 2,
+		"finale_title": "FIVE CRORE",
+		"prologue": [
+			{"speaker": "", "text": "Anug grew up with a football at his feet and one dream: to play it for a living.", "shot": "wide"},
+			{"speaker": "", "text": "But in Nepal, the pitch doesn't pay. Leagues stop. Clubs fold. The trials never come."},
+			{"speaker": "anug", "text": "Ten years in goal. Not one rupee from it."},
+			{"speaker": "", "text": "The city doesn't care what you were good at. Rent is due on the first."},
+			{"speaker": "anug", "text": "Football is all I know. Football... and how to fight."},
+			{"speaker": "", "text": "So he teaches MMA in a rented hall. Three students a week. Just enough to survive.", "shot": "hero"},
+			{"speaker": "", "text": "Then one night, walking home, a poster on a temple wall.", "shot": "wide", "banner": {"eyebrow": "OPEN TOURNAMENT", "title": "THE ROAD TO ANANTA", "subtitle": "BEAT ANANTA  /  WIN RS 5 CRORE", "red": true}},
+			{"speaker": "anug", "text": "Five crore..."},
+			{"speaker": "anug", "text": "That's not a prize. That's a pitch. A team. A future for every kid like me.", "shot": "hero"},
+			{"speaker": "anug", "text": "Nothing gets past me. Not this time."},
+		],
+		"chapters": {
+			"ish": {
+				"intro": [
+					{"speaker": "", "text": "First rival: Ish. The fastest hands in the valley."},
+					{"speaker": "ish", "text": "A goalkeeper? Go back to your pitch, keeper."},
+					{"speaker": "anug", "text": "There's no pitch to go back to. That's why I'm here."},
+				],
+				"victory": [
+					{"speaker": "ish", "text": "Okay... where did a goalkeeper learn to hit like that?"},
+					{"speaker": "anug", "text": "Teaching it. Three students a week."},
+				],
+			},
+			"sab": {
+				"intro": [
+					{"speaker": "sab", "text": "I've heard about you. The footballer who fights."},
+					{"speaker": "anug", "text": "The footballer who can't pay rent. That's the one."},
+					{"speaker": "sab", "text": "Then let's see how much you want it."},
+				],
+				"victory": [
+					{"speaker": "sab", "text": "Strong grip. Stronger will. Go get your pitch."},
+				],
+			},
+			"bib": {
+				"intro": [
+					{"speaker": "bib", "text": "Catch me if you can!"},
+					{"speaker": "anug", "text": "I've spent my whole life catching things."},
+				],
+				"victory": [
+					{"speaker": "bib", "text": "Guess I ran out of road."},
+					{"speaker": "anug", "text": "Nobody outruns the keeper."},
+				],
+			},
+			"abhi": {
+				"intro": [
+					{"speaker": "abhi", "text": "Five crore? You'll spend it on football? Nobody in Nepal watches football."},
+					{"speaker": "anug", "text": "They would. If someone gave them a reason."},
+				],
+				"victory": [
+					{"speaker": "abhi", "text": "...Fine. I'd watch that match."},
+				],
+			},
+			"sup": {
+				"intro": [
+					{"speaker": "sup", "text": "You fight like you're guarding something."},
+					{"speaker": "anug", "text": "I am. Every kid who only knows one thing."},
+				],
+				"victory": [
+					{"speaker": "sup", "text": "The spiral breaks. He's waiting at the stupa, keeper."},
+					{"speaker": "anug", "text": "Then let's finish this."},
+				],
+			},
+			"anant": {
+				"intro": [
+					{"speaker": "", "text": "Night at the stupa. Five crore rests on one fight.", "shot": "wide"},
+					{"speaker": "anant", "text": "A footballer. You're a long way from your pitch."},
+					{"speaker": "anug", "text": "I never had one. That's what I'm fighting for."},
+					{"speaker": "anant", "text": "Everyone who reached me was fighting for something."},
+					{"speaker": "anug", "text": "Then you've never faced a keeper."},
+				],
+				"victory": [
+					{"speaker": "anant", "text": "...Nothing gets past you. The final word is yours."},
+				],
+				"defeat": [
+					{"speaker": "anant", "text": "Your dream is heavy, keeper. Come back when you can carry it."},
+				],
+			},
+		},
+		"finale": [
+			{"speaker": "", "text": "Five crore. The Road to Ananta has its champion, and he wears goalkeeper gloves.", "shot": "hero"},
+			{"speaker": "anug", "text": "No kid here should have to choose between football and food."},
+			{"speaker": "", "text": "Months later, at the edge of the city, floodlights switch on over a brand new pitch.", "shot": "wide", "banner": {"eyebrow": "EPILOGUE", "title": "ANUG FOOTBALL ACADEMY", "subtitle": "FREE FOR EVERY KID WHO SHOWS UP"}},
+			{"speaker": "anug", "text": "Alright, everyone. Line up. Let's see who can get one past me."},
+			{"speaker": "", "text": "THE END.", "shot": "wide"},
+		],
+	},
+}

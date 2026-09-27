@@ -54,6 +54,8 @@ var fade_tween: Tween
 var pending: Callable
 var carding := false
 var leaving := false
+## Line index whose "banner" card has already been shown.
+var banner_shown := -1
 ## False until the first frames have rendered; loading hitches would
 ## otherwise eat the whole title card before anyone sees it.
 var started := false
@@ -165,11 +167,13 @@ func _open_beat() -> void:
 	var rival_index := _index_for(StoryDirector.opponent_id)
 	var chapter: int = MatchSetup.arcade_index + 1
 	var arena := 0
+	var route: Dictionary = StoryDirector.route()
+	banner_shown = -1
 	match phase:
 		StoryDirector.Phase.PROLOGUE:
-			arena = PROLOGUE_ROUND
+			arena = route.get("prologue_arena", PROLOGUE_ROUND)
 		StoryDirector.Phase.FINALE:
-			arena = FINALE_ROUND
+			arena = route.get("finale_arena", FINALE_ROUND)
 		_:
 			arena = MatchSetup.arcade_index % STAGE.ROUNDS.size()
 	stage.show_round(arena)
@@ -184,7 +188,7 @@ func _open_beat() -> void:
 	var place: String = STAGE.ROUNDS[arena].name
 	match phase:
 		StoryDirector.Phase.PROLOGUE:
-			_card("PROLOGUE", "THE ROAD TO " + ROSTER.profile(6).name, place, UI.GOLD)
+			_card("PROLOGUE", route.get("title", "THE ROAD TO " + ROSTER.profile(6).name), route.get("subtitle", place), UI.GOLD)
 		StoryDirector.Phase.INTRO:
 			var boss: bool = MatchSetup.is_final_boss()
 			_card("FINAL CHAPTER" if boss else "CHAPTER %02d" % chapter, rival.name, rival.title.to_upper() + "   /   " + place, UI.CRIMSON if boss else UI.GOLD)
@@ -198,7 +202,7 @@ func _open_beat() -> void:
 			_card("CHAPTER %02d" % chapter, "DEFEATED", "GET UP. THE ROAD IS STILL THERE.", UI.RED)
 		StoryDirector.Phase.FINALE:
 			_pose("player", "victory")
-			_card("FINALE", "THE FINAL WORD", hero.name + "   /   CHAMPION", UI.GOLD)
+			_card("FINALE", route.get("finale_title", "THE FINAL WORD"), hero.name + "   /   CHAMPION", UI.GOLD)
 	# Opening move while the card is up: a slow establishing crane.
 	_cut({"kind": "wide", "duration": 6.0})
 
@@ -264,7 +268,7 @@ func _cut(next: Dictionary) -> void:
 
 func _shot_for(line: Dictionary, index: int) -> Dictionary:
 	var named: String = line.get("shot", "")
-	var speaker: String = line.get("speaker", "")
+	var speaker: String = _speaker(line)
 	if named == "" :
 		if speaker == "player":
 			named = "close_player"
@@ -331,7 +335,7 @@ func _update_camera(delta: float) -> void:
 # ── Title card ───────────────────────────────────────────────────────────
 
 ## A crimson slash with the chapter name slides across, holds, and leaves.
-func _card(eyebrow: String, title: String, subtitle: String, accent: Color) -> void:
+func _card(eyebrow: String, title: String, subtitle: String, accent: Color, bars := true) -> void:
 	if is_instance_valid(card):
 		card.queue_free()
 	card = Control.new()
@@ -349,7 +353,7 @@ func _card(eyebrow: String, title: String, subtitle: String, accent: Color) -> v
 	style.border_color = accent
 	band.add_theme_stylebox_override("panel", style)
 	card.add_child(band)
-	var top := UI.eyebrow(card, eyebrow, Vector2(0, 212), Vector2(SIZE.x, 18), accent)
+	var top := UI.eyebrow(card, eyebrow, Vector2(0, 212), Vector2(SIZE.x, 18), accent.lightened(0.35))
 	top.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var big := UI.heading(card, title, Vector2(0, 226), Vector2(SIZE.x, 76), 66, UI.WHITE, UI.CRIMSON if accent != UI.CRIMSON else UI.GOLD)
 	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -359,7 +363,7 @@ func _card(eyebrow: String, title: String, subtitle: String, accent: Color) -> v
 	carding = true
 	card.modulate.a = 0.0
 	card.position.x = -80
-	_set_bars(0.0)
+	_set_bars(0.0 if bars else 1.0)
 	name_label.text = ""
 	text_label.text = ""
 	# In, hold, out: parallel() joins a tweener to the step before it.
@@ -367,7 +371,7 @@ func _card(eyebrow: String, title: String, subtitle: String, accent: Color) -> v
 	card_tween.tween_interval(0.25)
 	card_tween.tween_property(card, "modulate:a", 1.0, 0.35)
 	card_tween.parallel().tween_property(card, "position:x", 0.0, 0.6).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-	card_tween.parallel().tween_method(_set_bars, 0.0, 1.0, 0.9).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	card_tween.parallel().tween_method(_set_bars, 0.0 if bars else 1.0, 1.0, 0.9).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	card_tween.tween_interval(1.9)
 	card_tween.tween_property(card, "modulate:a", 0.0, 0.4)
 	card_tween.parallel().tween_property(card, "position:x", 80.0, 0.4).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
@@ -386,9 +390,22 @@ func _end_card() -> void:
 
 # ── Lines ────────────────────────────────────────────────────────────────
 
+## The line's speaker, with the chosen fighter's own id read as "player"
+## so their storyline can name them directly.
+func _speaker(line: Dictionary) -> String:
+	var id: String = line.get("speaker", "")
+	return "player" if id == ROSTER.profile(MatchSetup.selected_fighters[0]).id else id
+
 func _show_line() -> void:
 	var line: Dictionary = lines[line_index]
-	var speaker_id: String = line.get("speaker", "")
+	# A "banner" line first slams its card across the screen (a poster, a
+	# headline), then plays as a normal line.
+	if line.has("banner") and banner_shown != line_index:
+		banner_shown = line_index
+		var banner: Dictionary = line.banner
+		_card(banner.get("eyebrow", ""), banner.get("title", ""), banner.get("subtitle", ""), UI.CRIMSON if banner.get("red", false) else UI.GOLD, false)
+		return
+	var speaker_id: String = _speaker(line)
 	var tint: Color = UI.GOLD
 	if speaker_id.is_empty():
 		name_label.text = ""
