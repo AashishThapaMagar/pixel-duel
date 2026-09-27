@@ -32,6 +32,27 @@ extends RefCounted
 ## the line plays (a poster, a headline):
 ##   {"speaker": "", "text": "...", "banner": {"eyebrow": "...", "title": "...", "subtitle": "...", "red": true}}
 ##
+## Lines can leave the arenas for story_sets.gd sets and direct the actors:
+##   "set": "gym" | "street" | "pitch" | "academy"   (dips to black to change)
+##   "cast": {"player": {"at": "coach", "face": [0, 1]},
+##            "s1": {"fighter": "bib", "at": "s1", "face": "player", "scale": 0.62}}
+##       "at" is a mark of the set or [x, z]; "face" is [dx, dz], a mark, an
+##       actor or "camera"; any roster fighter can be cast under any name.
+##   "do": [{"who": "player", "walk": "poster", "speed": 1.2, "then_face": [0, -1]},
+##          {"who": "s1", "pose": "jab", "repeat": 1.3, "delay": 0.4},
+##          {"who": "player", "pose": "kick", "hold": 1.5},
+##          {"ball": {"from": [8, 0.11, 0], "to": [12.5, 1, -1], "time": 0.7}, "delay": 1.4}]
+##       poses are animation names: idle, walk, run, jab, punch_heavy, kick,
+##       kick_spin, block, block_hit, hit, ko, taunt, victory ("" = back to idle).
+##   "shot": {"eye": [x,y,z], "look": [x,y,z], "eye_to": ..., "look_to": ..., "time": 6}
+##           {"follow": "player", "offset": [x, y, z]}     {"close": "s1"}
+##
+## Narration: drop a recording for any line at
+##   audio/story/<chosen fighter>/<beat>_<line number>.ogg   (.wav / .mp3 too)
+## e.g. audio/story/anug/prologue_01.ogg, audio/story/anug/ish_intro_02.ogg,
+## audio/story/anug/finale_03.ogg. It plays with the line, and the scene moves
+## on by itself when it ends.
+##
 ## The cutscene camera picks its own shot (a close-up on whoever speaks,
 ## wide shots and two-shots for narration). Add a "shot" key to choose one:
 ## "wide", "two", "hero", "close_player" or "close_rival".
@@ -164,16 +185,52 @@ const ROUTES := {
 		"finale_arena": 2,
 		"finale_title": "FIVE CRORE",
 		"prologue": [
-			{"speaker": "", "text": "Anug grew up with a football at his feet and one dream: to play it for a living.", "shot": "wide"},
-			{"speaker": "", "text": "But in Nepal, the pitch doesn't pay. Leagues stop. Clubs fold. The trials never come."},
+			# A dusty neighbourhood pitch: the dream.
+			{"speaker": "", "text": "Anug grew up with a football at his feet and one dream: to play it for a living.",
+				"set": "pitch", "cast": {"player": {"at": "spot", "face": [1, 0]}},
+				"do": [{"who": "player", "pose": "kick", "delay": 0.9, "hold": 1.6},
+					{"ball": {"from": [8.2, 0.11, 0.2], "to": [13.4, 1.1, -1.6], "time": 0.7, "arc": 0.5}, "delay": 1.5}],
+				"shot": {"eye": [5.6, 1.25, 3.4], "look": [9.5, 0.9, -0.4], "eye_to": [6.3, 1.2, 2.9], "look_to": [11.5, 1.0, -0.9], "time": 6}},
+			{"speaker": "", "text": "But in Nepal, the pitch doesn't pay. Leagues stop. Clubs fold. The trials never come.",
+				"do": [{"who": "player", "walk": "centre", "speed": 0.8, "delay": 0.6}],
+				"shot": {"follow": "player", "offset": [-2.4, 0.1, 2.4]}},
 			{"speaker": "anug", "text": "Ten years in goal. Not one rupee from it."},
-			{"speaker": "", "text": "The city doesn't care what you were good at. Rent is due on the first."},
+			# The city at night.
+			{"speaker": "", "text": "The city doesn't care what you were good at. Rent is due on the first.",
+				"set": "street", "cast": {"player": {"at": "far", "face": [1, 0]}},
+				"do": [{"who": "player", "walk": [-2.4, 0.4], "speed": 1.0, "delay": 0.4}],
+				"shot": {"eye": [-4.8, 1.5, 4.6], "look": [-6.2, 1.2, 0.0], "eye_to": [-2.6, 1.5, 4.0], "look_to": [-2.2, 1.2, -0.6], "time": 6}},
 			{"speaker": "anug", "text": "Football is all I know. Football... and how to fight."},
-			{"speaker": "", "text": "So he teaches MMA in a rented hall. Three students a week. Just enough to survive.", "shot": "hero"},
-			{"speaker": "", "text": "Then one night, walking home, a poster on a temple wall.", "shot": "wide", "banner": {"eyebrow": "OPEN TOURNAMENT", "title": "THE ROAD TO ANANTA", "subtitle": "BEAT ANANTA  /  WIN RS 5 CRORE", "red": true}},
-			{"speaker": "anug", "text": "Five crore..."},
-			{"speaker": "anug", "text": "That's not a prize. That's a pitch. A team. A future for every kid like me.", "shot": "hero"},
-			{"speaker": "anug", "text": "Nothing gets past me. Not this time."},
+			# The rented hall.
+			{"speaker": "", "text": "So he teaches MMA in a rented hall. Three students a week. Just enough to survive.",
+				"set": "gym", "cast": {
+					"player": {"at": "coach", "face": [0, 1]},
+					"s1": {"fighter": "bib", "at": "s1", "face": "coach"},
+					"s2": {"fighter": "abhi", "at": "s2", "face": "coach"},
+					"s3": {"fighter": "sup", "at": "s3", "face": "coach"}},
+				"do": [{"who": "s1", "pose": "jab", "repeat": 1.5, "delay": 0.3},
+					{"who": "s2", "pose": "jab", "repeat": 1.5, "delay": 0.8},
+					{"who": "s3", "pose": "jab", "repeat": 1.5, "delay": 1.2},
+					{"who": "player", "pose": "jab", "repeat": 2.2, "delay": 0.1}],
+				"shot": "wide"},
+			{"speaker": "anug", "text": "Hands up. Chin down. Again.",
+				"shot": {"eye": [-1.2, 1.35, 2.7], "look": [0, 1.4, -1.2], "eye_to": [-0.7, 1.4, 2.2], "look_to": [0, 1.45, -1.2], "time": 5}},
+			# Walking home: the poster.
+			{"speaker": "", "text": "Then one night, walking home...",
+				"set": "street", "cast": {"player": {"at": [-5.0, 0.3], "face": [1, 0]}},
+				"do": [{"who": "player", "walk": [1.3, -1.6], "speed": 1.1, "then_face": [0, -1]}],
+				"shot": {"follow": "player", "offset": [1.9, 0.05, 2.4]}},
+			{"speaker": "", "text": "...a poster on a temple wall.",
+				"banner": {"eyebrow": "OPEN TOURNAMENT", "title": "THE ROAD TO ANANTA", "subtitle": "BEAT ANANTA  /  WIN RS 5 CRORE", "red": true},
+				"cast": {"player": {"at": [1.3, -1.6], "face": [0, -1]}},
+				"shot": {"eye": [-0.8, 1.9, 1.6], "look": [0.4, 1.85, -3.3], "eye_to": [-0.1, 1.87, 0.4], "look_to": [0.4, 1.85, -3.3], "time": 5}},
+			{"speaker": "anug", "text": "Five crore...",
+				"shot": {"eye": [2.1, 1.75, -0.3], "look": [0.5, 1.8, -3.3], "eye_to": [1.9, 1.78, -0.6], "look_to": [0.45, 1.82, -3.3], "time": 5}},
+			{"speaker": "anug", "text": "That's not a prize. That's a pitch. A team. A future for every kid like me.",
+				"do": [{"who": "player", "face": [0.4, 1]}], "shot": "hero"},
+			{"speaker": "anug", "text": "Nothing gets past me. Not this time.",
+				"do": [{"who": "player", "walk": [8.0, 0.9], "speed": 1.4, "delay": 1.2}],
+				"shot": {"eye": [-1.6, 1.4, 3.6], "look": [1.5, 1.3, -1.0], "eye_to": [-1.0, 1.5, 3.0], "look_to": [4.5, 1.3, 0.0], "time": 6}},
 		],
 		"chapters": {
 			"ish": {
@@ -245,8 +302,26 @@ const ROUTES := {
 		"finale": [
 			{"speaker": "", "text": "Five crore. The Road to Ananta has its champion, and he wears goalkeeper gloves.", "shot": "hero"},
 			{"speaker": "anug", "text": "No kid here should have to choose between football and food."},
-			{"speaker": "", "text": "Months later, at the edge of the city, floodlights switch on over a brand new pitch.", "shot": "wide", "banner": {"eyebrow": "EPILOGUE", "title": "ANUG FOOTBALL ACADEMY", "subtitle": "FREE FOR EVERY KID WHO SHOWS UP"}},
-			{"speaker": "anug", "text": "Alright, everyone. Line up. Let's see who can get one past me."},
+			# Months later: the academy.
+			{"speaker": "", "text": "Months later, at the edge of the city, floodlights switch on over a brand new pitch.",
+				"set": "academy",
+				"banner": {"eyebrow": "EPILOGUE", "title": "ANUG FOOTBALL ACADEMY", "subtitle": "FREE FOR EVERY KID WHO SHOWS UP"},
+				"cast": {
+					"player": {"at": "goal", "face": [-1, 0]},
+					"k1": {"fighter": "bib", "at": "k1", "face": "goal", "scale": 0.62},
+					"k2": {"fighter": "ish", "at": "k2", "face": "goal", "scale": 0.62},
+					"k3": {"fighter": "sup", "at": "k3", "face": "goal", "scale": 0.62}},
+				"shot": "wide"},
+			{"speaker": "anug", "text": "Alright, everyone. Line up. Let's see who can get one past me.",
+				"do": [{"who": "player", "pose": "block"}]},
+			{"speaker": "", "text": "The first shot the Anug Football Academy ever faced.",
+				"do": [{"ball": {"from": [8.45, 0.11, -0.75], "to": [8.45, 0.11, -0.75], "time": 0.05}},
+					{"who": "k2", "walk": [8.0, -0.7], "speed": 1.2, "then_face": "goal"},
+					{"who": "k2", "pose": "kick", "delay": 1.7, "hold": 1.6},
+					{"ball": {"from": [8.45, 0.11, -0.75], "to": [12.0, 1.05, -1.0], "time": 0.55, "arc": 0.4}, "delay": 2.3},
+					{"who": "player", "pose": "block_hit", "delay": 2.5, "hold": 2.2}],
+				"shot": {"eye": [6.2, 1.2, 2.8], "look": [9.8, 0.9, -0.9], "eye_to": [7.0, 1.3, 2.3], "look_to": [11.8, 1.2, -1.0], "time": 5}},
+			{"speaker": "anug", "text": "Saved! Good shot, though. Again. Harder this time."},
 			{"speaker": "", "text": "THE END.", "shot": "wide"},
 		],
 	},

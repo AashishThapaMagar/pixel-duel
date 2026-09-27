@@ -374,6 +374,12 @@ func update(delta: float) -> void:
 		guard_weight = move_toward(guard_weight, 1.0 if logical in GUARDED else 0.0, delta * 8.0)
 	_apply_guard()
 
+## Restarts the current clip on the next update (cutscenes repeating a move).
+func replay() -> void:
+	if player != null:
+		player.stop()
+	current = ""
+
 ## Blends the upper body toward the idle clip's boxing guard.
 func _apply_guard() -> void:
 	if guard_weight <= 0.0 or guard_clip == null:
