@@ -18,6 +18,20 @@ Combat keeps the existing move tables, stamina, hit confirms, throws, guard brea
 
 **Hit effects.** A landed strike pops a white-hot core, a camera-facing shock ring and a burst of hot sparks that fall under gravity; a guarded strike throws cold blue chips instead. The struck fighter flashes white-hot for a few frames, the camera jolts on two axes and kicks its lens in on heavy hits, and the finishing grade adds a brief radial colour split and shock ring around the impact. Heavy hits, landings and dashes puff courtyard dust at the feet. Dashes and heavy attacks leave translucent afterimages in the player's colour (blue for P1, red for P2). A knockout flashes the screen and briefly drains its colour. Camera shake and the lens kick follow the Fight Options shake setting; every effect is visual only and none of it changes the move tables or timings.
 
+## Menus, records and options
+
+The title screen keeps its slanted mode column and live arena, now with a gold light sweeping the title and a two-line ledger under the splash card: your last fight and your running record. A **RECORDS** entry opens the ledger: matches, wins, win rate, best streak, knockouts, perfect rounds, arcade clears and play time as stat tiles, wins per mode, a per-fighter column with your favourite in gold, and a reset. Records live in `user://records.cfg` (`scripts/records.gd`, the `Records` autoload) and are written by the arena at the end of every round and match.
+
+**Settings** is a hub: fullscreen, master and sound-effect volume, touch controls, the graphics preset, then Fight Options, Controls, How to Play and Reset Defaults. **Fight Options** adds Hit Effects (sparks, dust, trails and flashes) and Input Display (training-style key chips low on each player's side of the screen) beside AI difficulty, round timer and camera shake. **Controls** lists every key for both players. **Graphics** adds a Bloom and Grade toggle for the post-processing pass. The pause menu carries the same sliders and toggles mid-fight.
+
+Fighter select has a **?** button and the **R** key for a random pick: the portrait spins through the roster with a slowing tick, lands, and locks in. Each showcase shows that fighter's record. The arena picker names each arena's mood under its title. Every match opens on a **VS clash**: both names slam in from either side under a gold VS while the camera cranes down, then the round call follows. A round won without taking damage earns a **PERFECT!** under the winner callout.
+
+Rendered review of these screens (title, each options page, the select spin, the clash, the round call and a perfect) is written to `.godot/ui-*.png` by:
+
+```sh
+godot --path . --fixed-fps 60 -s res://tests/ui_capture.gd
+```
+
 ## Controls
 
 For immediate hands-on play, click **PRACTICE [F2]** on the main menu. Your selected 3D fighter enters the courtyard with a passive dummy, unlimited time, and automatic reset after a knockout. **R** resets positions and health. Use **FIGHTERS** first to change your character.
@@ -97,6 +111,8 @@ pixel-duel/
     main_menu.gd         Main menu screen-switching (Play/Match Setup/Settings/Exit)
     match_setup.gd         Autoload: selected fighters, selected_arena, vs_ai — survives scene changes
     settings.gd           Autoload: fullscreen/volume, applied + saved to user://settings.cfg
+    records.gd            Autoload: the player's fight record, saved to user://records.cfg
+    input_display.gd      Training-style input history chips on the match HUD
     player.gd            Movement, attacks, blocking, health, state machine
     ai_controller.gd      Player-vs-AI opponent: movement inputs and buffered attack decisions
     fighter_visual.gd    Articulated 2D fighter and combat-synchronized poses
