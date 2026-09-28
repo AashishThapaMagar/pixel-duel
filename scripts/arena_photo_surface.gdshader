@@ -66,7 +66,18 @@ void fragment() {
 	}
 	float grey = dot(col, LUMA);
 	col = mix(vec3(grey), col, saturation);
-	ALBEDO = col * tint.rgb * (1.0 - damp * 0.25);
+	// Contact grime: walls darken toward the ground they stand on, and the
+	// underside of every ledge is shaded, standing in for the ambient
+	// occlusion the Compatibility renderer cannot compute on screen.
+	float upright = 1.0 - abs(n.y);
+	float footing = (1.0 - smoothstep(-0.2, 1.1, world_pos.y)) * upright;
+	float underside = smoothstep(-0.2, -0.9, n.y);
+	float occlusion = 1.0 - footing * 0.35 - underside * 0.45;
+	ALBEDO = col * tint.rgb * (1.0 - damp * 0.25) * occlusion;
+	AO = occlusion;
+	AO_LIGHT_AFFECT = 0.4;
 	ROUGHNESS = clamp(rough - damp * 0.5, 0.2, 1.0);
+	// Wet stone and fired brick both pick up a small, tight highlight.
+	SPECULAR = mix(0.28, 0.55, damp);
 	NORMAL = normalize((VIEW_MATRIX * vec4(bent, 0.0)).xyz);
 }
