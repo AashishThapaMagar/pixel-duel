@@ -101,6 +101,7 @@ restart={
 [physics]
 
 2d/default_gravity=2200
+common/physics_interpolation=true
 
 [rendering]
 

@@ -14,12 +14,16 @@ var bust_tracking := false
 ## Full-body showcase for the big select-screen frames: a wider render, the
 ## fighter larger and set off-centre toward the outside edge.
 var hero := false
+var viewport: SubViewport
+## Roster busts redraw on alternate frames: seven of them share the screen
+## with two hero renders and the live arena, and a bust barely moves.
+const BUST_FRAME_SKIP := 2
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	var viewport := SubViewport.new()
+	viewport = SubViewport.new()
 	viewport.size = Vector2i(320, 320) if not (closeup or bust) else Vector2i(200, 200)
 	if hero:
 		viewport.size = Vector2i(544, 336)
@@ -93,6 +97,8 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if not bust or fighter == null or camera == null:
 		return
+	if is_visible_in_tree():
+		viewport.render_target_update_mode = SubViewport.UPDATE_ONCE if Engine.get_process_frames() % BUST_FRAME_SKIP == get_index() % BUST_FRAME_SKIP else SubViewport.UPDATE_DISABLED
 	var animated = fighter.get_node("Visual").animated
 	if not animated.active or animated.skeleton == null:
 		return

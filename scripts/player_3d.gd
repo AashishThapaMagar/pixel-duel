@@ -204,6 +204,8 @@ func reset_for_new_round() -> void:
 	if body != null:
 		body.position = spawn_position
 		body.velocity = Vector3.ZERO
+		# A teleport, not a move: don't smear the fighter across the arena.
+		body.reset_physics_interpolation()
 	lateral_speed = 0.0
 	travel = 0.0
 	dash_run_held = false

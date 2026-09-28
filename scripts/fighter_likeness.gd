@@ -37,6 +37,10 @@ func mesh(parent: Node3D, shape: Mesh, at: Vector3, size: Vector3, material: Str
 	piece.material_override = visual.materials[material] if visual.materials.has(material) else _extra(material)
 	piece.position = at
 	piece.scale = size
+	# Trim, buttons and facial pieces are too small to show in a shadow;
+	# only the big costume panels join the shadow passes.
+	if size.x * size.y * size.z < 220.0:
+		piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(piece)
 	return piece
 

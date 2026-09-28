@@ -28,6 +28,9 @@ func _ready() -> void:
 		return
 	if world_root != null:
 		model = Node3D.new()
+		# Parts are posed every rendered frame; the body under them is the
+		# only thing physics interpolation should touch (see arena_3d.gd).
+		model.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		world_root.add_child(model)
 	else:
 		viewport_3d = SubViewport.new()
@@ -241,6 +244,14 @@ func _build_model() -> void:
 		var far_part: MeshInstance3D = parts[key].duplicate()
 		model.add_child(far_part)
 		parts[key + "_far"] = far_part
+	# Small trim never shows in a shadow, so it skips every shadow pass: the
+	# sun's cascades and the night key light each redraw the whole rig, and
+	# these pieces were a third of that work.
+	for key in ["eye_white", "eye", "brow", "mouth", "ear", "nose", "lapel_a", "lapel_b", "chest_mark", "player_mark", "shades", "belt_tail", "headband", "crest", "braid",
+		"rear_anklet", "lead_anklet", "rear_boot_trim", "lead_boot_trim", "rear_kneepad", "lead_kneepad", "rear_wrap", "lead_wrap", "rear_elbow", "lead_elbow"]:
+		parts[key].cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if parts.has(key + "_far"):
+			parts[key + "_far"].cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 func sync_pose(owner_fighter: Node) -> void:
 	super.sync_pose(owner_fighter)

@@ -33,12 +33,18 @@ var fixed_stage := -1
 func _enter_tree() -> void:
 	world = Node3D.new()
 	world.name = "World3D"
+	# Physics interpolation smooths the 60 Hz fighter bodies on any refresh
+	# rate. Only the bodies (and the rig pivots they turn) are interpolated;
+	# the camera, scenery, effects and the pose-driven rig parts all move in
+	# _process and would lag a tick behind if they were.
+	world.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(world)
 	_build_stage()
 	for i in 2:
 		var fighter: Node = get_node("Player%d" % (i + 1))
 		var body := CharacterBody3D.new()
 		body.name = "Fighter%d" % (i + 1)
+		body.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
 		body.collision_layer = 8
 		body.collision_mask = 1
 		body.floor_snap_length = 0.15
@@ -418,10 +424,14 @@ func _ko_3d(fighter: Node) -> void:
 	nepal_stage.flash(Color(1.0, 0.96, 0.88), 0.35, 0.45)
 	_dust(fighter.body.position, 16, Color(0.6, 0.54, 0.46, 0.5), 0.9)
 
-## Afterimages: while a fighter dashes or swings a heavy attack, the
-## procedural rig is snapshotted into one merged mesh every few frames and
-## left behind as a translucent ghost in the player's colour. Skinned
-## models are skipped (their surfaces would snapshot in the bind pose).
+## Afterimages: while a fighter dashes or swings a heavy attack, the big
+## pieces of the procedural rig are copied every few frames (sharing their
+## meshes, so nothing is built or uploaded) and left behind as a translucent
+## ghost in the player's colour. Skinned models are skipped (their
+## surfaces would copy in the bind pose).
+const GHOST_PARTS := ["torso", "hips", "chest_bulk", "head", "hair", "rear_thigh", "lead_thigh", "rear_shin", "lead_shin",
+	"rear_upper", "lead_upper", "rear_forearm", "lead_forearm", "rear_boot", "lead_boot", "rear_hand", "lead_hand", "cape"]
+
 func _update_ghosts(delta: float) -> void:
 	for i in 2:
 		var fighter: Node = [player1, player2][i]
@@ -458,24 +468,6 @@ func _snapshot(fighter: Node, color: Color) -> MeshInstance3D:
 	var animated = visual.get("animated")
 	if animated != null and animated.active:
 		return null
-	var tool := SurfaceTool.new()
-	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var to_world := Transform3D.IDENTITY
-	var any := false
-	for part: MeshInstance3D in visual.model.find_children("*", "MeshInstance3D", true, false):
-		if part.mesh == null or not part.is_visible_in_tree():
-			continue
-		# Tiny facial pieces add draw weight and read as noise in a ghost
-		# (sizes in world metres: the rig lives under a 1/64 pivot).
-		if part.get_aabb().get_longest_axis_size() * part.global_transform.basis.get_scale().length() < 0.06:
-			continue
-		for surface in part.mesh.get_surface_count():
-			tool.append_from(part.mesh, surface, part.global_transform)
-			any = true
-	if not any:
-		return null
-	var ghost := MeshInstance3D.new()
-	ghost.mesh = tool.commit()
 	var material := StandardMaterial3D.new()
 	# A faint alpha-blended trail in the fighter's own tone, not a neon copy.
 	material.albedo_color = Color(color.r, color.g, color.b, 0.1)
@@ -483,10 +475,25 @@ func _snapshot(fighter: Node, color: Color) -> MeshInstance3D:
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
 	material.cull_mode = BaseMaterial3D.CULL_BACK
+	var ghost := MeshInstance3D.new()
 	ghost.material_override = material
 	ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	world.add_child(ghost)
-	ghost.global_transform = to_world
+	var any := false
+	for key in GHOST_PARTS:
+		var part: MeshInstance3D = visual.parts.get(key)
+		if part == null or part.mesh == null or not part.is_visible_in_tree():
+			continue
+		var copy := MeshInstance3D.new()
+		copy.mesh = part.mesh
+		copy.material_override = material
+		copy.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		ghost.add_child(copy)
+		copy.global_transform = part.global_transform
+		any = true
+	if not any:
+		ghost.queue_free()
+		return null
 	return ghost
 
 ## A soft dark blob under each fighter, whatever the lamps and moon are

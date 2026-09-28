@@ -255,12 +255,11 @@ func _ready() -> void:
 	sun = DirectionalLight3D.new()
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 40.0
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	# Most of the shadow map goes to the first few metres, where the fighters
-	# are; the far splits only need to shade the houses and towers.
-	sun.directional_shadow_split_1 = 0.08
-	sun.directional_shadow_split_2 = 0.22
-	sun.directional_shadow_split_3 = 0.5
+	# Two cascades, not four: every cascade redraws the whole scene, and the
+	# near one alone (the first 7 metres, where the fighters are) gets half
+	# the atlas, which is plenty at 4096. The far one shades the square.
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.directional_shadow_split_1 = 0.18
 	sun.directional_shadow_fade_start = 0.85
 	sun.shadow_blur = 1.1
 	sun.shadow_normal_bias = 1.6
@@ -413,7 +412,7 @@ func _apply_graphics() -> void:
 	if settings == null or sun == null:
 		return
 	sun.shadow_enabled = settings.shadows > 0
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if settings.shadows == 2 else DirectionalLight3D.SHADOW_ORTHOGONAL
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if settings.shadows == 2 else DirectionalLight3D.SHADOW_ORTHOGONAL
 	sun.directional_shadow_max_distance = 40.0 if settings.shadows == 2 else 22.0
 	if key_light != null:
 		key_light.shadow_enabled = _key_shadow()
@@ -425,9 +424,12 @@ func _apply_graphics() -> void:
 		current_round = -1
 		show_round(round_index)
 
+## The night key light's shadow is a whole extra scene pass, so only the
+## HIGH shadow setting pays for it; the contact blobs ground the fighters
+## on MEDIUM and LOW.
 func _key_shadow() -> bool:
 	var settings := get_node_or_null("/root/Settings")
-	return settings == null or settings.shadows > 0
+	return settings == null or settings.shadows == 2
 
 func _photo_material(kind: String) -> ShaderMaterial:
 	var key := kind + ("_night" if night else "_day")
