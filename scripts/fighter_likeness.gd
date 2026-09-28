@@ -51,8 +51,8 @@ func round_part(parent: Node3D, at: Vector3, size: Vector3, material: String) ->
 		sphere = SphereMesh.new()
 		sphere.radius = 1.0
 		sphere.height = 2.0
-		sphere.radial_segments = 14
-		sphere.rings = 7
+		sphere.radial_segments = 24
+		sphere.rings = 12
 	return mesh(parent, sphere, at, size, material)
 
 ## Limb pieces live on the limb mesh itself, so they stretch and bend with it.

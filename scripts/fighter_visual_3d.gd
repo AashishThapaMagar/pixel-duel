@@ -69,25 +69,42 @@ func _ready() -> void:
 	for key in ["skin", "cloth", "pants", "dark", "accent", "hair", "wrap", "team", "mouth", "eye_white", "shoe", "sole", "under"]:
 		var surface_material := StandardMaterial3D.new()
 		surface_material.roughness = 0.92
-		# A cheap rim light along every edge gives the low-poly rig a lit,
-		# "real 3D game" silhouette instead of looking like a flat cutout.
-		surface_material.rim_enabled = false
-		surface_material.rim = 0.32
-		surface_material.rim_tint = 0.45
+		# A soft rim along every edge lifts the silhouette off dark
+		# architecture the way stage back-light does, without the glossy
+		# "action figure" look a strong rim gives.
+		surface_material.rim_enabled = true
+		surface_material.rim = 0.16
+		surface_material.rim_tint = 0.6
+		surface_material.metallic_specular = 0.22
 		materials[key] = surface_material
 	materials.dark.albedo_color = Color("1c2331")
 	materials.wrap.albedo_color = Color("e6e2d8")
 	materials.eye_white.albedo_color = Color("f2ede4")
 	materials.sole.albedo_color = Color("ece7dc")
 	materials.eye_white.rim_enabled = false
-	# Skin reads as a glossy, rim-glowing "action figure" at this roughness;
-	# knocking the shine down and quieting its rim is what separates a face
-	# from a plastic mannequin head. Hair keeps a touch more shine (healthier
-	# look); everything else keeps the punchier stylized default above.
-	materials.skin.roughness = 0.85
-	materials.skin.rim = 0.14
-	materials.skin.rim_tint = 0.25
-	materials.hair.roughness = 0.9
+	# Cloth: a fine woven grain in the normal map and a matte finish. The
+	# grain is generated once (no texture files) and laid on in object
+	# space, so it follows every limb whichever way the rig bends.
+	for key in ["cloth", "pants", "accent", "wrap", "under", "team"]:
+		materials[key].normal_enabled = true
+		materials[key].normal_texture = _weave()
+		materials[key].normal_scale = 0.55
+		materials[key].uv1_triplanar = true
+		materials[key].uv1_scale = Vector3.ONE * 0.05
+		materials[key].roughness = 0.9
+	# Skin: matte, with just enough specular to catch the key light on the
+	# brow, shoulders and knuckles; a quiet rim keeps a face from reading as
+	# a plastic mannequin head. Hair and leather shoes keep a touch of sheen.
+	materials.skin.roughness = 0.78
+	materials.skin.metallic_specular = 0.3
+	materials.skin.rim = 0.1
+	materials.skin.rim_tint = 0.4
+	materials.hair.roughness = 0.72
+	materials.hair.metallic_specular = 0.45
+	materials.shoe.roughness = 0.55
+	materials.shoe.metallic_specular = 0.5
+	materials.dark.roughness = 0.6
+	materials.dark.metallic_specular = 0.4
 	# Mouths tinted from the character's own skin (see _update_profile) read
 	# as a closed, human mouth line; a flat black bar reads as a gash.
 	materials.mouth.roughness = 0.75
@@ -96,6 +113,27 @@ func _ready() -> void:
 	if fighter != null:
 		_update_profile()
 	_update_model()
+
+## One shared woven-cloth normal map for every fighter, built from noise
+## the first time it is needed.
+static var weave_texture: Texture2D
+static func _weave() -> Texture2D:
+	if weave_texture == null:
+		var noise := FastNoiseLite.new()
+		noise.seed = 7
+		noise.noise_type = FastNoiseLite.TYPE_CELLULAR
+		noise.cellular_return_type = FastNoiseLite.RETURN_DISTANCE2_SUB
+		noise.frequency = 0.16
+		noise.fractal_octaves = 2
+		var texture := NoiseTexture2D.new()
+		texture.width = 128
+		texture.height = 128
+		texture.seamless = true
+		texture.as_normal_map = true
+		texture.bump_strength = 4.0
+		texture.noise = noise
+		weave_texture = texture
+	return weave_texture
 
 func _light(angles: Vector3, color: Color, energy: float) -> void:
 	var light := DirectionalLight3D.new()
@@ -116,8 +154,8 @@ func _sphere(key: String, size: Vector3, surface_material: String) -> void:
 	var mesh := SphereMesh.new()
 	mesh.radius = 1.0
 	mesh.height = 2.0
-	mesh.radial_segments = 22
-	mesh.rings = 11
+	mesh.radial_segments = 32
+	mesh.rings = 16
 	_mesh(key, mesh, surface_material).scale = size
 
 func _box(key: String, size: Vector3, surface_material: String) -> void:
@@ -130,7 +168,7 @@ func _bone(key: String, radius: float, surface_material: String) -> void:
 	mesh.top_radius = radius * 0.82
 	mesh.bottom_radius = radius
 	mesh.height = 30.0
-	mesh.radial_segments = 10
+	mesh.radial_segments = 18
 	_mesh(key, mesh, surface_material)
 
 func _build_model() -> void:
@@ -157,7 +195,7 @@ func _build_model() -> void:
 	torso.top_radius = 17.0
 	torso.bottom_radius = 11.5
 	torso.height = 33.0
-	torso.radial_segments = 12
+	torso.radial_segments = 24
 	_mesh("torso", torso, "cloth").scale.z = 0.62
 	_sphere("hips", Vector3(13, 9, 10), "cloth")
 	# Pecs and traps give the broad, heroic arcade-fighter upper body.
