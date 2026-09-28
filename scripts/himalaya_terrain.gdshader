@@ -13,6 +13,8 @@ uniform vec3 haze_color : source_color = vec3(0.7, 0.8, 0.9);
 uniform float haze_start = 60.0;
 uniform float haze_density = 0.004;
 uniform float haze_max = 0.7;
+// Overall brightness of the scans (they are shot in daylight).
+uniform float light_scale = 1.0;
 varying vec3 world_pos;
 varying vec3 world_normal;
 
@@ -52,7 +54,7 @@ void fragment() {
 	}
 	float dist = length(world_pos.xz - CAMERA_POSITION_WORLD.xz);
 	float haze = clamp(1.0 - exp(-max(dist - haze_start, 0.0) * haze_density), 0.0, haze_max);
-	ALBEDO = mix(col, haze_color, haze * 0.35);
+	ALBEDO = mix(col * light_scale, haze_color, haze * 0.35);
 	ROUGHNESS = mix(0.95, 0.6, snowy);
 	// Haze also veils the lighting itself, so far peaks go soft and pale.
 	EMISSION = haze_color * haze * 0.55;

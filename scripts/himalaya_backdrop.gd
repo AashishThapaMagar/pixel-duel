@@ -103,4 +103,7 @@ static func _material(layer: Array, horizon: Color, night: bool, sunset: bool) -
 	material.set_shader_parameter("haze_start", 60.0 if not far else 180.0)
 	material.set_shader_parameter("haze_density", (0.0045 if not far else 0.0032) * (0.7 if night else 1.0))
 	material.set_shader_parameter("haze_max", 0.55 if night else (0.4 if sunset else 0.72))
+	# Moonlit snow is a fraction as bright as it is by day; the mood's sun
+	# and ambient are already dim, but the scans themselves are shot in sun.
+	material.set_shader_parameter("light_scale", 0.42 if night else 1.0)
 	return material

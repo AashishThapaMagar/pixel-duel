@@ -50,11 +50,22 @@ const AMBIENCE := [
 ## Sky and light per round: [sky top, horizon, sun colour, sun energy,
 ## ambient colour, ambient energy, sun pitch, sun yaw, mountain tint].
 const MOODS := [
-	[Color("050a1c"), Color("22305a"), Color("c4d3ff"), 0.36, Color("4b5684"), 0.48, -38.0, -40.0, Color(0.42, 0.47, 0.68)],
-	[Color("070b1c"), Color("1d2442"), Color("9fb4ec"), 0.32, Color("5b6690"), 0.55, -40.0, 30.0, Color(0.32, 0.36, 0.55)],
-	[Color("46558f"), Color("f4a45e"), Color("ffb070"), 0.95, Color("c79a86"), 0.42, -16.0, 28.0, Color(1.0, 0.78, 0.62)],
-	[Color("050817"), Color("18223e"), Color("b7c8f5"), 0.3, Color("5d6a96"), 0.42, -35.0, -25.0, Color(0.36, 0.42, 0.62)],
+	[Color("050a1c"), Color("22305a"), Color("c4d3ff"), 0.42, Color("4b5684"), 0.36, -38.0, -40.0, Color(0.42, 0.47, 0.68)],
+	[Color("070b1c"), Color("1d2442"), Color("9fb4ec"), 0.36, Color("5b6690"), 0.4, -40.0, 30.0, Color(0.32, 0.36, 0.55)],
+	[Color("46558f"), Color("f4a45e"), Color("ffb070"), 1.05, Color("c79a86"), 0.4, -16.0, 28.0, Color(1.0, 0.78, 0.62)],
+	[Color("050817"), Color("18223e"), Color("b7c8f5"), 0.36, Color("5d6a96"), 0.32, -35.0, -25.0, Color(0.36, 0.42, 0.62)],
 ]
+## Finishing grade per round (arena_grade.gdshader): [shadow tint,
+## highlight tint, saturation, contrast, vignette, exposure, glow intensity,
+## glow threshold]. Night squares lean teal in the darks and amber in the
+## lamplight; the sunset warms everything; the stupa finale is cold and clean.
+const GRADES := [
+	[Color(0.86, 0.92, 1.08), Color(1.06, 0.98, 0.9), 1.12, 1.08, 0.34, 1.05, 1.1, 0.72],
+	[Color(0.84, 0.9, 1.1), Color(1.08, 0.97, 0.86), 1.16, 1.1, 0.36, 1.05, 1.25, 0.68],
+	[Color(0.94, 0.9, 1.0), Color(1.08, 1.0, 0.9), 1.18, 1.06, 0.28, 1.12, 0.7, 0.95],
+	[Color(0.86, 0.92, 1.12), Color(0.98, 1.0, 1.06), 1.02, 1.12, 0.4, 1.0, 1.15, 0.7],
+]
+const GRADE_SHADER := preload("res://scripts/arena_grade.gdshader")
 const SURFACE_SHADER := """shader_type spatial;
 // World-space procedural surfaces: 0 brick, 1 cut stone, 2 roof tiles,
 // 3 plaster, 4 timber, 5 flagstone, 6 carved lattice.
@@ -62,6 +73,8 @@ uniform int pattern = 0;
 uniform vec3 base_color : source_color = vec3(0.6, 0.3, 0.2);
 uniform vec3 joint_color : source_color = vec3(0.3, 0.26, 0.22);
 uniform float scale = 1.0;
+// Rain on the flagstones: puddles in the low slabs at night.
+uniform float wetness = 0.0;
 varying vec3 wp;
 varying vec3 wn;
 void vertex() {
@@ -79,6 +92,7 @@ void fragment() {
 	uv /= scale;
 	vec3 col = base_color;
 	float rough = 0.88;
+	float spec = 0.3;
 	float grime = noise(uv * 1.3) * 0.18 + noise(uv * 7.0) * 0.08;
 	if (pattern == 0) {
 		vec2 b = uv / vec2(0.23, 0.075);
@@ -117,6 +131,12 @@ void fragment() {
 		vec3 slab_tint = mix(vec3(1.05, 1.0, 0.93), vec3(0.94, 0.98, 1.05), hash(floor(b) + 17.3));
 		col = mix(joint_color, base_color * slab_tint * (0.72 + 0.32 * hash(floor(b))) * (0.86 + grain * 0.18 + veins * 0.08), face);
 		rough = mix(0.94, 0.66 + grain * 0.16, face);
+		// Standing water darkens the low slabs into mirrors for the lamps;
+		// the rest of the dais is merely damp.
+		float puddle = smoothstep(0.52, 0.7, noise(uv * 0.55 + 3.1)) * wetness * face;
+		col *= 1.0 - puddle * 0.45 - wetness * 0.08;
+		rough = mix(rough, 0.08, puddle) - wetness * 0.12;
+		spec = mix(0.32, 0.65, puddle);
 	} else if (pattern == 6) {
 		vec2 b = uv / 0.09;
 		vec2 f = abs(fract(b) - 0.5);
@@ -124,7 +144,8 @@ void fragment() {
 		col = mix(joint_color, base_color, clamp(lattice, 0.0, 1.0));
 	}
 	ALBEDO = col * (1.0 - grime * 0.6);
-	ROUGHNESS = rough;
+	ROUGHNESS = clamp(rough, 0.05, 1.0);
+	SPECULAR = spec;
 }
 """
 const SKY_SHADER := """shader_type sky;
@@ -134,7 +155,10 @@ uniform vec3 sun_color : source_color;
 uniform vec3 sun_dir = vec3(0.0, 0.5, -1.0);
 uniform float disc = 0.9994;
 uniform float stars = 0.0;
+// 1 at night: the disc becomes a moon with a soft halo instead of a sun.
+uniform float moon = 0.0;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float noise(vec2 p) {
 	vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
 	return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
@@ -142,17 +166,41 @@ float noise(vec2 p) {
 void sky() {
 	float y = EYEDIR.y;
 	vec3 col = mix(horizon_color, top_color, smoothstep(-0.02, 0.55, y));
-	float d = dot(EYEDIR, normalize(sun_dir));
-	col += sun_color * smoothstep(disc, disc + 0.0003, d);
-	col += sun_color * 0.35 * pow(max(d, 0.0), 18.0);
-	vec2 cloud_uv = EYEDIR.xz / max(y + 0.18, 0.08) * 2.2;
+	// A warm band just above the horizon: dust and city glow at night, the
+	// afterglow at sunset.
+	col += horizon_color * 0.35 * exp(-max(y, 0.0) * 9.0) * (1.0 - stars * 0.5);
+	vec3 s = normalize(sun_dir);
+	float d = dot(EYEDIR, s);
+	if (moon > 0.5) {
+		// Crescent-lit moon: a bright disc with a soft, cool halo.
+		float body = smoothstep(disc, disc + 0.0004, d);
+		vec3 shade_dir = normalize(s + vec3(0.45, 0.2, 0.0));
+		float phase = smoothstep(disc - 0.0015, disc + 0.0015, dot(EYEDIR, shade_dir));
+		col += sun_color * body * (0.55 + 0.45 * (1.0 - phase));
+		col += sun_color * 0.18 * pow(max(d, 0.0), 220.0);
+		col += sun_color * 0.05 * pow(max(d, 0.0), 24.0);
+	} else {
+		col += sun_color * smoothstep(disc, disc + 0.0003, d) * 2.5;
+		col += sun_color * 0.5 * pow(max(d, 0.0), 18.0);
+		col += sun_color * 0.22 * pow(max(d, 0.0), 4.0);
+	}
+	vec2 cloud_uv = EYEDIR.xz / max(y + 0.18, 0.08) * 2.2 + vec2(TIME * 0.006, 0.0);
 	float cloud = noise(cloud_uv) * 0.57 + noise(cloud_uv * 2.1) * 0.28 + noise(cloud_uv * 4.3) * 0.15;
 	float cover = smoothstep(0.51, 0.75, cloud) * smoothstep(0.0, 0.18, y);
-	col = mix(col, mix(horizon_color, sun_color, 0.3), cover * (0.58 - stars * 0.3));
+	// Clouds catch the light on their sunward side.
+	float lit = 0.3 + 0.5 * max(d, 0.0);
+	col = mix(col, mix(horizon_color, sun_color, lit), cover * (0.58 - stars * 0.3));
 	if (stars > 0.0) {
 		vec3 cell = floor(EYEDIR * 260.0);
-		float h = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
-		col += vec3(step(0.9978, h)) * stars * smoothstep(0.04, 0.3, y);
+		float h = hash3(cell);
+		float twinkle = 0.7 + 0.3 * sin(TIME * (1.5 + h * 3.0) + h * 40.0);
+		float bright = step(0.9968, h) * (0.4 + 0.6 * fract(h * 71.0)) * twinkle;
+		vec3 star_tint = mix(vec3(0.85, 0.9, 1.0), vec3(1.0, 0.92, 0.8), fract(h * 13.0));
+		// The Milky Way: a faint tilted band of finer stars and dust.
+		float band = exp(-pow(dot(EYEDIR, normalize(vec3(0.6, 0.35, -0.7))) * 4.0, 2.0));
+		float dust = noise(EYEDIR.xz * 9.0 + EYEDIR.y * 5.0) * band;
+		col += star_tint * bright * stars * smoothstep(0.02, 0.25, y) * (1.0 - cover);
+		col += vec3(0.5, 0.55, 0.75) * dust * 0.08 * stars * smoothstep(0.05, 0.4, y);
 	}
 	COLOR = col;
 }
@@ -178,6 +226,14 @@ var lanterns: Array[Node3D] = []
 ## current round (see _batch_static); the arena's piece count, for tests.
 var batched_pieces := 0
 var fade: ColorRect
+## Full-screen finishing pass (arena_grade.gdshader), drawn under the HUD.
+var grade: ShaderMaterial
+var grade_rect: ColorRect
+var punch_level := 0.0
+var flash_level := 0.0
+var drain_level := 0.0
+## Shadow-casting key light over the dais; the sun handles the daytime.
+var key_light: SpotLight3D
 
 func _ready() -> void:
 	environment = WorldEnvironment.new()
@@ -190,13 +246,24 @@ func _ready() -> void:
 	sky.sky_material = sky_material
 	environment.environment.background_mode = Environment.BG_SKY
 	environment.environment.sky = sky
-	environment.environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# ACES keeps saturated lamplight and costume colours from clipping to
+	# white the way the plain filmic curve did; exposure is set per round.
+	environment.environment.tonemap_mode = Environment.TONE_MAPPER_ACES
+	environment.environment.tonemap_white = 6.0
 	sun = DirectionalLight3D.new()
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 40.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	sun.shadow_blur = 1.4
+	# Most of the shadow map goes to the first few metres, where the fighters
+	# are; the far splits only need to shade the houses and towers.
+	sun.directional_shadow_split_1 = 0.08
+	sun.directional_shadow_split_2 = 0.22
+	sun.directional_shadow_split_3 = 0.5
+	sun.directional_shadow_fade_start = 0.85
+	sun.shadow_blur = 1.1
+	sun.shadow_normal_bias = 1.6
 	add_child(sun)
+	_grade()
 	var settings := get_node_or_null("/root/Settings")
 	if settings != null:
 		settings.graphics_changed.connect(_apply_graphics)
@@ -247,6 +314,7 @@ func _import_arena(index: int) -> void:
 	model.set_meta("source_glb", ARENA_MODELS[index])
 	content.add_child(model)
 	floor_material = _surface("dais", 5, Color("8a8071"), Color("463f37"))
+	floor_material.set_shader_parameter("wetness", 0.75 if night else 0.12)
 	var polished: Dictionary = {}
 	for node in model.find_children("*", "", true, false):
 		if node is OmniLight3D:
@@ -345,10 +413,18 @@ func _apply_graphics() -> void:
 	sun.shadow_enabled = settings.shadows > 0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if settings.shadows == 2 else DirectionalLight3D.SHADOW_ORTHOGONAL
 	sun.directional_shadow_max_distance = 40.0 if settings.shadows == 2 else 22.0
+	if key_light != null:
+		key_light.shadow_enabled = _key_shadow()
+	if environment != null and current_round >= 0:
+		environment.environment.glow_enabled = _effects_level() > 0
 	if settings.detailed_textures != built_detailed and current_round >= 0:
 		var round_index := current_round
 		current_round = -1
 		show_round(round_index)
+
+func _key_shadow() -> bool:
+	var settings := get_node_or_null("/root/Settings")
+	return settings == null or settings.shadows > 0
 
 func _photo_material(kind: String) -> ShaderMaterial:
 	var key := kind + ("_night" if night else "_day")
@@ -438,6 +514,25 @@ func _fight_lighting() -> void:
 	rim.light_color = Color("ffb46e") if current_round in [1, 2] else Color("a0cfff")
 	rim.light_energy = 1.1 if night else 0.6
 	content.add_child(rim)
+	# A shadow-casting key light over the dais. At night the moon's shadows
+	# are too faint to ground the fighters, so a warm (cold, for the stupa)
+	# spot from high in front does it; by day the sun already does.
+	key_light = null
+	if night:
+		key_light = SpotLight3D.new()
+		key_light.name = "DaisKey"
+		key_light.position = Vector3(1.5, 6.5, 4.5)
+		key_light.look_at_from_position(key_light.position, Vector3(0, 0.9, 0), Vector3.UP)
+		key_light.spot_range = 14.0
+		key_light.spot_angle = 42.0
+		key_light.spot_attenuation = 0.9
+		key_light.light_color = Color("ffc98a") if current_round in [0, 1] else Color("b9cdf5")
+		key_light.set_meta("base", 1.35 if current_round in [0, 1] else 1.1)
+		key_light.light_energy = key_light.get_meta("base")
+		key_light.shadow_enabled = _key_shadow()
+		key_light.shadow_blur = 1.5
+		key_light.shadow_normal_bias = 1.4
+		content.add_child(key_light)
 	if night:
 		for side in [-1.0, 1.0]:
 			var wash := OmniLight3D.new()
@@ -527,6 +622,16 @@ func _arena_inlay() -> void:
 
 func animate(delta: float) -> void:
 	elapsed += delta
+	if punch_level > 0.0 or flash_level > 0.0 or drain_level > 0.0:
+		punch_level = move_toward(punch_level, 0.0, delta * 5.5)
+		flash_level = move_toward(flash_level, 0.0, delta * 3.5)
+		drain_level = move_toward(drain_level, 0.0, delta * 1.6)
+		grade.set_shader_parameter("punch", punch_level)
+		grade.set_shader_parameter("flash", flash_level)
+		grade.set_shader_parameter("drain", drain_level)
+	if key_light != null:
+		# The key light breathes with the flames it stands for.
+		key_light.light_energy = key_light.get_meta("base") * (0.94 + 0.06 * sin(elapsed * 7.0) * sin(elapsed * 3.3))
 	for i in flags.size():
 		# Wind travels along the rope, so neighbouring flags ripple in sequence.
 		flags[i].rotation.x = sin(elapsed * 3.1 - i * 0.55) * 0.35
@@ -766,33 +871,101 @@ func _place_prop(path: String, at: Vector3, turn: float, scale := 1.0, tint := C
 
 func _lighting() -> void:
 	var mood: Array = MOODS[current_round]
+	var look: Array = GRADES[current_round]
 	sky_material.set_shader_parameter("top_color", mood[0])
 	sky_material.set_shader_parameter("horizon_color", mood[1])
 	sky_material.set_shader_parameter("sun_color", mood[2])
 	sky_material.set_shader_parameter("stars", 0.9 if night else 0.0)
+	sky_material.set_shader_parameter("moon", 1.0 if night else 0.0)
 	sky_material.set_shader_parameter("disc", 0.9992 if night else 0.99955)
 	sun.rotation_degrees = Vector3(mood[6], mood[7], 0)
 	# The light travels along -Z of its basis, so the disc sits along +Z.
 	sky_material.set_shader_parameter("sun_dir", Basis.from_euler(sun.rotation) * Vector3.BACK)
 	sun.light_color = mood[2]
 	sun.light_energy = mood[3]
-	environment.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.environment.ambient_light_color = mood[4]
-	environment.environment.ambient_light_energy = mood[5]
+	var env: Environment = environment.environment
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = mood[4]
+	env.ambient_light_energy = mood[5]
+	env.tonemap_exposure = look[5]
 	# Depth fog leaves the fighters crisp while the distant ridges merge
 	# naturally into the sky. Supported by the Compatibility renderer.
-	environment.environment.fog_enabled = true
-	environment.environment.fog_light_color = mood[1]
-	environment.environment.fog_light_energy = 0.65
-	environment.environment.fog_density = 0.0025 if night else 0.0018
-	environment.environment.fog_sky_affect = 0.12
-	# Bloom on flames, lanterns and lit windows makes the night read.
-	environment.environment.glow_enabled = night
-	environment.environment.glow_intensity = 0.9
-	environment.environment.glow_strength = 1.0
-	environment.environment.glow_bloom = 0.05
-	environment.environment.glow_hdr_threshold = 0.9
-	environment.environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	env.fog_enabled = true
+	env.fog_light_color = mood[1]
+	env.fog_light_energy = 0.65
+	env.fog_density = 0.0025 if night else 0.0018
+	env.fog_sky_affect = 0.12
+	# Sunlight scattered into the haze, so fog glows toward the sun.
+	env.fog_sun_scatter = 0.0 if night else 0.35
+	# A thin ground mist pools on the night squares: it catches the
+	# lamplight low around the dais without dulling the fighters.
+	env.fog_height = 0.35 if night else -20.0
+	env.fog_height_density = 0.045 if night else 0.0
+	# Bloom on flames, lanterns, lit windows and the sun disc. The threshold
+	# is set so costume colours and pale stone stay crisp while anything
+	# emissive or sunlit-white blooms. Off at the lowest quality preset.
+	env.glow_enabled = _effects_level() > 0
+	env.glow_intensity = look[6]
+	env.glow_strength = 1.0
+	env.glow_bloom = 0.04 if night else 0.02
+	env.glow_hdr_threshold = look[7]
+	env.glow_hdr_scale = 2.0
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT if night else Environment.GLOW_BLEND_MODE_ADDITIVE
+	if not night:
+		env.glow_intensity = look[6] * 0.5
+	grade.set_shader_parameter("shadow_tint", look[0])
+	grade.set_shader_parameter("highlight_tint", look[1])
+	grade.set_shader_parameter("saturation", look[2])
+	grade.set_shader_parameter("contrast", look[3])
+	grade.set_shader_parameter("vignette", look[4])
+	grade.set_shader_parameter("punch_color", Color("ffd9a0") if current_round != 3 else Color("cfe4ff"))
+
+## 0 on the LOW preset (or custom settings with everything off), 1 otherwise:
+## gates the post effects and the dais key-light shadow.
+func _effects_level() -> int:
+	var settings := get_node_or_null("/root/Settings")
+	if settings == null:
+		return 1
+	if settings.quality == settings.Quality.LOW:
+		return 0
+	if settings.quality == settings.Quality.CUSTOM and settings.shadows == 0 and settings.anti_aliasing == 0:
+		return 0
+	return 1
+
+## The finishing pass: a screen-reading ColorRect on its own canvas layer,
+## under every HUD layer (which start at 1) and over the 3D world.
+func _grade() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "Grade"
+	layer.layer = 0
+	add_child(layer)
+	grade = ShaderMaterial.new()
+	grade.shader = GRADE_SHADER
+	grade_rect = ColorRect.new()
+	grade_rect.name = "GradeRect"
+	grade_rect.material = grade
+	grade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	grade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(grade_rect)
+
+## An impact seen at `screen_point` (0..1 across the view): a shock ring and
+## a radial colour split that fade over a few frames. `strength` 1 is a
+## heavy hit.
+func punch(screen_point: Vector2, strength: float) -> void:
+	if _effects_level() == 0:
+		return
+	punch_level = maxf(punch_level, clampf(strength, 0.0, 1.0))
+	grade.set_shader_parameter("punch_center", screen_point)
+	grade.set_shader_parameter("punch", punch_level)
+
+## A whole-screen flash that decays into a brief drain of colour: the
+## knockout hit.
+func flash(color: Color, strength: float, drain_after := 0.0) -> void:
+	flash_level = maxf(flash_level, strength)
+	drain_level = maxf(drain_level, drain_after)
+	grade.set_shader_parameter("flash_color", color)
+	grade.set_shader_parameter("flash", flash_level)
+	grade.set_shader_parameter("drain", drain_level)
 
 func _ground() -> void:
 	# Brick plaza one step below the flagstone fighting dais.
@@ -1164,6 +1337,26 @@ func _butter_lamps() -> void:
 		content.add_child(glow)
 		lamp_lights.append(glow)
 
+## A soft round dot for every particle quad (embers, sparks, dust): built
+## once from a radial gradient, so motes read as points of light and haze
+## rather than hard squares.
+static var soft_dot_texture: Texture2D
+static func soft_dot() -> Texture2D:
+	if soft_dot_texture == null:
+		var gradient := Gradient.new()
+		gradient.set_color(0, Color.WHITE)
+		gradient.set_color(1, Color(1, 1, 1, 0))
+		gradient.add_point(0.35, Color(1, 1, 1, 0.75))
+		var texture := GradientTexture2D.new()
+		texture.gradient = gradient
+		texture.width = 32
+		texture.height = 32
+		texture.fill = GradientTexture2D.FILL_RADIAL
+		texture.fill_from = Vector2(0.5, 0.5)
+		texture.fill_to = Vector2(1.0, 0.5)
+		soft_dot_texture = texture
+	return soft_dot_texture
+
 ## Per-round atmosphere: courtyard dust, lantern embers, drifting rhododendron
 ## petals and, for the finale, sky lanterns rising behind the stupa.
 func _ambience() -> void:
@@ -1182,6 +1375,8 @@ func _ambience() -> void:
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	material.vertex_color_use_as_albedo = true
+	if spec[0] != "petals":
+		material.albedo_texture = soft_dot()
 	quad.material = material
 	particles.mesh = quad
 	particles.color = spec[1]
