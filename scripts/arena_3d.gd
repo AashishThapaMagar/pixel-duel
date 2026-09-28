@@ -249,8 +249,17 @@ func _update_fight_camera(delta: float) -> void:
 	camera_3d.position = eye
 	camera_3d.look_at(camera_target)
 
+## Fight Options can switch the sparks, dust, trails and punch off.
+func _effects_on() -> bool:
+	var settings := get_node_or_null("/root/Settings")
+	return settings == null or settings.hit_effects
+
 func _impact_3d(fighter: Node, blocked: bool, heavy: bool) -> void:
 	preload("res://scripts/sfx.gd").fire("block" if blocked else ("hit_heavy" if heavy else "hit_light"))
+	if not _effects_on():
+		if not blocked:
+			shake_3d = 0.045 if heavy else 0.022
+		return
 	var point: Vector3 = fighter.body.position + fighter.forward * 0.25 + Vector3.UP * (1.03 if heavy else 1.37)
 	var color := Color("8bdeff") if blocked else (Color("ffb347") if heavy else Color("ffd78b"))
 	_impact_burst(point, color, blocked, heavy)
@@ -351,6 +360,8 @@ func _impact_burst(point: Vector3, color: Color, blocked: bool, heavy: bool) -> 
 ## A puff of courtyard dust at floor level: landings, dashes and the
 ## stagger of a heavy hit.
 func _dust(at: Vector3, amount: int, color: Color, speed: float) -> void:
+	if not _effects_on():
+		return
 	var puff := CPUParticles3D.new()
 	puff.one_shot = true
 	puff.explosiveness = 0.9
@@ -415,7 +426,7 @@ func _update_ghosts(delta: float) -> void:
 	for i in 2:
 		var fighter: Node = [player1, player2][i]
 		ghost_clock[i] -= delta
-		if ghost_clock[i] > 0.0 or not _wants_ghost(fighter):
+		if ghost_clock[i] > 0.0 or not _effects_on() or not _wants_ghost(fighter):
 			continue
 		ghost_clock[i] = 0.065
 		var ghost := _snapshot(fighter, TEAM_COLORS[i])

@@ -14,6 +14,18 @@ var callout_style := false
 ## below stay as invisible data holders for combat code and tests.
 var gauges: Control
 var movebook: Control
+## Match-opening "VS" clash over the round-one intro, the PERFECT callout
+## and the training-style input history.
+var clash: Control
+var perfect_label: Label
+var input_display: Control
+var input_history: Array = [[], []]
+var last_result_visible := false
+## Whether the clash has played for the current match (round one's intro),
+## and how long it has been up (the round call waits behind it).
+var clash_played := false
+var clash_time := 0.0
+const CLASH_HOLD := 1.15
 
 func _ready() -> void:
 	arena = get_parent()
@@ -175,6 +187,13 @@ func _ready() -> void:
 	arena.result_label.z_index = 11
 	result_panel.hide()
 	layer.move_child(arena.move_guide, -1)
+	perfect_label = UI.heading(layer, "PERFECT!", Vector2(230, 282), Vector2(500, 44), 34, UI.WHITE, UI.CRIMSON)
+	perfect_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	perfect_label.z_index = 11
+	perfect_label.hide()
+	input_display = preload("res://scripts/input_display.gd").new()
+	input_display.hud = self
+	layer.add_child(input_display)
 	var hint: Label = layer.get_node("ControlsHint")
 	hint.position = Vector2(12, 505)
 	hint.size = Vector2(936, 34)
@@ -226,6 +245,51 @@ func _style_result(callout: bool) -> void:
 		label.add_theme_constant_override("shadow_offset_y", 0)
 		label.add_theme_constant_override("outline_size", 0)
 
+## Match opener: both names slam in from either side under a big VS while
+## the intro camera cranes down, then the whole card wipes away before the
+## round call. Only on round one, never in practice.
+func _show_clash() -> void:
+	var layer: CanvasLayer = arena.get_node("UI")
+	clash = Control.new()
+	clash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	clash.z_index = 12
+	layer.add_child(clash)
+	var band := Polygon2D.new()
+	band.polygon = PackedVector2Array([Vector2(0, 178), Vector2(960, 150), Vector2(960, 330), Vector2(0, 358)])
+	band.color = Color(0.02, 0.02, 0.05, 0.82)
+	clash.add_child(band)
+	var slash := Polygon2D.new()
+	slash.polygon = PackedVector2Array([Vector2(492, 150), Vector2(526, 150), Vector2(434, 358), Vector2(400, 358)])
+	slash.color = Color(UI.CRIMSON, 0.95)
+	clash.add_child(slash)
+	var names := [arena.player1.character_profile.name, arena.player2.character_profile.name]
+	var labels: Array[Label] = []
+	for i in 2:
+		var color := UI.RED if i == 0 else UI.VIOLET
+		var label := UI.heading(clash, names[i], Vector2(20 if i == 0 else 580, 204), Vector2(360, 84), 60, UI.WHITE, color.darkened(0.15))
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if i == 0 else HORIZONTAL_ALIGNMENT_LEFT
+		label.add_theme_constant_override("shadow_offset_x", 5)
+		label.add_theme_constant_override("shadow_offset_y", 5)
+		var eyebrow := UI.eyebrow(clash, "PLAYER %d" % (i + 1) if not (MatchSetup.vs_ai and i == 1) else "COMPUTER", Vector2(20 if i == 0 else 580, 290), Vector2(360, 16), color)
+		eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if i == 0 else HORIZONTAL_ALIGNMENT_LEFT
+		var home := label.position
+		label.position.x += -520.0 if i == 0 else 520.0
+		label.create_tween().set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT).tween_property(label, "position", home, 0.45).set_delay(0.1 + 0.08 * i)
+		labels.append(label)
+	var vs := UI.heading(clash, "VS", Vector2(400, 190), Vector2(160, 110), 92, UI.GOLD, UI.CRIMSON)
+	vs.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vs.pivot_offset = vs.size * 0.5
+	vs.scale = Vector2.ONE * 2.6
+	vs.modulate.a = 0.0
+	var pop := vs.create_tween().set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	pop.tween_property(vs, "scale", Vector2.ONE, 0.4).set_delay(0.35)
+	pop.tween_property(vs, "modulate:a", 1.0, 0.2).set_delay(0.35)
+	var leave := clash.create_tween()
+	leave.tween_interval(CLASH_HOLD)
+	leave.tween_property(clash, "modulate:a", 0.0, 0.22)
+	leave.tween_callback(clash.queue_free)
+	clash_time = 0.0
+
 func _continue_match() -> void:
 	if arena.round_active or arena.move_guide.visible:
 		return
@@ -235,6 +299,20 @@ func _continue_match() -> void:
 		arena._begin_round(arena.round_index + 1)
 
 func _process(_delta: float) -> void:
+	# The opener plays over round one's intro; a rematch gets a fresh one.
+	if arena.round_index != 0:
+		clash_played = false
+	elif arena.intro_timer > 0.0 and not clash_played:
+		clash_played = true
+		_show_clash()
+	# The round call waits behind the clash, then fades up as it clears.
+	if is_instance_valid(clash):
+		var before: float = clash_time
+		clash_time += _delta
+		if clash_time < CLASH_HOLD:
+			arena.banner.modulate.a = 0.0
+		elif before < CLASH_HOLD:
+			arena.banner.create_tween().tween_property(arena.banner, "modulate:a", 1.0, 0.25)
 	for i in 2:
 		var fighter: Node = arena.player1 if i == 0 else arena.player2
 		stamina_bars[i].max_value = fighter.character_profile.stamina
@@ -246,6 +324,20 @@ func _process(_delta: float) -> void:
 	var callout: bool = show_result and not arena.match_over
 	if callout != callout_style:
 		_style_result(callout)
+	# A round won without a scratch earns a PERFECT under the callout.
+	if show_result and not last_result_visible:
+		perfect_label.visible = arena.perfect_round
+		if arena.perfect_round:
+			perfect_label.position.y = callout_style if false else (282.0 if callout else 150.0)
+			perfect_label.modulate.a = 0.0
+			perfect_label.pivot_offset = perfect_label.size * 0.5
+			perfect_label.scale = Vector2.ONE * 1.6
+			var flourish := perfect_label.create_tween().set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			flourish.tween_property(perfect_label, "scale", Vector2.ONE, 0.35).set_delay(0.3)
+			flourish.tween_property(perfect_label, "modulate:a", 1.0, 0.2).set_delay(0.3)
+	elif not show_result:
+		perfect_label.hide()
+	last_result_visible = show_result
 	show_result = show_result and arena.match_over
 	if show_result and not result_panel.visible:
 		UI.enter(result_panel)

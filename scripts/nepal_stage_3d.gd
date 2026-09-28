@@ -419,6 +419,7 @@ func _apply_graphics() -> void:
 		key_light.shadow_enabled = _key_shadow()
 	if environment != null and current_round >= 0:
 		environment.environment.glow_enabled = _effects_level() > 0
+		grade_rect.visible = _effects_level() > 0
 	if settings.detailed_textures != built_detailed and current_round >= 0:
 		var round_index := current_round
 		current_round = -1
@@ -907,6 +908,7 @@ func _lighting() -> void:
 	# is set so costume colours and pale stone stay crisp while anything
 	# emissive or sunlit-white blooms. Off at the lowest quality preset.
 	env.glow_enabled = _effects_level() > 0
+	grade_rect.visible = _effects_level() > 0
 	env.glow_intensity = look[6]
 	env.glow_strength = 1.0
 	env.glow_bloom = 0.04 if night else 0.02
@@ -928,6 +930,8 @@ func _effects_level() -> int:
 	var settings := get_node_or_null("/root/Settings")
 	if settings == null:
 		return 1
+	if not settings.post_effects:
+		return 0
 	if settings.quality == settings.Quality.LOW:
 		return 0
 	if settings.quality == settings.Quality.CUSTOM and settings.shadows == 0 and settings.anti_aliasing == 0:
