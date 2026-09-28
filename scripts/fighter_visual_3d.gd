@@ -88,9 +88,9 @@ func _ready() -> void:
 	for key in ["cloth", "pants", "accent", "wrap", "under", "team"]:
 		materials[key].normal_enabled = true
 		materials[key].normal_texture = _weave()
-		materials[key].normal_scale = 0.55
+		materials[key].normal_scale = 0.28
 		materials[key].uv1_triplanar = true
-		materials[key].uv1_scale = Vector3.ONE * 0.05
+		materials[key].uv1_scale = Vector3.ONE * 0.14
 		materials[key].roughness = 0.9
 	# Skin: matte, with just enough specular to catch the key light on the
 	# brow, shoulders and knuckles; a quiet rim keeps a face from reading as
@@ -123,7 +123,7 @@ static func _weave() -> Texture2D:
 		noise.seed = 7
 		noise.noise_type = FastNoiseLite.TYPE_CELLULAR
 		noise.cellular_return_type = FastNoiseLite.RETURN_DISTANCE2_SUB
-		noise.frequency = 0.16
+		noise.frequency = 0.3
 		noise.fractal_octaves = 2
 		var texture := NoiseTexture2D.new()
 		texture.width = 128
@@ -307,9 +307,16 @@ func _update_profile() -> void:
 func _process(delta: float) -> void:
 	super._process(delta)
 	if model == null or fighter == null or fighter.combat_paused or fighter.hitstop_remaining > 0.0:
+		# Hit-stop: the pose freezes on the frame of contact while the
+		# struck fighter shudders in place, which is what sells the weight
+		# of the blow. Longer freezes (kicks) shudder harder.
+		if model != null and fighter != null and fighter.hitstop_remaining > 0.0 and fighter.state in [fighter.State.HITSTUN, fighter.State.BLOCKSTUN, fighter.State.KO]:
+			var amplitude: float = 0.6 + 14.0 * fighter.hitstop_remaining
+			model.position.x = sin(Time.get_ticks_msec() * 0.095) * amplitude
 		# Still called so the animated model freezes with the fight.
 		animated.update(delta)
 		return
+	model.position.x = move_toward(model.position.x, 0.0, delta * 120.0)
 	scale.x = 1.0
 	var target_turn := 0.0 if fighter.facing >= 0 else PI
 	_turn_rotation = lerp_angle(_turn_rotation, target_turn, 1.0 - exp(-16.0 * delta))

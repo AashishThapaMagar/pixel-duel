@@ -10,6 +10,12 @@ var fighter: Node
 var pose: Array[Vector2] = []
 var phase: float = 0.0
 var ko_progress: float = 0.0
+## Impact reactions ease out over the stun they were dealt with, instead of
+## holding one pose and snapping back: this is the length of the current
+## stun, captured on the first frame after hit-stop (see _stun_progress).
+var _stun_length: float = 0.0
+var _stun_pending: bool = false
+var _impact_connected: bool = false
 var team := Color("416bd9")
 var accent := Color("e5c45d")
 var _last_position := Vector2.ZERO
@@ -85,12 +91,17 @@ func reset_pose() -> void:
 	gait_weight = 0.0
 	_step_speed = 0.0
 	ko_progress = 0.0
+	_stun_length = 0.0
+	_stun_pending = false
 	_initialized = false
 	rotation = 0.0
 	position = Vector2.ZERO
 
 func sync_pose(owner_fighter: Node) -> void:
 	fighter = owner_fighter
+	if not _impact_connected and fighter.has_signal("impact"):
+		fighter.impact.connect(func(_point: Vector2, _blocked: bool, _heavy: bool): _stun_pending = true)
+		_impact_connected = true
 	team = fighter.base_color.lightened(0.12)
 	accent = fighter.current_style.accent_color if fighter.current_style != null else Color("e5c45d")
 	if pose.is_empty():
@@ -254,23 +265,47 @@ func _process(delta: float) -> void:
 				target[3] = Vector2(22, -113)
 				target[4] = Vector2(32, -98)
 			if fighter.state == fighter.State.BLOCKSTUN:
-				target[1].x -= 5.0
-				target[2].x -= 6.0
+				# The guard takes the blow: arms and chest are shoved back
+				# hard on contact and push forward again as the stun runs out.
+				var shove := _recoil()
+				target[1].x -= 3.0 + 6.0 * shove
+				target[2].x -= 3.0 + 8.0 * shove
+				target[3].x -= 6.0 * shove
+				target[4].x -= 7.0 * shove
+				target[0].y += 2.0 * shove
 		fighter.State.HITSTUN:
-			target[1] += Vector2(-13, 4)
-			target[2] += Vector2(-19, 6)
-			target[3] = Vector2(-27, -84)
-			target[4] = Vector2(14, -74)
+			# A landed blow whips the head back first, then the chest folds
+			# and the arms fly; everything eases back toward the guard over
+			# the stun so the recovery reads as regaining balance, not a snap.
+			var recoil := _recoil()
+			var whip := _whip()
+			var force := clampf(_stun_length / 0.22, 0.75, 1.4)
+			target[1] += Vector2(-13, 4) * (0.35 + 0.65 * recoil) * force
+			target[2] += Vector2(-19, 6) * (0.3 + 0.7 * whip) * force
+			target[3] = target[3].lerp(Vector2(-27, -84), 0.35 + 0.65 * recoil)
+			target[4] = target[4].lerp(Vector2(14, -74), 0.35 + 0.65 * recoil)
+			target[0].y += 3.5 * recoil * force
 		fighter.State.PUNCH, fighter.State.KICK:
 			target = _attack_pose(target)
 		fighter.State.KO:
-			ko_progress = minf(1.0, ko_progress + delta * 2.4)
-			target[3] = Vector2(-22, -75)
-			target[4] = Vector2(23, -68)
-			target[5] = Vector2(-19, -7)
-			target[6] = Vector2(22, -10)
-			rotation = -fighter.facing * smoothstep(0.0, 1.0, ko_progress) * PI * 0.48
-			position.y = -8.0 * ko_progress
+			# Knockout in three beats: the blow whips the head and chest
+			# back, the body goes limp, then it falls under gravity (speeding
+			# up as it goes) with the arms trailing and a small settle at
+			# the bottom.
+			ko_progress = minf(1.0, ko_progress + delta * 1.7)
+			var t := ko_progress
+			var whip := exp(-t * 7.0)
+			var fall := pow(t, 1.7)
+			var settle := sin(clampf((t - 0.78) / 0.22, 0.0, 1.0) * PI) * 0.05
+			target[1] += Vector2(-16, 6) * whip
+			target[2] += Vector2(-24, 8) * whip
+			target[3] = target[3].lerp(Vector2(-22, -75), fall)
+			target[4] = target[4].lerp(Vector2(23, -68), fall)
+			target[5] = target[5].lerp(Vector2(-19, -7), fall)
+			target[6] = target[6].lerp(Vector2(22, -10), fall)
+			target[0].y += 6.0 * fall
+			rotation = -fighter.facing * (fall - settle) * PI * 0.48
+			position.y = -8.0 * fall
 	# Attacks are sampled directly to keep the limb at contact on active ticks.
 	var attacking: bool = fighter.state in [fighter.State.PUNCH, fighter.State.KICK]
 	var blend := 1.0 if attacking else 1.0 - exp(-24.0 * delta)
@@ -279,6 +314,26 @@ func _process(delta: float) -> void:
 	_apply_gait()
 	scale.x = float(fighter.facing)
 	queue_redraw()
+
+## 0 at the moment of contact, 1 when the stun ends. The stun length is
+## read on the first frame after hit-stop, when the fighter's timer holds
+## the value the blow dealt; a fresh hit mid-stun restarts it.
+func _stun_progress() -> float:
+	var timer: float = fighter.get("stun_timer") if fighter.get("stun_timer") != null else 0.0
+	if _stun_pending or timer > _stun_length:
+		_stun_length = maxf(timer, 0.01)
+		_stun_pending = false
+	return clampf(1.0 - timer / _stun_length, 0.0, 1.0)
+
+## Recoil that is strongest on contact and eases out toward the end of the
+## stun.
+func _recoil() -> float:
+	var t := _stun_progress()
+	return (1.0 - t) * (1.0 - t)
+
+## The head's snap: sharp on contact, settled well before the stun ends.
+func _whip() -> float:
+	return exp(-_stun_progress() * 6.0)
 
 func _attack_pose(guard: Array[Vector2]) -> Array[Vector2]:
 	var windup: Array[Vector2] = guard.duplicate()
