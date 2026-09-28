@@ -37,6 +37,18 @@ var post_effects: bool = true
 var hit_effects: bool = true
 ## Training-style input history under each fighter's side of the HUD.
 var input_display: bool = false
+## Steps the graphics preset down by itself when a fight runs under 30 FPS
+## for a few seconds (never up, never past LOW, never from CUSTOM).
+var adaptive_quality: bool = true
+const ADAPTIVE_FLOOR_FPS := 30.0
+const ADAPTIVE_WINDOW := 3.0
+const ADAPTIVE_WARMUP := 4.0
+var _adaptive_scene: Node
+var _adaptive_time := 0.0
+var _adaptive_frames := 0
+var _adaptive_window := 0.0
+var notice_label: Label
+var _notice_tween: Tween
 var fps_label: Label
 
 func _ready() -> void:
@@ -51,13 +63,63 @@ func _ready() -> void:
 	fps_label.add_theme_constant_override("outline_size", 4)
 	fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(fps_label)
+	notice_label = Label.new()
+	notice_label.position = Vector2(0, 92)
+	notice_label.size = Vector2(960, 22)
+	notice_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	notice_label.add_theme_font_size_override("font_size", 12)
+	notice_label.add_theme_color_override("font_color", Color("ffc53d"))
+	notice_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	notice_label.add_theme_constant_override("outline_size", 4)
+	notice_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	notice_label.modulate.a = 0.0
+	layer.add_child(notice_label)
 	_apply()
 	apply_graphics()
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	fps_label.visible = show_fps
 	if show_fps:
 		fps_label.text = "%d FPS" % Engine.get_frames_per_second()
+	_adapt(delta)
+
+## Watches the frame rate during fights only (menus are cheap) and steps
+## the preset down one notch at a time, telling the player on screen.
+func _adapt(delta: float) -> void:
+	var scene := get_tree().current_scene
+	var fighting := scene != null and scene.get_script() != null and (str(scene.get_script().resource_path).ends_with("arena_3d.gd") or str(scene.get_script().resource_path).ends_with("practice_3d.gd"))
+	if not adaptive_quality or not fighting or quality == Quality.LOW or quality == Quality.CUSTOM:
+		_adaptive_scene = null
+		return
+	if scene != _adaptive_scene:
+		_adaptive_scene = scene
+		_adaptive_time = 0.0
+		_adaptive_frames = 0
+		_adaptive_window = 0.0
+	_adaptive_time += delta
+	if _adaptive_time < ADAPTIVE_WARMUP:
+		return
+	_adaptive_frames += 1
+	_adaptive_window += delta
+	if _adaptive_window < ADAPTIVE_WINDOW:
+		return
+	var average := _adaptive_frames / _adaptive_window
+	_adaptive_frames = 0
+	_adaptive_window = 0.0
+	if average < ADAPTIVE_FLOOR_FPS:
+		set_quality(quality - 1)
+		notify("SMOOTHER PLAY: GRAPHICS SET TO %s  (SETTINGS ▸ GRAPHICS TO CHANGE)" % ["LOW", "MEDIUM", "HIGH", "CUSTOM"][quality])
+		_adaptive_time = 0.0
+
+## A short line of gold text over the top of the screen.
+func notify(text: String) -> void:
+	notice_label.text = text
+	if _notice_tween != null:
+		_notice_tween.kill()
+	notice_label.modulate.a = 1.0
+	_notice_tween = create_tween()
+	_notice_tween.tween_interval(3.5)
+	_notice_tween.tween_property(notice_label, "modulate:a", 0.0, 0.6)
 
 func set_quality(value: int) -> void:
 	quality = value
@@ -140,6 +202,7 @@ func _load() -> void:
 		vsync = cfg.get_value("graphics", "vsync", vsync)
 		show_fps = cfg.get_value("graphics", "show_fps", show_fps)
 		post_effects = cfg.get_value("graphics", "post_effects", post_effects)
+		adaptive_quality = cfg.get_value("graphics", "adaptive_quality", adaptive_quality)
 		hit_effects = cfg.get_value("fight", "hit_effects", hit_effects)
 		input_display = cfg.get_value("fight", "input_display", input_display)
 
@@ -149,7 +212,7 @@ func _save() -> void:
 	cfg.set_value("audio", "volume", volume)
 	cfg.set_value("audio", "sfx_volume", sfx_volume)
 	cfg.set_value("display", "touch_controls", touch_controls)
-	for key in ["quality", "render_scale", "anti_aliasing", "shadows", "detailed_textures", "vsync", "show_fps", "post_effects"]:
+	for key in ["quality", "render_scale", "anti_aliasing", "shadows", "detailed_textures", "vsync", "show_fps", "post_effects", "adaptive_quality"]:
 		cfg.set_value("graphics", key, get(key))
 	for key in ["hit_effects", "input_display"]:
 		cfg.set_value("fight", key, get(key))
@@ -172,6 +235,7 @@ func reset_defaults() -> void:
 	vsync = true
 	show_fps = false
 	post_effects = true
+	adaptive_quality = true
 	hit_effects = true
 	input_display = false
 	_apply()

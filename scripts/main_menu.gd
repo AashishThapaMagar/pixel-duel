@@ -473,11 +473,11 @@ func _show_graphics() -> void:
 	pickers.detailed_textures.item_selected.connect(func(index: int):
 		Settings.set_graphic("detailed_textures", index == 1)
 		refresh.call())
-	for pair in [["VSYNC", "vsync", 28.0], ["SHOW FPS", "show_fps", 176.0], ["BLOOM AND GRADE", "post_effects", 316.0]]:
+	for pair in [["VSYNC", "vsync", 28.0, 296.0], ["SHOW FPS", "show_fps", 176.0, 296.0], ["BLOOM AND GRADE", "post_effects", 316.0, 296.0], ["AUTO-ADJUST WHEN A FIGHT DROPS UNDER 30 FPS", "adaptive_quality", 28.0, 330.0]]:
 		var toggle := CheckBox.new()
 		toggle.text = pair[0]
-		toggle.position = Vector2(pair[2], 296)
-		toggle.size = Vector2(140 if pair[2] < 300.0 else 200, 36)
+		toggle.position = Vector2(pair[2], pair[3])
+		toggle.size = Vector2(140 if pair[2] < 300.0 else 200, 30)
 		toggle.button_pressed = Settings.get(pair[1])
 		toggle.toggled.connect(func(on: bool):
 			Settings.set(pair[1], on)

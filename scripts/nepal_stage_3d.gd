@@ -255,12 +255,13 @@ func _ready() -> void:
 	sun = DirectionalLight3D.new()
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 40.0
-	# Two cascades, not four: every cascade redraws the whole scene, and the
-	# near one alone (the first 7 metres, where the fighters are) gets half
-	# the atlas, which is plenty at 4096. The far one shades the square.
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.directional_shadow_split_1 = 0.18
-	sun.directional_shadow_fade_start = 0.85
+	# One shadow pass, not four cascades: every pass redraws both fighters,
+	# and rigged fighters are the dearest thing on screen. The single map
+	# covers the dais and the near square at the full 4096 atlas; the far
+	# square and houses go unshadowed, which the lamps and haze hide.
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	sun.directional_shadow_max_distance = 18.0
+	sun.directional_shadow_fade_start = 0.8
 	sun.shadow_blur = 1.1
 	sun.shadow_normal_bias = 1.6
 	add_child(sun)
@@ -412,8 +413,8 @@ func _apply_graphics() -> void:
 	if settings == null or sun == null:
 		return
 	sun.shadow_enabled = settings.shadows > 0
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if settings.shadows == 2 else DirectionalLight3D.SHADOW_ORTHOGONAL
-	sun.directional_shadow_max_distance = 40.0 if settings.shadows == 2 else 22.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	sun.directional_shadow_max_distance = 18.0 if settings.shadows == 2 else 14.0
 	if key_light != null:
 		key_light.shadow_enabled = _key_shadow()
 	if environment != null and current_round >= 0:

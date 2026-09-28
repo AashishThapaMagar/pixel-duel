@@ -15,9 +15,12 @@ var bust_tracking := false
 ## fighter larger and set off-centre toward the outside edge.
 var hero := false
 var viewport: SubViewport
-## Roster busts redraw on alternate frames: seven of them share the screen
-## with two hero renders and the live arena, and a bust barely moves.
-const BUST_FRAME_SKIP := 2
+## How often this portrait animates and redraws, in Hz. The Compatibility
+## renderer skins rigged fighters on the CPU, so every live portrait costs
+## a fighter's worth of skinning per update: busts idle at 10 Hz, hero
+## showcases at 30 Hz, and nothing is skinned between updates.
+var refresh_rate := 30.0
+var _accumulated := 0.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -89,16 +92,32 @@ func _ready() -> void:
 	fighter.add_child(visual)
 	fighter.set_physics_process(false)
 	viewport.add_child(fighter)
+	# Driven from _process below at refresh_rate instead of every frame.
+	visual.set_process(false)
+	visual.set_meta("throttled", true)
+	if bust:
+		refresh_rate = 10.0
+	_accumulated = get_index() * 0.011
 	fighter.controls_enabled = false
 	fighter.collision_layer = 0
 	fighter.hurtbox.collision_layer = 0
 	show_fighter(index)
 
-func _process(_delta: float) -> void:
-	if not bust or fighter == null or camera == null:
+func _process(delta: float) -> void:
+	if fighter == null or camera == null:
 		return
-	if is_visible_in_tree():
-		viewport.render_target_update_mode = SubViewport.UPDATE_ONCE if Engine.get_process_frames() % BUST_FRAME_SKIP == get_index() % BUST_FRAME_SKIP else SubViewport.UPDATE_DISABLED
+	_accumulated += delta
+	if not is_visible_in_tree():
+		viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		return
+	if _accumulated < 1.0 / refresh_rate:
+		viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		return
+	fighter.get_node("Visual")._process(_accumulated)
+	_accumulated = 0.0
+	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	if not bust:
+		return
 	var animated = fighter.get_node("Visual").animated
 	if not animated.active or animated.skeleton == null:
 		return
@@ -122,6 +141,8 @@ func show_fighter(value: int) -> void:
 		fighter.apply_character(value)
 		fighter.apply_style(load("res://resources/styles/action.tres"))
 		fighter._update_animation()
+		# Redraw with the new fighter straight away.
+		_accumulated = 1.0
 		if bust:
 			_clear_guard()
 
