@@ -61,6 +61,11 @@ void fragment() {
 var arena_label: Label
 ## Versus arena options, in cycling order (see MatchSetup.stage_choice).
 const STAGE_OPTIONS := [-1, 0, 1, 2, 3, 4]
+## Random pick roulette per player: the portrait spins through the roster,
+## slowing down until it lands, then locks in.
+var rolling: Array[bool] = [false, false]
+var random_buttons: Array[Button] = []
+var arena_caption: Label
 
 func _ready() -> void:
 	theme = UI.theme()
@@ -149,11 +154,11 @@ func _ready() -> void:
 		markers.append(marker)
 	if mode_id == "arcade":
 		_build_ladder(tile_shader)
-	var hint := "P1: A/D select, F ready    |    P2: arrows select, K ready    |    Enter fight"
+	var hint := "P1: A/D select, F ready    |    P2: arrows select, K ready    |    R random    |    Enter fight"
 	if MatchSetup.arcade:
-		hint = "A/D choose your fighter    |    F lock in    |    Enter begin    |    Esc back"
+		hint = "A/D choose your fighter    |    R random    |    F lock in    |    Enter begin    |    Esc back"
 	elif mode_id == "ai":
-		hint = "A/D choose fighter    |    Arrows choose CPU    |    F lock in    |    Enter challenge"
+		hint = "A/D choose fighter    |    Arrows choose CPU    |    R random    |    F lock in    |    Enter challenge"
 	var hint_label := UI.label(self, hint, Vector2(55, 512), Vector2(850, 22), 12, UI.WHITE)
 	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint_label.add_theme_font_override("font", UI.strong_font())
@@ -231,14 +236,53 @@ func _build_player(player: int) -> void:
 	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	detail.visible = not compact
 	details.append(detail)
-	var tab := UI.button(self, "", pos + Vector2(0, dimensions.y + 54), Vector2(160, 30))
+	var tab := UI.button(self, "", pos + Vector2(0, dimensions.y + 54), Vector2(124, 30))
 	tab.pressed.connect(func(): editing_player = player; _refresh())
 	tab.visible = not compact
 	player_tabs.append(tab)
-	var lock := UI.button(self, "LOCK IN", pos + Vector2(166, dimensions.y + 54), Vector2(134, 30))
+	var random := UI.button(self, "?", pos + Vector2(128, dimensions.y + 54), Vector2(40, 30))
+	random.tooltip_text = "Random fighter"
+	random.add_theme_font_override("font", UI.display_font())
+	random.add_theme_font_size_override("font_size", 18)
+	random.pressed.connect(_roulette.bind(player))
+	random.visible = not compact and not (MatchSetup.vs_ai and player == 1)
+	random_buttons.append(random)
+	var lock := UI.button(self, "LOCK IN", pos + Vector2(172, dimensions.y + 54), Vector2(128, 30))
 	lock.pressed.connect(_toggle_ready.bind(player))
 	lock.visible = not compact and not (MatchSetup.vs_ai and player == 1)
 	ready_buttons.append(lock)
+
+## Random select: spin through the roster with a slowing tick, land on a
+## fighter the player is not already using, and lock in.
+func _roulette(player: int) -> void:
+	if transitioning or rolling[player] or (MatchSetup.arcade and player == 1) or (MatchSetup.vs_ai and player == 1):
+		return
+	rolling[player] = true
+	ready_players[player] = false
+	editing_player = player
+	var landing := posmod(selections[player] + 1 + randi() % (ROSTER.PROFILES.size() - 1), ROSTER.PROFILES.size())
+	var steps := 12 + posmod(landing - selections[player], ROSTER.PROFILES.size())
+	var tween := create_tween()
+	for i in steps:
+		var delay := 0.04 + 0.16 * pow(float(i) / steps, 2.5)
+		tween.tween_interval(delay)
+		tween.tween_callback(func():
+			selections[player] = posmod(selections[player] + 1, ROSTER.PROFILES.size())
+			if MatchSetup.arcade:
+				selections[1] = 1 if selections[0] == 0 else 0
+			preload("res://scripts/sfx.gd").fire("menu_move", -6.0, 1.0 + 0.3 * float(i) / steps)
+			_refresh())
+	tween.tween_callback(func():
+		rolling[player] = false
+		if selections[player] != landing:
+			selections[player] = landing
+		if MatchSetup.arcade:
+			selections[1] = 1 if selections[0] == 0 else 0
+			ready_players[1] = true
+		ready_players[player] = true
+		preload("res://scripts/sfx.gd").fire("menu_confirm")
+		editing_player = 0 if MatchSetup.vs_ai else 1 - player
+		_refresh())
 
 ## Stat bars in the showcase corner, filled from the fighter's profile.
 func _build_stats(player: int, at: Vector2) -> void:
@@ -340,9 +384,12 @@ func _build_stage_picker() -> void:
 		arrow.focus_mode = Control.FOCUS_NONE
 	prev.pressed.connect(_cycle_stage.bind(-1))
 	next.pressed.connect(_cycle_stage.bind(1))
-	arena_label = UI.heading(self, "", Vector2(394, 370), Vector2(172, 32), 17, UI.GOLD)
+	arena_label = UI.heading(self, "", Vector2(394, 364), Vector2(172, 26), 17, UI.GOLD)
 	arena_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	arena_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	arena_caption = UI.label(self, "", Vector2(300, 388), Vector2(360, 14), 9, UI.MUTED)
+	arena_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	arena_caption.add_theme_font_override("font", UI.strong_font())
 	_show_stage()
 
 func _cycle_stage(step: int) -> void:
@@ -358,11 +405,14 @@ func _show_stage() -> void:
 	match MatchSetup.stage_choice:
 		MatchSetup.JOURNEY_STAGE:
 			arena_label.text = "ALL 4 ARENAS"
+			arena_caption.text = "THE JOURNEY: ONE ARENA PER ROUND, NIGHT TO SUNSET TO THE STUPA"
 			backdrop.stage.show_round(0)
 		MatchSetup.RANDOM_STAGE:
 			arena_label.text = "RANDOM ARENA"
+			arena_caption.text = "ONE ARENA DRAWN FOR THE WHOLE MATCH"
 		_:
 			arena_label.text = rounds[MatchSetup.stage_choice].name
+			arena_caption.text = rounds[MatchSetup.stage_choice].detail.to_upper()
 			backdrop.stage.show_round(MatchSetup.stage_choice)
 
 func _back() -> void:
@@ -374,7 +424,7 @@ func _choose(index: int) -> void:
 	_select_for_player(index, editing_player)
 
 func _select_for_player(index: int, player: int) -> void:
-	if transitioning or (MatchSetup.arcade and player == 1):
+	if transitioning or rolling[player] or (MatchSetup.arcade and player == 1):
 		return
 	selections[player] = posmod(index, ROSTER.PROFILES.size())
 	preload("res://scripts/sfx.gd").fire("menu_move")
@@ -386,7 +436,7 @@ func _select_for_player(index: int, player: int) -> void:
 	_refresh()
 
 func _toggle_ready(player: int) -> void:
-	if transitioning or (MatchSetup.vs_ai and player == 1):
+	if transitioning or rolling[player] or (MatchSetup.vs_ai and player == 1):
 		return
 	ready_players[player] = not ready_players[player]
 	preload("res://scripts/sfx.gd").fire("menu_confirm" if ready_players[player] else "menu_back")
@@ -420,8 +470,13 @@ func _refresh() -> void:
 				tween.tween_property(fill, "size:x", STAT_WIDTH * values[row], 0.25).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 			else:
 				fill.size.x = STAT_WIDTH * values[row]
-		details[player].text = profile.title + "\n" + profile.trait
-		player_tabs[player].text = "P%d / %s" % [player + 1, "SELECTING" if editing_player == player else "SELECT"]
+		var ledger := ""
+		var records := get_node_or_null("/root/Records")
+		if records != null:
+			var record: Dictionary = records.fighter_record(profile.id)
+			ledger = "   ·   RECORD %dW / %d" % [record.wins, record.picks] if record.picks > 0 else "   ·   NO RECORD YET"
+		details[player].text = profile.title + ledger + "\n" + profile.trait
+		player_tabs[player].text = "P%d / %s" % [player + 1, "PICKING" if editing_player == player else "PICK"]
 		ready_buttons[player].text = "✓  READY" if ready_players[player] else "LOCK IN"
 		if ready_players[player]:
 			ready_buttons[player].add_theme_stylebox_override("normal", UI.blade(UI.GOLD, UI.CRIMSON, 6))
@@ -472,6 +527,9 @@ func _input(event: InputEvent) -> void:
 			_select_for_player(selections[player] + 1, player)
 		elif event.is_action_pressed(prefix + "punch"):
 			_toggle_ready(player)
+	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_R:
+		_roulette(editing_player)
+		get_viewport().set_input_as_handled()
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_TAB and is_instance_valid(arena_label):
 		_cycle_stage(-1 if event.shift_pressed else 1)
 		get_viewport().set_input_as_handled()

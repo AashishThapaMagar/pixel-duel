@@ -141,7 +141,7 @@ func _open_page(title: String, eyebrow: String) -> Control:
 	var face := UI.box(Color(0.03, 0.03, 0.07, 0.94), UI.GOLD, 0, 0.04)
 	face.border_width_left = 6
 	var body := Panel.new()
-	body.size = Vector2(450, 380)
+	body.size = Vector2(450, 432)
 	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_theme_stylebox_override("panel", face)
 	page.add_child(body)
@@ -157,47 +157,53 @@ func _option(to: Control, text: String, y: float) -> void:
 
 func _show_settings() -> void:
 	var to := _open_page("SETTINGS", "PAUSED  /  SETTINGS")
-	_option(to, "MASTER VOLUME", 104)
-	var value := UI.heading(to, "%d%%" % roundi(Settings.volume * 100), Vector2(368, 96), Vector2(64, 30), 20, UI.GOLD)
-	var slider := HSlider.new()
-	slider.position = Vector2(206, 106)
-	slider.size = Vector2(156, 22)
-	slider.max_value = 1.0
-	slider.step = 0.05
-	slider.value = Settings.volume
-	slider.focus_mode = Control.FOCUS_NONE
-	slider.value_changed.connect(func(volume: float):
-		Settings.set_volume(volume)
-		value.text = "%d%%" % roundi(volume * 100))
-	to.add_child(slider)
-	_option(to, "GRAPHICS", 152)
+	_slider(to, "MASTER VOLUME", 100, Settings.volume, Settings.set_volume)
+	_slider(to, "SOUND EFFECTS", 138, Settings.sfx_volume, Settings.set_sfx_volume)
+	_option(to, "GRAPHICS", 180)
 	var quality := OptionButton.new()
 	for name in QUALITY_NAMES:
 		quality.add_item(name)
 	quality.set_item_disabled(3, true)
 	quality.select(Settings.quality)
-	quality.position = Vector2(206, 144)
-	quality.size = Vector2(220, 34)
+	quality.position = Vector2(206, 172)
+	quality.size = Vector2(220, 32)
 	quality.focus_mode = Control.FOCUS_NONE
 	quality.item_selected.connect(func(index: int): Settings.set_quality(index))
 	to.add_child(quality)
 	var toggles := [["FULLSCREEN", Settings.fullscreen, func(on: bool): Settings.set_fullscreen(on)],
 		["CAMERA SHAKE", MatchSetup.camera_shake, func(on: bool): MatchSetup.camera_shake = on],
+		["HIT EFFECTS", Settings.hit_effects, func(on: bool): Settings.set_option("hit_effects", on)],
+		["INPUT DISPLAY", Settings.input_display, func(on: bool): Settings.set_option("input_display", on)],
 		["SHOW FPS", Settings.show_fps, func(on: bool):
 			Settings.show_fps = on
 			Settings._save()]]
 	for i in toggles.size():
-		_option(to, toggles[i][0], 200 + i * 44)
+		_option(to, toggles[i][0], 220 + i * 34)
 		var box := CheckBox.new()
-		box.position = Vector2(206, 192 + i * 44)
-		box.size = Vector2(220, 34)
+		box.position = Vector2(206, 212 + i * 34)
+		box.size = Vector2(220, 30)
 		box.button_pressed = toggles[i][1]
 		box.text = "ON" if box.button_pressed else "OFF"
 		box.focus_mode = Control.FOCUS_NONE
 		box.toggled.connect(toggles[i][2])
 		box.toggled.connect(func(on: bool): box.text = "ON" if on else "OFF")
 		to.add_child(box)
-	_back_button(to)
+	_back_button(to, 388)
+
+func _slider(to: Control, text: String, y: float, level: float, apply: Callable) -> void:
+	_option(to, text, y)
+	var value := UI.heading(to, "%d%%" % roundi(level * 100), Vector2(368, y - 8), Vector2(64, 30), 20, UI.GOLD)
+	var slider := HSlider.new()
+	slider.position = Vector2(206, y + 2)
+	slider.size = Vector2(156, 22)
+	slider.max_value = 1.0
+	slider.step = 0.05
+	slider.value = level
+	slider.focus_mode = Control.FOCUS_NONE
+	slider.value_changed.connect(func(volume: float):
+		apply.call(volume)
+		value.text = "%d%%" % roundi(volume * 100))
+	to.add_child(slider)
 
 func _show_guide() -> void:
 	var to := _open_page("HOW TO PLAY", "PAUSED  /  CONTROLS")
@@ -213,8 +219,8 @@ func _show_guide() -> void:
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_back_button(to)
 
-func _back_button(to: Control) -> void:
-	var back := UI.button(to, "◀  BACK", Vector2(300, 336), Vector2(130, 32))
+func _back_button(to: Control, y := 336.0) -> void:
+	var back := UI.button(to, "◀  BACK", Vector2(300, y), Vector2(130, 32))
 	back.focus_mode = Control.FOCUS_NONE
 	back.pressed.connect(_close_page)
 

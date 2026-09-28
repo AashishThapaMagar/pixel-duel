@@ -14,11 +14,23 @@ const MODES := [
 const MODE_KEYS := ["arcade", "story", "local", "ai"]
 ## Non-fight entries that follow the modes in the list: [key, title, text, accent].
 const EXTRAS := [
-	["settings", "SETTINGS", "Display, volume, fight options and how to play.", Color("c9cfdf")],
+	["records", "RECORDS", "Your fights, wins, streaks, perfects and favourite fighter.", Color("6fb4ff")],
+	["settings", "SETTINGS", "Display, sound, graphics, fight options, controls and how to play.", Color("c9cfdf")],
 	["exit", "EXIT", "Leave the championship. See you next time.", Color("ff4a5a")],
 ]
 ## Order the arrow keys walk through the list.
-const ENTRIES := ["arcade", "story", "local", "ai", "settings", "exit"]
+const ENTRIES := ["arcade", "story", "local", "ai", "records", "settings", "exit"]
+## Gold light sweeping across the title, arcade attract-mode style.
+const SHIMMER := """shader_type canvas_item;
+void fragment() {
+	vec4 base = texture(TEXTURE, UV) * COLOR;
+	float sweep = fract(TIME * 0.22) * 2.4 - 0.7;
+	float band = abs(SCREEN_UV.x + SCREEN_UV.y * 0.35 - sweep);
+	float shine = 1.0 - smoothstep(0.0, 0.07, band);
+	base.rgb += vec3(0.55, 0.5, 0.35) * shine * base.a;
+	COLOR = base;
+}
+"""
 ## Menu column geometry: row pitch, bar height and the gap after the modes.
 const ROW_TOP := 140.0
 const ROW_STEP := 48.0
@@ -37,6 +49,7 @@ var modal_content: Control
 var play_button: Button
 var return_focus: Control
 var transitioning: bool = false
+var record_strip: Label
 
 func _ready() -> void:
 	theme = UI.theme()
@@ -44,6 +57,14 @@ func _ready() -> void:
 	add_child(backdrop)
 	var title := UI.heading(self, "WHO WON?", Vector2(38, 22), Vector2(420, 84), 70, UI.GOLD)
 	title.name = "GameTitle"
+	var shimmer := ShaderMaterial.new()
+	shimmer.shader = Shader.new()
+	shimmer.shader.code = SHIMMER
+	title.material = shimmer
+	# The title lands with a little weight when the screen opens.
+	title.pivot_offset = Vector2(0, 42)
+	title.scale = Vector2.ONE * 1.12
+	title.create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).tween_property(title, "scale", Vector2.ONE, 0.45)
 	UI.panel(self, Vector2(44, 106), Vector2(150, 4), UI.CRIMSON, Color.TRANSPARENT, 0.0)
 	UI.panel(self, Vector2(196, 106), Vector2(46, 4), UI.GOLD, Color.TRANSPARENT, 0.0)
 	for i in MODES.size():
@@ -75,6 +96,12 @@ func _ready() -> void:
 	mode_desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	mode_desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	mode_desc_label.add_theme_constant_override("outline_size", 4)
+	# The player's ledger sits under the splash card, arcade high-score style.
+	record_strip = UI.label(self, "", Vector2(470, 452), Vector2(300, 36), 11, UI.MUTED)
+	record_strip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	record_strip.add_theme_font_override("font", UI.strong_font())
+	record_strip.add_theme_constant_override("outline_size", 4)
+	_refresh_record_strip()
 	var hint_x := 40.0
 	for hint in [["↑↓", "SELECT"], ["ENTER", "CONFIRM"], ["F2", "PRACTICE"], ["ESC", "BACK"]]:
 		hint_x += UI.key_hint(self, hint[0], hint[1], Vector2(hint_x, 514))
@@ -159,10 +186,78 @@ func _activate_extra(key: String) -> void:
 		return
 	_point_at(key)
 	match key:
+		"records":
+			_show_records()
 		"settings":
 			_show_settings()
 		"exit":
 			get_tree().quit()
+
+## Two lines under the splash card: the last fight and the running record.
+func _refresh_record_strip() -> void:
+	var records := get_node_or_null("/root/Records")
+	if records == null or record_strip == null:
+		return
+	if records.totals.matches == 0:
+		record_strip.text = "NO FIGHTS ON RECORD YET\nSTEP IN AND MAKE ONE"
+		return
+	var last: Dictionary = records.last
+	var first := ""
+	if not last.is_empty():
+		var p1: String = ROSTER.profile(_roster_index(last.p1)).name
+		var p2: String = ROSTER.profile(_roster_index(last.p2)).name
+		var verdict: String = "DREW WITH" if last.draw else ("BEAT" if last.won else "LOST TO")
+		first = "LAST  %s %s %s  %d : %d" % [p1, verdict, p2, last.score[0], last.score[1]]
+	record_strip.text = "%s\nRECORD  %dW  %dL  /  STREAK %d  /  WIN RATE %d%%" % [first, records.totals.wins, records.totals.losses, records.totals.streak, records.win_rate()]
+
+static func _roster_index(id: String) -> int:
+	for i in ROSTER.PROFILES.size():
+		if ROSTER.PROFILES[i].id == id:
+			return i
+	return 0
+
+## Records page: stat tiles, a per-mode line, the roster ledger and reset.
+func _show_records() -> void:
+	if transitioning or is_instance_valid(modal):
+		return
+	var records := get_node_or_null("/root/Records")
+	_open_modal("YOUR RECORD", "RECORDS")
+	if records == null:
+		return
+	var t: Dictionary = records.totals
+	var tiles := [
+		["MATCHES", str(t.matches)], ["WINS", str(t.wins)], ["WIN RATE", "%d%%" % records.win_rate()], ["BEST STREAK", str(t.best_streak)],
+		["KNOCKOUTS", str(t.kos)], ["PERFECTS", str(t.perfects)], ["ARCADE RUNS", str(t.arcade_clears)], ["PLAY TIME", records.play_time()],
+	]
+	for i in tiles.size():
+		var at := Vector2(28 + (i % 4) * 143, 98 + (i / 4) * 66)
+		UI.panel(modal_content, at, Vector2(134, 58), Color(1, 1, 1, 0.05), Color(UI.GOLD, 0.35), 0.06)
+		UI.eyebrow(modal_content, tiles[i][0], at + Vector2(12, 8), Vector2(120, 14))
+		UI.heading(modal_content, tiles[i][1], at + Vector2(10, 22), Vector2(120, 32), 24, UI.WHITE, Color(0, 0, 0, 0.6))
+	var by_mode := ""
+	for key in ["arcade", "story", "local", "ai"]:
+		var entry: Dictionary = records.modes.get(key, {"matches": 0, "wins": 0})
+		by_mode += "%s %d/%d    " % [records.MODE_NAMES[key], entry.wins, entry.matches]
+	UI.label(modal_content, "WINS / MATCHES BY MODE:   " + by_mode.strip_edges(), Vector2(28, 234), Vector2(566, 18), 11, UI.MUTED).add_theme_font_override("font", UI.strong_font())
+	# The roster ledger: one column per fighter, favourite in gold.
+	var favourite: String = records.favourite()
+	for i in ROSTER.PROFILES.size():
+		var profile := ROSTER.profile(i)
+		var record: Dictionary = records.fighter_record(profile.id)
+		var x := 28.0 + i * 81
+		var mine: bool = profile.id == favourite and record.picks > 0
+		var name := UI.heading(modal_content, profile.name, Vector2(x, 258), Vector2(78, 20), 13, UI.GOLD if mine else UI.WHITE, Color(0, 0, 0, 0.7))
+		name.add_theme_constant_override("outline_size", 3)
+		var line := UI.label(modal_content, "%dW / %d" % [record.wins, record.picks], Vector2(x, 278), Vector2(78, 16), 10, UI.MUTED)
+		line.add_theme_font_override("font", UI.strong_font())
+	if favourite != "":
+		UI.eyebrow(modal_content, "FAVOURITE: " + ROSTER.profile(_roster_index(favourite)).name, Vector2(28, 300), Vector2(300, 16))
+	var reset := UI.button(modal_content, "RESET RECORDS", Vector2(28, 311), Vector2(170, 38))
+	reset.pressed.connect(func():
+		records.reset()
+		_refresh_record_strip()
+		_close_modal()
+		_show_records())
 
 ## The mode the current MatchSetup state maps to — shared by
 ## _refresh_mode_summary (styling every row after a change) and each row's
@@ -180,27 +275,34 @@ func _show_fight_options() -> void:
 		difficulty.add_item(name)
 	difficulty.select(MatchSetup.ai_difficulty)
 	difficulty.position = Vector2(306, 108)
-	difficulty.size = Vector2(282, 38)
+	difficulty.size = Vector2(282, 36)
 	difficulty.item_selected.connect(func(index: int): MatchSetup.ai_difficulty = index)
 	modal_content.add_child(difficulty)
-	_option_label("ROUND TIMER", 167)
+	_option_label("ROUND TIMER", 158)
 	var timer := OptionButton.new()
 	for seconds in [60, 99, 120]:
 		timer.add_item("%d SECONDS" % seconds, seconds)
 	timer.select([60, 99, 120].find(MatchSetup.round_seconds))
-	timer.position = Vector2(306, 159)
-	timer.size = Vector2(282, 38)
+	timer.position = Vector2(306, 150)
+	timer.size = Vector2(282, 36)
 	timer.item_selected.connect(func(index: int): MatchSetup.round_seconds = [60, 99, 120][index])
 	modal_content.add_child(timer)
-	_option_label("CAMERA SHAKE", 218)
-	var shake := CheckBox.new()
-	shake.text = "IMPACT SHAKE"
-	shake.position = Vector2(306, 210)
-	shake.size = Vector2(282, 38)
-	shake.button_pressed = MatchSetup.camera_shake
-	shake.toggled.connect(func(enabled: bool): MatchSetup.camera_shake = enabled)
-	modal_content.add_child(shake)
-	UI.label(modal_content, "Four rounds per match. Options apply to your next fight.", Vector2(28, 267), Vector2(566, 26), 12, UI.MUTED)
+	_toggle_row("CAMERA SHAKE", "IMPACT SHAKE AND LENS KICK", 200, MatchSetup.camera_shake, func(enabled: bool): MatchSetup.camera_shake = enabled)
+	_toggle_row("HIT EFFECTS", "SPARKS, DUST, TRAILS AND FLASHES", 240, Settings.hit_effects, func(enabled: bool): Settings.set_option("hit_effects", enabled))
+	_toggle_row("INPUT DISPLAY", "SHOW EACH PLAYER'S INPUTS", 280, Settings.input_display, func(enabled: bool): Settings.set_option("input_display", enabled))
+	UI.label(modal_content, "Four rounds per match. Options apply to your next fight.", Vector2(28, 322), Vector2(400, 26), 11, UI.MUTED)
+
+## Option name on the left, a labelled toggle on the right.
+func _toggle_row(text: String, caption: String, y: float, on: bool, apply: Callable) -> CheckBox:
+	_option_label(text, y)
+	var box := CheckBox.new()
+	box.text = caption
+	box.position = Vector2(306, y - 8)
+	box.size = Vector2(282, 34)
+	box.button_pressed = on
+	box.toggled.connect(apply)
+	modal_content.add_child(box)
+	return box
 
 ## Left-hand option name with a gold tick, as on arcade option screens.
 func _option_label(text: String, y: float) -> void:
@@ -287,37 +389,45 @@ func _show_settings() -> void:
 	if transitioning or is_instance_valid(modal):
 		return
 	_open_modal("YOUR SETUP", "SETTINGS")
-	_option_label("DISPLAY", 104)
-	var fullscreen := CheckBox.new()
-	fullscreen.text = "FULLSCREEN"
-	fullscreen.position = Vector2(306, 96)
-	fullscreen.size = Vector2(282, 38)
-	fullscreen.button_pressed = Settings.fullscreen
-	fullscreen.toggled.connect(Settings.set_fullscreen)
-	modal_content.add_child(fullscreen)
-	_volume_row("MASTER VOLUME", 148, Settings.volume, Settings.set_volume)
-	_option_label("TOUCH CONTROLS", 192)
-	var touch := CheckBox.new()
-	touch.text = "ON-SCREEN BUTTONS"
-	touch.position = Vector2(306, 184)
-	touch.size = Vector2(282, 38)
-	touch.button_pressed = Settings.touch_controls
-	touch.toggled.connect(Settings.set_touch_controls)
-	modal_content.add_child(touch)
-	var options := UI.button(modal_content, "FIGHT OPTIONS  ▶", Vector2(28, 311), Vector2(200, 38))
-	options.pressed.connect(func():
-		_close_modal()
-		_show_fight_options())
-	var guide := UI.button(modal_content, "HOW TO PLAY  ▶", Vector2(236, 311), Vector2(190, 38))
-	guide.pressed.connect(func():
-		_close_modal()
-		_show_guide())
-	_option_label("GRAPHICS", 240)
-	var graphics := UI.button(modal_content, "%s  ▶" % QUALITY_NAMES[Settings.quality], Vector2(306, 232), Vector2(282, 38))
+	_toggle_row("DISPLAY", "FULLSCREEN", 104, Settings.fullscreen, Settings.set_fullscreen)
+	_volume_row("MASTER VOLUME", 142, Settings.volume, Settings.set_volume)
+	_volume_row("SOUND EFFECTS", 176, Settings.sfx_volume, Settings.set_sfx_volume)
+	_toggle_row("TOUCH CONTROLS", "ON-SCREEN BUTTONS", 214, Settings.touch_controls, Settings.set_touch_controls)
+	_option_label("GRAPHICS", 250)
+	var graphics := UI.button(modal_content, "%s  ▶" % QUALITY_NAMES[Settings.quality], Vector2(306, 242), Vector2(282, 34))
 	graphics.pressed.connect(func():
 		_close_modal()
 		_show_graphics())
-	UI.label(modal_content, "Changes are saved automatically.", Vector2(28, 280), Vector2(540, 22), 12, UI.MUTED)
+	var pages := [["FIGHT OPTIONS  ▶", 28.0, 190.0, _show_fight_options], ["CONTROLS  ▶", 226.0, 150.0, _show_controls], ["HOW TO PLAY  ▶", 384.0, 172.0, _show_guide]]
+	for page in pages:
+		var open := UI.button(modal_content, page[0], Vector2(page[1], 284), Vector2(page[2], 34))
+		open.pressed.connect(func():
+			_close_modal()
+			page[3].call())
+	var reset := UI.button(modal_content, "RESET DEFAULTS", Vector2(28, 326), Vector2(170, 30))
+	reset.pressed.connect(func():
+		Settings.reset_defaults()
+		MatchSetup.camera_shake = true
+		_close_modal()
+		_show_settings())
+	UI.label(modal_content, "Saved automatically.", Vector2(206, 332), Vector2(220, 20), 11, UI.MUTED)
+
+## Every key for both players, as chips.
+func _show_controls() -> void:
+	if transitioning or is_instance_valid(modal):
+		return
+	_open_modal("KEYS AND COMMANDS", "SETTINGS  /  CONTROLS")
+	for player in 2:
+		var x := 28.0 + player * 294
+		var color := UI.GOLD if player == 0 else UI.VIOLET
+		UI.panel(modal_content, Vector2(x, 96), Vector2(270, 212), Color(color, 0.08), Color(color, 0.6), 0.06)
+		UI.heading(modal_content, "PLAYER %d" % (player + 1), Vector2(x + 14, 100), Vector2(240, 28), 20, color, Color(0, 0, 0, 0.6))
+		var keys := [["A / D", "APPROACH / RETREAT"], ["W / S", "SIDESTEP"], ["SPACE", "JUMP"], ["E", "GUARD"], ["F", "PUNCH"], ["G", "KICK"], ["H", "GRAPPLE"], ["SHIFT", "RUN"]] if player == 0 \
+			else [["← / →", "APPROACH / RETREAT"], ["↑ / ↓", "SIDESTEP"], ["ENTER", "JUMP"], ["O", "GUARD"], ["K", "PUNCH"], ["L", "KICK"], ["J", "GRAPPLE"], ["CTRL", "RUN"]]
+		for k in keys.size():
+			UI.key_hint(modal_content, keys[k][0], keys[k][1], Vector2(x + 14, 134 + k * 21))
+	var tip := UI.label(modal_content, "Double-tap forward to dash, back to backdash. Punch + Kick together grapples; the same tap just before contact escapes a throw.\nF1 movebook  /  Esc pause  /  R next round or rematch.", Vector2(28, 314), Vector2(400, 46), 11, UI.MUTED)
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 const QUALITY_NAMES := ["LOW", "MEDIUM", "HIGH", "CUSTOM"]
 
@@ -363,11 +473,11 @@ func _show_graphics() -> void:
 	pickers.detailed_textures.item_selected.connect(func(index: int):
 		Settings.set_graphic("detailed_textures", index == 1)
 		refresh.call())
-	for pair in [["VSYNC", "vsync", 28.0], ["SHOW FPS", "show_fps", 200.0]]:
+	for pair in [["VSYNC", "vsync", 28.0], ["SHOW FPS", "show_fps", 176.0], ["BLOOM AND GRADE", "post_effects", 316.0]]:
 		var toggle := CheckBox.new()
 		toggle.text = pair[0]
 		toggle.position = Vector2(pair[2], 296)
-		toggle.size = Vector2(160, 36)
+		toggle.size = Vector2(140 if pair[2] < 300.0 else 200, 36)
 		toggle.button_pressed = Settings.get(pair[1])
 		toggle.toggled.connect(func(on: bool):
 			Settings.set(pair[1], on)
