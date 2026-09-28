@@ -52,6 +52,15 @@ var transitioning: bool = false
 var record_strip: Label
 var hero: TextureRect
 var hero_glow: ColorRect
+## Featured fighter showcase: name, title and three stat bars beside the
+## hero; the roster rotates until the player browses with Left / Right.
+var hero_name: Label
+var hero_title: Label
+var hero_eyebrow: Label
+var hero_stats: Array[ColorRect] = []
+var showcase_time := 0.0
+var browsing := false
+const SHOWCASE_EVERY := 5.0
 ## Spotlight behind the title-screen hero in the mode's accent colour.
 const SPOTLIGHT := """shader_type canvas_item;
 uniform vec4 tint : source_color = vec4(1.0, 0.8, 0.3, 1.0);
@@ -77,6 +86,21 @@ func _ready() -> void:
 	title.pivot_offset = Vector2(0, 42)
 	title.scale = Vector2.ONE * 1.12
 	title.create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).tween_property(title, "scale", Vector2.ONE, 0.45)
+	var shade := TextureRect.new()
+	var fade := Gradient.new()
+	fade.set_color(0, Color(0.02, 0.025, 0.05, 0.82))
+	fade.set_color(1, Color(0.02, 0.025, 0.05, 0.0))
+	var ramp := GradientTexture2D.new()
+	ramp.gradient = fade
+	ramp.width = 256
+	ramp.height = 4
+	shade.texture = ramp
+	shade.position = Vector2(0, 0)
+	shade.size = Vector2(430, 540)
+	shade.stretch_mode = TextureRect.STRETCH_SCALE
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(shade)
+	move_child(shade, title.get_index())
 	UI.panel(self, Vector2(44, 106), Vector2(150, 4), UI.CRIMSON, Color.TRANSPARENT, 0.0)
 	UI.panel(self, Vector2(196, 106), Vector2(46, 4), UI.GOLD, Color.TRANSPARENT, 0.0)
 	for i in MODES.size():
@@ -104,7 +128,7 @@ func _ready() -> void:
 	# The player's fighter stands in a spotlight on the right: the favourite
 	# from the records, else the last one chosen.
 	hero_glow = ColorRect.new()
-	hero_glow.position = Vector2(560, 40)
+	hero_glow.position = Vector2(520, 110)
 	hero_glow.size = Vector2(380, 330)
 	hero_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var spot := ShaderMaterial.new()
@@ -116,10 +140,38 @@ func _ready() -> void:
 	hero.hero = true
 	hero.facing_left = true
 	hero.index = _hero_index()
-	hero.position = Vector2(540, 26)
-	hero.size = Vector2(420, 344)
+	hero.position = Vector2(330, 40)
+	hero.size = Vector2(620, 496)
 	add_child(hero)
-	UI.eyebrow(self, "YOUR FIGHTER  /  " + ROSTER.profile(hero.index).name, Vector2(560, 34), Vector2(370, 16)).horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hero_eyebrow = UI.eyebrow(self, "YOUR FIGHTER", Vector2(560, 30), Vector2(370, 16))
+	hero_eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hero_name = UI.heading(self, "", Vector2(560, 44), Vector2(370, 48), 40, UI.WHITE)
+	hero_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hero_title = UI.label(self, "", Vector2(560, 92), Vector2(370, 18), 11, UI.GOLD)
+	hero_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hero_title.add_theme_font_override("font", UI.strong_font())
+	for row in 3:
+		var y := 118.0 + row * 17.0
+		UI.label(self, ["POWER", "SPEED", "STAMINA"][row], Vector2(760, y - 4), Vector2(60, 14), 9, UI.MUTED).add_theme_font_override("font", UI.strong_font())
+		var track := ColorRect.new()
+		track.position = Vector2(826, y)
+		track.size = Vector2(104, 5)
+		track.color = Color(1, 1, 1, 0.14)
+		track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(track)
+		var fill := ColorRect.new()
+		fill.position = track.position
+		fill.size = Vector2(0, 5)
+		fill.color = UI.GOLD
+		fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(fill)
+		hero_stats.append(fill)
+	var browse_left := UI.button(self, "◀", Vector2(590, 250), Vector2(34, 28))
+	var browse_right := UI.button(self, "▶", Vector2(876, 250), Vector2(34, 28))
+	for pair in [[browse_left, -1], [browse_right, 1]]:
+		(pair[0] as Button).focus_mode = Control.FOCUS_NONE
+		(pair[0] as Button).pressed.connect(_browse_hero.bind(pair[1]))
+	_show_hero(hero.index, false)
 	# Splash card for the highlighted mode.
 	mode_title_label = UI.heading(self, "", Vector2(470, 322), Vector2(460, 76), 60, UI.WHITE)
 	mode_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -134,11 +186,80 @@ func _ready() -> void:
 	record_strip.add_theme_constant_override("outline_size", 4)
 	_refresh_record_strip()
 	var hint_x := 40.0
-	for hint in [["↑↓", "SELECT"], ["ENTER", "CONFIRM"], ["F2", "PRACTICE"], ["ESC", "BACK"]]:
+	for hint in [["↑↓", "SELECT"], ["◀ ▶", "FIGHTER"], ["ENTER", "CONFIRM"], ["F2", "PRACTICE"]]:
 		hint_x += UI.key_hint(self, hint[0], hint[1], Vector2(hint_x, 514))
 	UI.label(self, "v1.0  /  PRESS ENTER TO FIGHT", Vector2(640, 514), Vector2(290, 18), 11, UI.MUTED).horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_refresh_mode_summary()
 	play_button.grab_focus()
+	_entrance()
+
+## The menu column slides in row by row as the screen opens.
+func _entrance() -> void:
+	var rows: Array = []
+	for key in ENTRIES:
+		rows.append(mode_rows.get(key, extra_rows.get(key)))
+	for i in rows.size():
+		var btn: Button = rows[i].button
+		var home: Vector2 = btn.position
+		btn.position = home - Vector2(60, 0)
+		btn.modulate.a = 0.0
+		var tween := btn.create_tween().set_parallel(true).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+		tween.tween_property(btn, "position", home, 0.5).set_delay(0.06 * i)
+		tween.tween_property(btn, "modulate:a", 1.0, 0.3).set_delay(0.06 * i)
+
+## Puts a fighter in the spotlight: portrait, name, title and stats. With
+## animate, the old one dips out and the new one comes up.
+func _show_hero(index: int, animate := true) -> void:
+	# Claimed now, so quick repeated presses step on from the new pick.
+	hero.index = index
+	var profile := ROSTER.profile(index)
+	var apply := func():
+		hero.show_fighter(index)
+		hero_name.text = profile.name
+		hero_name.add_theme_color_override("font_shadow_color", (profile.color as Color).darkened(0.1))
+		hero_title.text = String(profile.title).to_upper()
+		var values := [
+			clampf((float(profile.get("punch_bonus", 0)) + 3.0) / 7.0, 0.1, 1.0),
+			clampf((float(profile.get("speed", 1.0)) - 0.8) / 0.45, 0.1, 1.0),
+			clampf(float(profile.get("stamina", 100.0)) / 140.0, 0.1, 1.0),
+		]
+		for row in hero_stats.size():
+			var fill: ColorRect = hero_stats[row]
+			if fill.is_inside_tree():
+				fill.create_tween().set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT).tween_property(fill, "size:x", 104.0 * values[row], 0.4)
+			else:
+				fill.size.x = 104.0 * values[row]
+	if not animate:
+		apply.call()
+		return
+	var tween := create_tween()
+	tween.tween_property(hero, "modulate:a", 0.0, 0.18)
+	tween.parallel().tween_property(hero_name, "modulate:a", 0.0, 0.18)
+	tween.tween_callback(apply)
+	tween.tween_property(hero, "modulate:a", 1.0, 0.3)
+	tween.parallel().tween_property(hero_name, "modulate:a", 1.0, 0.3)
+
+## Left / Right (or the arrows) choose the featured fighter, who becomes
+## player one's pick; browsing stops the showcase rotation.
+func _browse_hero(step: int) -> void:
+	if transitioning or is_instance_valid(modal):
+		return
+	browsing = true
+	hero_eyebrow.text = "YOUR FIGHTER"
+	var next := posmod(hero.index + step, ROSTER.PROFILES.size())
+	MatchSetup.selected_fighters[0] = next
+	_show_hero(next)
+	preload("res://scripts/sfx.gd").fire("menu_move")
+
+## Until the player browses, the spotlight tours the roster.
+func _process(delta: float) -> void:
+	if browsing or transitioning or is_instance_valid(modal):
+		return
+	showcase_time += delta
+	if showcase_time >= SHOWCASE_EVERY:
+		showcase_time = 0.0
+		hero_eyebrow.text = "THE ROSTER"
+		_show_hero(posmod(hero.index + 1, ROSTER.PROFILES.size()))
 
 func _enter_door(mode: String) -> void:
 	if transitioning or is_instance_valid(modal):
@@ -583,8 +704,12 @@ func _input(event: InputEvent) -> void:
 		_start_practice()
 		get_viewport().set_input_as_handled()
 		return
-	if event.physical_keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]:
-		var step := 1 if event.physical_keycode in [KEY_DOWN, KEY_RIGHT] else -1
+	if event.physical_keycode in [KEY_LEFT, KEY_RIGHT]:
+		_browse_hero(1 if event.physical_keycode == KEY_RIGHT else -1)
+		get_viewport().set_input_as_handled()
+		return
+	if event.physical_keycode in [KEY_UP, KEY_DOWN]:
+		var step := 1 if event.physical_keycode == KEY_DOWN else -1
 		var current := cursor_key if not cursor_key.is_empty() else _selected_mode()
 		var next: String = ENTRIES[posmod(ENTRIES.find(current) + step, ENTRIES.size())]
 		if next in MODE_KEYS:
