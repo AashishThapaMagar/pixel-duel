@@ -37,6 +37,22 @@ const PHOTO_TEXTURES := {
 	"whitewash": ["white_plaster_02", 1.5, Color(1.08, 1.08, 1.06), 0.6, 0.7],
 }
 static var photo_materials: Dictionary = {}
+## Baked lighting, per round. tools/export_heritage_lightmap.gd writes the
+## scene (merged scenery with UV2 and an unbaked LightmapGI); the editor's
+## Bake Lightmaps fills in its light data. A missing, unbaked or stale scene
+## keeps the live lighting.
+const LIGHTMAP_SCENES := {
+	0: "res://assets/lightmaps/heritage_square.scn",
+}
+## The exporter turns this off so it always captures the live scenery.
+var use_baked_lighting := true
+## True while the current round shows its baked lightmap.
+var baked_lighting := false
+## Cinematic grade (see _apply_grade): vignette and film grain drawn over the
+## 3D view only, beneath every HUD and menu layer.
+const GRADE_SHADER := preload("res://scripts/cinematic_grade.gdshader")
+var grade_layer: CanvasLayer
+var grade_rect: ColorRect
 const IMPORTED_SURFACE := preload("res://scripts/arena_surface.gdshader")
 ## Five traditional prayer-flag colours, in their customary order.
 const FLAG_COLORS := [Color("2f6fc4"), Color("f1ede2"), Color("c8342c"), Color("2f8f4e"), Color("e6b62f")]
@@ -177,6 +193,9 @@ var lanterns: Array[Node3D] = []
 ## How many separate scenery meshes were merged into shared batches for the
 ## current round (see _batch_static); the arena's piece count, for tests.
 var batched_pieces := 0
+## The merged meshes themselves, named Batched0, Batched1... in build order
+## so a lightmap bake can find them again.
+var batches: Array[MeshInstance3D] = []
 var fade: ColorRect
 
 func _ready() -> void:
@@ -229,6 +248,7 @@ func show_round(index: int) -> void:
 	_fight_lighting()
 	_arena_inlay()
 	_batch_static()
+	_apply_baked_lighting()
 	_ambience()
 	if changing:
 		_fade_in()
@@ -335,7 +355,8 @@ func _surface_kind(texture: Texture2D, bounds: AABB) -> String:
 		kind = "paving_brick" if bounds.size.y < 0.5 and bounds.size.x > 20.0 else "wall_brick"
 	return kind
 
-## Settings' shadow level drives the sun; switching arena textures
+## Settings' shadow level drives the sun and the cinematic grade toggles
+## with the Environment; switching arena textures
 ## rebuilds the current round so the change shows immediately.
 var built_detailed := true
 func _apply_graphics() -> void:
@@ -345,6 +366,7 @@ func _apply_graphics() -> void:
 	sun.shadow_enabled = settings.shadows > 0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if settings.shadows == 2 else DirectionalLight3D.SHADOW_ORTHOGONAL
 	sun.directional_shadow_max_distance = 40.0 if settings.shadows == 2 else 22.0
+	_apply_grade()
 	if settings.detailed_textures != built_detailed and current_round >= 0:
 		var round_index := current_round
 		current_round = -1
@@ -456,6 +478,7 @@ func _fight_lighting() -> void:
 ## because merged vertices keep their world positions.
 func _batch_static() -> void:
 	batched_pieces = 0
+	batches.clear()
 	if not is_inside_tree() or content == null:
 		return
 	var moving := {}
@@ -493,11 +516,12 @@ func _batch_static() -> void:
 		for piece in groups[key]:
 			tool.append_from(piece[0], piece[1], piece[2])
 		var batch := MeshInstance3D.new()
-		batch.name = "Batched"
+		batch.name = "Batched%d" % batches.size()
 		batch.mesh = tool.commit()
 		batch.material_override = key[0]
 		batch.cast_shadow = key[2]
 		content.add_child(batch)
+		batches.append(batch)
 	for node in merged:
 		node.get_parent().remove_child(node)
 		node.queue_free()
@@ -510,6 +534,70 @@ func _moves_or_shared(node: Node, moving: Dictionary) -> bool:
 			return true
 		parent = parent.get_parent()
 	return false
+
+## Identifies the merged scenery (batch order, vertex counts and extents), so
+## a lightmap is only ever applied to the exact geometry it was baked from.
+func batch_signature() -> String:
+	var parts := PackedStringArray()
+	for batch in batches:
+		var bounds: AABB = batch.mesh.get_aabb()
+		parts.append("%s:%d:%s:%s" % [batch.name, batch.mesh.surface_get_array_len(0),
+			bounds.position.snapped(Vector3.ONE * 0.01), bounds.size.snapped(Vector3.ONE * 0.01)])
+	return ",".join(parts).md5_text()
+
+## The lightmap scene for the current round, or "".
+func lightmap_scene_path() -> String:
+	return LIGHTMAP_SCENES.get(current_round, "")
+
+## Swaps the merged scenery for its lightmapped copy once one has been baked
+## (tools/export_heritage_lightmap.gd, then Bake Lightmaps in the editor).
+## The copy's meshes carry UV2 and its LightmapGI holds the bake; the round's
+## own materials are kept. The bake is indirect only: the lightmap replaces
+## the flat ambient colour with night-sky light that is occluded in corners
+## and under eaves, plus warm lamp light bounced off the brick and paving.
+## Every light stays real time for direct light, so the lamps still flicker,
+## the wet paving keeps its specular pools and fighters are lit and cast
+## shadows as before. Sampling the lightmap is one texture read per pixel.
+## A missing, unbaked or out-of-date scene changes nothing.
+func _apply_baked_lighting() -> void:
+	baked_lighting = false
+	var path := lightmap_scene_path()
+	# The bake's data file sits beside the scene (the editor's default name);
+	# checking it first skips loading a scene that was exported but never baked.
+	if not use_baked_lighting or path.is_empty() or batches.is_empty() or not ResourceLoader.exists(path) \
+			or not ResourceLoader.exists(path.get_basename() + ".lmbake"):
+		return
+	var packed := load(path) as PackedScene
+	var baked: Node3D = packed.instantiate() if packed != null and packed.can_instantiate() else null
+	if baked == null:
+		return
+	var gi := baked.get_node_or_null("LightmapGI") as LightmapGI
+	var usable := gi != null and gi.light_data != null
+	if usable and baked.get_meta("signature", "") != batch_signature():
+		push_warning("%s was baked for different scenery; re-run tools/export_heritage_lightmap.gd and bake again." % path)
+		usable = false
+	if not usable:
+		baked.free()
+		return
+	# Lights in the scene exist only for the bake; the live ones stay.
+	var bake_lights := baked.get_node_or_null("BakeLights")
+	if bake_lights != null:
+		bake_lights.free()
+	# Batches the bake left out (distant peaks, dense facade props) stay
+	# as built and keep real-time light.
+	for i in batches.size():
+		var batch := batches[i]
+		var copy := baked.get_node_or_null(NodePath(batch.name)) as MeshInstance3D
+		if copy == null:
+			continue
+		copy.material_override = batch.material_override
+		copy.cast_shadow = batch.cast_shadow
+		content.remove_child(batch)
+		batch.queue_free()
+		batches[i] = copy
+	baked.name = "BakedLighting"
+	content.add_child(baked)
+	baked_lighting = true
 
 ## Thin brass inlays make the usable lane legible without floating UI.
 func _arena_inlay() -> void:
@@ -793,6 +881,76 @@ func _lighting() -> void:
 	environment.environment.glow_bloom = 0.05
 	environment.environment.glow_hdr_threshold = 0.9
 	environment.environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	_apply_grade()
+
+## Cinematic grade per round: [exposure, contrast, saturation, shadow tint,
+## highlight tint, glow intensity, glow threshold, vignette, grain].
+## The tints are the ends of a per-channel colour-correction curve: night
+## shadows sink toward moonlit teal while lamp-lit highlights stay warm.
+const GRADES := [
+	[1.12, 1.1, 1.08, Color(0.0, 0.035, 0.07), Color(1.0, 0.95, 0.84), 1.0, 0.8, 0.42, 0.03],
+	[1.1, 1.08, 1.06, Color(0.01, 0.03, 0.07), Color(1.0, 0.94, 0.82), 0.95, 0.8, 0.4, 0.03],
+	[1.0, 1.06, 1.04, Color(0.04, 0.025, 0.05), Color(1.0, 0.96, 0.88), 0.7, 1.0, 0.3, 0.022],
+	[1.1, 1.1, 1.05, Color(0.0, 0.03, 0.08), Color(0.98, 0.96, 0.9), 1.0, 0.8, 0.44, 0.03],
+]
+static var _grade_curves: Dictionary = {}
+
+## Settings' "Cinematic grade" (on for Medium and High): Environment tone,
+## contrast, saturation and a colour curve, tuned glow, and a full-screen
+## vignette plus film grain. All of it is fixed-cost on the GPU: the
+## Environment work folds into the tonemap pass Compatibility already runs,
+## and the overlay is one alpha-blended quad that never reads the screen.
+## The overlay lives on canvas layer -1, above the 3D view but below every
+## HUD, menu and caption layer, so text is never darkened or grained.
+## Off restores the plain look exactly.
+func _apply_grade() -> void:
+	if current_round < 0 or environment == null:
+		return
+	var settings := get_node_or_null("/root/Settings")
+	var on: bool = settings == null or settings.cinematic_grade
+	var env := environment.environment
+	var grade: Array = GRADES[current_round]
+	env.tonemap_exposure = grade[0] if on else 1.0
+	env.adjustment_enabled = on
+	env.adjustment_brightness = 1.0
+	env.adjustment_contrast = grade[1]
+	env.adjustment_saturation = grade[2]
+	env.adjustment_color_correction = _grade_curve(grade[3], grade[4]) if on else null
+	env.glow_enabled = night or on
+	env.glow_intensity = grade[5] if on else 0.9
+	env.glow_hdr_threshold = grade[6] if on else 0.9
+	env.glow_bloom = 0.02 if on else 0.05
+	if on and grade_layer == null:
+		grade_layer = CanvasLayer.new()
+		grade_layer.name = "CinematicGrade"
+		grade_layer.layer = -1
+		add_child(grade_layer)
+		grade_rect = ColorRect.new()
+		grade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		grade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+		grade_rect.material = ShaderMaterial.new()
+		grade_rect.material.shader = GRADE_SHADER
+		grade_layer.add_child(grade_rect)
+	if grade_layer != null:
+		grade_layer.visible = on
+		grade_rect.material.set_shader_parameter("vignette", grade[7])
+		grade_rect.material.set_shader_parameter("grain", grade[8])
+
+## A per-channel curve (Environment 1D colour correction): lifted, tinted
+## blacks through neutral mid-tones to softly tinted whites.
+static func _grade_curve(shadows: Color, highlights: Color) -> GradientTexture1D:
+	var key := [shadows, highlights]
+	if _grade_curves.has(key):
+		return _grade_curves[key]
+	var gradient := Gradient.new()
+	gradient.set_color(0, shadows)
+	gradient.set_color(1, highlights)
+	gradient.add_point(0.5, Color(0.5, 0.5, 0.5).lerp((shadows + highlights) * 0.5, 0.25))
+	var curve := GradientTexture1D.new()
+	curve.gradient = gradient
+	curve.width = 256
+	_grade_curves[key] = curve
+	return curve
 
 func _ground() -> void:
 	# Brick plaza one step below the flagstone fighting dais.

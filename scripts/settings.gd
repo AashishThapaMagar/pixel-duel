@@ -17,18 +17,21 @@ signal graphics_changed
 enum Quality { LOW, MEDIUM, HIGH, CUSTOM }
 const RENDER_SCALES := [0.5, 0.75, 1.0]
 ## [render scale index, anti-aliasing (0 off, 1 2x, 2 4x),
-##  shadows (0 off, 1 low, 2 high), photo-real arena textures].
+##  shadows (0 off, 1 low, 2 high), photo-real arena textures,
+##  cinematic grade (colour grade, vignette and film grain; see
+##  nepal_stage_3d.gd _apply_grade)].
 const PRESETS := [
-	[1, 0, 0, false],
-	[2, 1, 1, false],
+	[1, 0, 0, false, false],
+	[2, 1, 1, false, true],
 	# High uses 2x MSAA: 4x cost ~15 fps at 1080p on integrated GPUs.
-	[2, 1, 2, true],
+	[2, 1, 2, true, true],
 ]
 var quality: int = Quality.HIGH
 var render_scale: int = 2
 var anti_aliasing: int = 1
 var shadows: int = 2
 var detailed_textures: bool = true
+var cinematic_grade: bool = true
 var vsync: bool = true
 var show_fps: bool = false
 var fps_label: Label
@@ -61,6 +64,7 @@ func set_quality(value: int) -> void:
 		anti_aliasing = preset[1]
 		shadows = preset[2]
 		detailed_textures = preset[3]
+		cinematic_grade = preset[4]
 	apply_graphics()
 	_save()
 
@@ -70,7 +74,7 @@ func set_graphic(option: String, value: Variant) -> void:
 	set(option, value)
 	quality = Quality.CUSTOM
 	for i in PRESETS.size():
-		if PRESETS[i] == [render_scale, anti_aliasing, shadows, detailed_textures]:
+		if PRESETS[i] == [render_scale, anti_aliasing, shadows, detailed_textures, cinematic_grade]:
 			quality = i
 	apply_graphics()
 	_save()
@@ -131,6 +135,8 @@ func _load() -> void:
 		anti_aliasing = cfg.get_value("graphics", "anti_aliasing", anti_aliasing)
 		shadows = cfg.get_value("graphics", "shadows", shadows)
 		detailed_textures = cfg.get_value("graphics", "detailed_textures", detailed_textures)
+		# Saves from before the option existed follow their preset.
+		cinematic_grade = cfg.get_value("graphics", "cinematic_grade", quality != Quality.LOW)
 		vsync = cfg.get_value("graphics", "vsync", vsync)
 		show_fps = cfg.get_value("graphics", "show_fps", show_fps)
 
@@ -140,6 +146,6 @@ func _save() -> void:
 	cfg.set_value("audio", "volume", volume)
 	cfg.set_value("audio", "sfx_volume", sfx_volume)
 	cfg.set_value("display", "touch_controls", touch_controls)
-	for key in ["quality", "render_scale", "anti_aliasing", "shadows", "detailed_textures", "vsync", "show_fps"]:
+	for key in ["quality", "render_scale", "anti_aliasing", "shadows", "detailed_textures", "cinematic_grade", "vsync", "show_fps"]:
 		cfg.set_value("graphics", key, get(key))
 	cfg.save(SAVE_PATH)

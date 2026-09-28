@@ -274,3 +274,18 @@ godot --path . --fixed-fps 60 -s res://tests/nepal_journey_test.gd -- --capture
 ```
 
 Screenshots are written to `.godot/nepal-round-1.png` through `nepal-round-4.png`. `scripts/nepal_stage_3d.gd` owns the round scenery and lighting. The original painted arenas remain archived for the legacy 2D scene.
+
+### Cinematic grade and baked lighting
+
+**Settings > Graphics > Cinematic grade** (on for Medium and High, off for Low) adds a per-arena colour grade in the Environment (exposure, contrast, saturation and a per-channel colour curve: moonlit teal shadows, warm lamp highlights), tuned glow, and a vignette with light 24 fps film grain (`scripts/cinematic_grade.gdshader`, one full-screen quad on canvas layer -1: over the 3D view, under every HUD, menu and caption layer). Off restores the plain look exactly.
+
+Heritage Square can use a baked LightmapGI for sky occlusion and warm bounce light; direct light stays real time, so lamps still flicker and fighters are lit and shadowed as before. Without a bake the square lights exactly as it always has. To bake (on a PC with a GPU):
+
+```sh
+# 1. Only after changing the square's scenery (5-15 min): rebuild the bake scene
+godot --headless --path . -s res://tools/export_heritage_lightmap.gd
+# 2. Open the editor with the Forward+ backend for this session (the project stays Compatibility)
+godot --editor --rendering-method forward_plus --path .
+```
+
+In the editor open `assets/lightmaps/heritage_square.scn`, select **LightmapGI**, click **Bake Lightmaps** in the 3D toolbar, keep the suggested file `res://assets/lightmaps/heritage_square.lmbake`, then save the scene (Ctrl+S) and commit `heritage_square.scn`, `.lmbake`, `.exr` and `.exr.import`. The game checks a geometry signature and falls back to live lighting if the scenery changed since the bake.

@@ -347,9 +347,16 @@ func _show_graphics() -> void:
 		picker.focus_mode = Control.FOCUS_NONE
 		modal_content.add_child(picker)
 		pickers[row[1]] = picker
+	# Colour grade, vignette and film grain; part of the presets (off on LOW).
+	var grade := CheckBox.new()
+	grade.text = "CINEMATIC GRADE"
+	grade.position = Vector2(372, 296)
+	grade.size = Vector2(216, 36)
+	modal_content.add_child(grade)
 	var refresh := func():
 		for key in pickers:
 			pickers[key].select(int(Settings.get(key)))
+		grade.set_pressed_no_signal(Settings.cinematic_grade)
 	refresh.call()
 	# Custom is a result, not something to pick.
 	pickers.quality.set_item_disabled(3, true)
@@ -362,6 +369,9 @@ func _show_graphics() -> void:
 			refresh.call())
 	pickers.detailed_textures.item_selected.connect(func(index: int):
 		Settings.set_graphic("detailed_textures", index == 1)
+		refresh.call())
+	grade.toggled.connect(func(on: bool):
+		Settings.set_graphic("cinematic_grade", on)
 		refresh.call())
 	for pair in [["VSYNC", "vsync", 28.0], ["SHOW FPS", "show_fps", 200.0]]:
 		var toggle := CheckBox.new()

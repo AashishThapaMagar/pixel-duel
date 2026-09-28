@@ -16,6 +16,7 @@ func frames(count: int) -> void:
 
 func run() -> void:
 	root.get_node("Settings").touch_controls = true
+	root.get_node("Settings").cinematic_grade = true
 	root.get_node("MatchSetup").vs_ai = false
 	var arena: Node = load("res://scenes/Arena3D.tscn").instantiate()
 	root.add_child(arena)
@@ -53,7 +54,10 @@ func run() -> void:
 		var model: Node = stage.content.get_node("ArenaModel")
 		check(model.get_meta("source_glb") == stage.ARENA_MODELS[index], "Each round loads its supplied arena model")
 		check(stage.batched_pieces > 100, "Each imported arena retains its modelled architecture (merged into batches)")
-		check(stage.content.find_children("Batched", "MeshInstance3D", false, false).size() < 60, "Static scenery is merged into a few draw batches")
+		check(stage.batches.size() > 0 and stage.batches.size() < 60, "Static scenery is merged into a few draw batches")
+		check(stage.baked_lighting == stage.content.has_node("BakedLighting") and (index == 0 or not stage.baked_lighting), "Only Heritage Square swaps in baked lighting, and only once it has been baked")
+		var env: Environment = stage.environment.environment
+		check(env.adjustment_enabled and env.adjustment_color_correction != null and stage.grade_layer.visible and stage.grade_layer.layer < 0, "Cinematic grade colours the 3D view beneath the HUD layers")
 		check(stage.lamp_lights.size() >= 2, "Imported practical lamps are registered for flicker")
 		check(stage.environment.environment.fog_enabled, "Arena lighting includes atmospheric depth")
 		if index == 1:
@@ -68,6 +72,14 @@ func run() -> void:
 			await RenderingServer.frame_post_draw
 			root.get_texture().get_image().save_png("res://.godot/nepal-round-%d.png" % (index + 1))
 	check(nights == 3, "Three night rounds and the sunset terrace")
+	var settings: Node = root.get_node("Settings")
+	var grade_before: bool = settings.cinematic_grade
+	settings.cinematic_grade = false
+	settings.apply_graphics()
+	var plain: Environment = arena.nepal_stage.environment.environment
+	check(not plain.adjustment_enabled and plain.tonemap_exposure == 1.0 and not arena.nepal_stage.grade_layer.visible, "Turning the cinematic grade off restores the plain look")
+	settings.cinematic_grade = grade_before
+	settings.apply_graphics()
 	arena._toggle_move_guide()
 	var clock_before: float = arena.nepal_stage.elapsed
 	await frames(5)
