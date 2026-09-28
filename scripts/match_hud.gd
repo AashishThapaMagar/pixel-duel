@@ -26,6 +26,12 @@ var last_result_visible := false
 var clash_played := false
 var clash_time := 0.0
 const CLASH_HOLD := 1.15
+## Per-player match statistics for the results card: damage dealt, best
+## combo, knockouts and perfect rounds. Reset when round one opens.
+var stats: Array = [{}, {}]
+var stat_values: Array = [[], []]
+var last_health: Array = [0, 0]
+var ko_label: Label
 
 func _ready() -> void:
 	arena = get_parent()
@@ -167,25 +173,72 @@ func _ready() -> void:
 		if arena.move_guide.visible:
 			movebook.refresh())
 
-	result_panel = UI.panel(layer, Vector2(180, 163), Vector2(600, 244), UI.INK, UI.LIME)
+	# Results card: dark glass under a crimson slash, the verdict in big
+	# type, then both fighters' match statistics side by side.
+	result_panel = UI.panel(layer, Vector2(130, 118), Vector2(700, 316), Color(0.02, 0.022, 0.05, 0.96), UI.GOLD)
 	result_panel.z_index = 10
-	UI.label(result_panel, "THE RESULTS ARE IN", Vector2(24, 17), Vector2(552, 22), 12, UI.LIME).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	result_detail = UI.label(result_panel, "", Vector2(24, 117), Vector2(552, 28), 15, UI.MUTED)
+	var slash := Polygon2D.new()
+	slash.polygon = PackedVector2Array([Vector2(0, 0), Vector2(700, 0), Vector2(700, 8), Vector2(0, 30)])
+	slash.color = Color(UI.CRIMSON, 0.95)
+	result_panel.add_child(slash)
+	UI.eyebrow(result_panel, "MATCH RESULT", Vector2(24, 40), Vector2(400, 16))
+	result_detail = UI.label(result_panel, "", Vector2(24, 108), Vector2(652, 22), 13, UI.MUTED)
 	result_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	next_button = UI.button(result_panel, "NEXT ROUND / R", Vector2(28, 176), Vector2(306, 43), true)
+	result_detail.add_theme_font_override("font", UI.strong_font())
+	var columns := ["ROUNDS", "DAMAGE", "BEST COMBO", "KNOCKOUTS", "PERFECTS"]
+	for side in 2:
+		var color := UI.RED if side == 0 else UI.VIOLET
+		var name_label := UI.heading(result_panel, "", Vector2(24 if side == 0 else 356, 146), Vector2(320, 26), 18, color, Color(0, 0, 0, 0.7))
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if side == 0 else HORIZONTAL_ALIGNMENT_RIGHT
+		name_label.name = "StatsName%d" % side
+		for i in columns.size():
+			var x := (24 if side == 0 else 356) + i * 66
+			UI.panel(result_panel, Vector2(x, 176), Vector2(60, 50), Color(color, 0.08), Color(color, 0.45), 0.06)
+			var caption := UI.label(result_panel, columns[i], Vector2(x + 4, 180), Vector2(56, 12), 8, UI.MUTED)
+			caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			caption.add_theme_font_override("font", UI.strong_font())
+			var value := UI.heading(result_panel, "0", Vector2(x, 194), Vector2(60, 28), 20, UI.WHITE, Color(0, 0, 0, 0.6))
+			value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			stat_values[side].append(value)
+	next_button = UI.button(result_panel, "NEXT ROUND / R", Vector2(24, 250), Vector2(380, 44), true)
 	next_button.theme = UI.theme()
 	next_button.focus_mode = Control.FOCUS_NONE
+	next_button.add_theme_font_override("font", UI.display_font())
+	next_button.add_theme_font_size_override("font_size", 20)
 	next_button.pressed.connect(_continue_match)
-	var menu := UI.button(result_panel, "MAIN MENU / ESC", Vector2(346, 176), Vector2(226, 43))
+	var menu := UI.button(result_panel, "MAIN MENU / ESC", Vector2(416, 250), Vector2(260, 44))
 	menu.theme = UI.theme()
 	menu.focus_mode = Control.FOCUS_NONE
 	menu.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/MainMenu.tscn"))
-	arena.result_label.position = Vector2(196, 220)
-	arena.result_label.size = Vector2(568, 56)
+	arena.result_label.position = Vector2(154, 172)
+	arena.result_label.size = Vector2(652, 56)
 	arena.result_label.add_theme_font_size_override("font_size", 33)
 	arena.result_label.add_theme_color_override("font_color", UI.WHITE)
 	arena.result_label.z_index = 11
 	result_panel.hide()
+	# "K.O." slams in ahead of the winner callout on a knockout.
+	ko_label = UI.heading(layer, "K.O.", Vector2(180, 150), Vector2(600, 150), 132, UI.CRIMSON, UI.GOLD)
+	ko_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ko_label.add_theme_constant_override("outline_size", 10)
+	ko_label.add_theme_constant_override("shadow_offset_x", 7)
+	ko_label.add_theme_constant_override("shadow_offset_y", 7)
+	ko_label.z_index = 12
+	ko_label.hide()
+	for i in 2:
+		var fighter: Node = arena.player1 if i == 0 else arena.player2
+		fighter.ko.connect(_knockout.bind(i))
+		fighter.health_changed.connect(_track_damage.bind(i))
+		last_health[i] = fighter.health
+	_reset_stats()
+	# Slanted plates behind the fighter names, in each player's colour.
+	for i in 2:
+		var plate := Polygon2D.new()
+		var x := 28.0 if i == 0 else 932.0
+		var dir := 1.0 if i == 0 else -1.0
+		plate.polygon = PackedVector2Array([Vector2(x, 54), Vector2(x + dir * 300, 54), Vector2(x + dir * 288, 86), Vector2(x - dir * 6, 86)])
+		plate.color = Color(UI.CRIMSON if i == 0 else Color("2f6fd1"), 0.55)
+		plate.z_index = -1
+		layer.add_child(plate)
 	layer.move_child(arena.move_guide, -1)
 	perfect_label = UI.heading(layer, "PERFECT!", Vector2(230, 282), Vector2(500, 44), 34, UI.WHITE, UI.CRIMSON)
 	perfect_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -235,11 +288,11 @@ func _style_result(callout: bool) -> void:
 		label.scale = Vector2.ONE * 1.5
 		label.create_tween().tween_property(label, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	else:
-		label.position = Vector2(196, 220)
-		label.size = Vector2(568, 56)
+		label.position = Vector2(154, 166)
+		label.size = Vector2(652, 56)
 		label.scale = Vector2.ONE
 		label.remove_theme_font_override("font")
-		label.add_theme_font_size_override("font_size", 33)
+		label.add_theme_font_size_override("font_size", 34)
 		label.add_theme_color_override("font_color", UI.WHITE)
 		label.add_theme_constant_override("shadow_offset_x", 0)
 		label.add_theme_constant_override("shadow_offset_y", 0)
@@ -298,13 +351,43 @@ func _continue_match() -> void:
 	else:
 		arena._begin_round(arena.round_index + 1)
 
+func _reset_stats() -> void:
+	for i in 2:
+		stats[i] = {"damage": 0, "combo": 0, "kos": 0, "perfects": 0}
+
+func _track_damage(health: int, _maximum: int, player: int) -> void:
+	if health < last_health[player]:
+		stats[1 - player].damage += last_health[player] - health
+	last_health[player] = health
+
+func _knockout(loser: int) -> void:
+	stats[1 - loser].kos += 1
+	ko_label.show()
+	ko_label.pivot_offset = ko_label.size * 0.5
+	ko_label.scale = Vector2.ONE * 3.0
+	ko_label.modulate.a = 0.0
+	var slam := ko_label.create_tween().set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	slam.tween_property(ko_label, "scale", Vector2.ONE, 0.3)
+	slam.tween_property(ko_label, "modulate:a", 1.0, 0.12)
+	var leave := ko_label.create_tween()
+	leave.tween_interval(0.8)
+	leave.tween_property(ko_label, "modulate:a", 0.0, 0.2)
+	leave.tween_callback(ko_label.hide)
+	# The winner callout waits its turn behind the K.O.
+	arena.result_label.modulate.a = 0.0
+	arena.result_label.create_tween().tween_property(arena.result_label, "modulate:a", 1.0, 0.25).set_delay(0.95)
+
 func _process(_delta: float) -> void:
 	# The opener plays over round one's intro; a rematch gets a fresh one.
 	if arena.round_index != 0:
 		clash_played = false
 	elif arena.intro_timer > 0.0 and not clash_played:
 		clash_played = true
+		_reset_stats()
 		_show_clash()
+	for i in 2:
+		var fighter: Node = arena.player1 if i == 0 else arena.player2
+		stats[1 - i].combo = maxi(stats[1 - i].combo, int(fighter._received_hits))
 	# The round call waits behind the clash, then fades up as it clears.
 	if is_instance_valid(clash):
 		var before: float = clash_time
@@ -326,8 +409,11 @@ func _process(_delta: float) -> void:
 		_style_result(callout)
 	# A round won without a scratch earns a PERFECT under the callout.
 	if show_result and not last_result_visible:
-		perfect_label.visible = arena.perfect_round
+		# Between rounds the PERFECT rides under the callout; at the end of
+		# the match it is counted on the results card instead.
+		perfect_label.visible = arena.perfect_round and not arena.match_over
 		if arena.perfect_round:
+			stats[0 if arena.player1.health > arena.player2.health else 1].perfects += 1
 			perfect_label.position.y = callout_style if false else (282.0 if callout else 150.0)
 			perfect_label.modulate.a = 0.0
 			perfect_label.pivot_offset = perfect_label.size * 0.5
@@ -345,6 +431,12 @@ func _process(_delta: float) -> void:
 	if show_result:
 		next_button.text = "REMATCH / R"
 		result_detail.text = "%s  /  SCORE %d : %d" % ["MATCH COMPLETE" if arena.match_over else "ROUND %d COMPLETE" % (arena.round_index + 1), arena.round_wins[0], arena.round_wins[1]]
+		for side in 2:
+			var fighter: Node = arena.player1 if side == 0 else arena.player2
+			result_panel.get_node("StatsName%d" % side).text = fighter.character_profile.name + (" / CPU" if MatchSetup.vs_ai and side == 1 else "")
+			var values := [arena.round_wins[side], stats[side].damage, stats[side].combo, stats[side].kos, stats[side].perfects]
+			for i in values.size():
+				stat_values[side][i].text = str(values[i])
 		if arena.match_over and MatchSetup.arcade:
 			var won: bool = arena.round_wins[0] > arena.round_wins[1]
 			next_button.text = ("NEW RUN / R" if MatchSetup.is_final_boss() else "NEXT RIVAL / R") if won else "RETRY RIVAL / R"

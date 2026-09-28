@@ -27,7 +27,7 @@ func _run() -> void:
 	await settle()
 	check(menu.play_button.has_focus(), "Play receives initial keyboard focus")
 	check(menu.get_node('GameTitle').text == 'WHO WON?', 'New title is displayed')
-	check(menu.find_children('*', 'CharacterBody2D', true, false).is_empty(), 'Menu contains no character previews')
+	check(menu.find_children('*', 'CharacterBody2D', true, false).size() <= 1, 'Menu shows at most one hero showcase, never the roster')
 	for state in ['font_color', 'font_hover_color', 'font_pressed_color', 'font_focus_color']:
 		check(menu.play_button.get_theme_color(state).get_luminance() > 0.3, 'Start text stays bright over the dark title background in ' + state)
 	await screenshot("ui-home")

@@ -50,7 +50,19 @@ var play_button: Button
 var return_focus: Control
 var transitioning: bool = false
 var record_strip: Label
-
+var hero: TextureRect
+var hero_glow: ColorRect
+## Spotlight behind the title-screen hero in the mode's accent colour.
+const SPOTLIGHT := """shader_type canvas_item;
+uniform vec4 tint : source_color = vec4(1.0, 0.8, 0.3, 1.0);
+void fragment() {
+	vec2 d = (UV - vec2(0.5, 0.62)) * vec2(1.0, 1.35);
+	float beam = 1.0 - smoothstep(0.0, 0.55, length(d));
+	float rays = 0.5 + 0.5 * sin(atan(d.y, d.x) * 9.0 + TIME * 0.6);
+	float floor_glow = (1.0 - smoothstep(0.86, 1.0, UV.y)) * smoothstep(0.7, 0.9, UV.y);
+	COLOR = vec4(tint.rgb, (beam * (0.42 + 0.14 * rays) + floor_glow * 0.35) * tint.a);
+}
+"""
 func _ready() -> void:
 	theme = UI.theme()
 	backdrop = BACKDROP.new()
@@ -89,6 +101,25 @@ func _ready() -> void:
 	play_button.add_theme_stylebox_override("hover", UI.blade(Color("f03a52"), UI.GOLD, 8))
 	play_button.add_theme_color_override("font_hover_color", UI.WHITE)
 	play_button.pressed.connect(_confirm)
+	# The player's fighter stands in a spotlight on the right: the favourite
+	# from the records, else the last one chosen.
+	hero_glow = ColorRect.new()
+	hero_glow.position = Vector2(560, 40)
+	hero_glow.size = Vector2(380, 330)
+	hero_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var spot := ShaderMaterial.new()
+	spot.shader = Shader.new()
+	spot.shader.code = SPOTLIGHT
+	hero_glow.material = spot
+	add_child(hero_glow)
+	hero = preload("res://scripts/roster_portrait.gd").new()
+	hero.hero = true
+	hero.facing_left = true
+	hero.index = _hero_index()
+	hero.position = Vector2(540, 26)
+	hero.size = Vector2(420, 344)
+	add_child(hero)
+	UI.eyebrow(self, "YOUR FIGHTER  /  " + ROSTER.profile(hero.index).name, Vector2(560, 34), Vector2(370, 16)).horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	# Splash card for the highlighted mode.
 	mode_title_label = UI.heading(self, "", Vector2(470, 322), Vector2(460, 76), 60, UI.WHITE)
 	mode_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -133,6 +164,10 @@ func _mode_row(mode_key: String, title: String, desc: String, index: float, acce
 	btn.focus_mode = Control.FOCUS_NONE
 	var heading := UI.heading(btn, title, Vector2(30, 0), Vector2(236, ROW_HEIGHT), 26, UI.WHITE, Color(0, 0, 0, 0.6))
 	heading.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# Arcade-style index beside each entry.
+	var number := UI.label(btn, "%02d" % (int(index) + 1), Vector2(8, 0), Vector2(22, ROW_HEIGHT), 10, Color(accent, 0.9))
+	number.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	number.add_theme_font_override("font", UI.strong_font())
 	heading.add_theme_constant_override("shadow_offset_x", 2)
 	heading.add_theme_constant_override("shadow_offset_y", 2)
 	return {"button": btn, "title": title, "desc": desc, "accent": accent, "heading": heading, "home": Vector2(44, y)}
@@ -157,6 +192,8 @@ func _style_row(row: Dictionary, active: bool) -> void:
 		mode_title_label.text = row.title
 		mode_title_label.add_theme_color_override("font_shadow_color", accent.darkened(0.2))
 		mode_desc_label.text = row.desc
+		if hero_glow != null:
+			hero_glow.material.set_shader_parameter("tint", Color(accent, 1.0))
 
 func _choose_home_mode(mode: String) -> void:
 	if transitioning or is_instance_valid(modal):
@@ -209,6 +246,12 @@ func _refresh_record_strip() -> void:
 		var verdict: String = "DREW WITH" if last.draw else ("BEAT" if last.won else "LOST TO")
 		first = "LAST  %s %s %s  %d : %d" % [p1, verdict, p2, last.score[0], last.score[1]]
 	record_strip.text = "%s\nRECORD  %dW  %dL  /  STREAK %d  /  WIN RATE %d%%" % [first, records.totals.wins, records.totals.losses, records.totals.streak, records.win_rate()]
+
+func _hero_index() -> int:
+	var records := get_node_or_null("/root/Records")
+	if records != null and records.favourite() != "":
+		return _roster_index(records.favourite())
+	return clampi(MatchSetup.selected_fighters[0], 0, ROSTER.PROFILES.size() - 1)
 
 static func _roster_index(id: String) -> int:
 	for i in ROSTER.PROFILES.size():

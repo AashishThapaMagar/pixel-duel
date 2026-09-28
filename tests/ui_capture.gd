@@ -70,4 +70,24 @@ func run() -> void:
 			break
 	await frames(30)
 	await snap("perfect")
+	# Play the match out to the results card.
+	for round_no in 3:
+		arena._begin_round(round_no + 1)
+		arena.intro_timer = 0
+		arena._hide_banner()
+		arena.player2.body.position = Vector3(0.5, 0.02, 0)
+		arena.player1.body.position = Vector3(-0.5, 0.02, 0)
+		await frames(6)
+		arena.player2.health = 3
+		arena.player1._start_style_move("kick")
+		for i in 60:
+			await frames(1)
+			if arena.result_label.visible:
+				break
+		if round_no == 0:
+			await frames(4)
+			await snap("ko")
+		await frames(20)
+	await frames(50)
+	await snap("results")
 	quit(0)

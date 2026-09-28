@@ -456,6 +456,13 @@ func _refresh() -> void:
 		previews[i].modulate = Color.WHITE if chosen else Color(0.78, 0.78, 0.84)
 	for player in 2:
 		var profile := ROSTER.profile(selections[player])
+		if portraits[player].index != selections[player] and portraits[player].is_inside_tree():
+			# A fresh pick lands with a pop of the showcase and its name.
+			portraits[player].pivot_offset = portraits[player].size * 0.5
+			portraits[player].scale = Vector2.ONE * 1.08
+			portraits[player].create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).tween_property(portraits[player], "scale", Vector2.ONE, 0.28)
+			names[player].modulate.a = 0.0
+			names[player].create_tween().tween_property(names[player], "modulate:a", 1.0, 0.2)
 		portraits[player].show_fighter(selections[player])
 		var tint: Color = profile.color
 		preview_glows[player].material.set_shader_parameter("top_color", tint.lightened(0.25))
