@@ -89,15 +89,14 @@ func configure(owner_visual: Node, profile: Dictionary) -> void:
 	if config.is_empty() or visual.model == null:
 		visual.model.visible = true if visual.model != null else false
 		return
-	var packed: PackedScene = load(config.scene) if ResourceLoader.exists(config.scene) else null
-	if packed == null:
+	character = _load_character(config.scene)
+	if character == null:
 		push_warning("Fighter model %s missing; using the procedural rig." % config.scene)
 		visual.model.visible = true
 		return
 	root = Node3D.new()
 	root.name = "AnimatedFighter"
 	visual.model.get_parent().add_child(root)
-	character = packed.instantiate() as Node3D
 	root.add_child(character)
 	player = character.find_children("*", "AnimationPlayer", true, false).front() if not character.find_children("*", "AnimationPlayer", true, false).is_empty() else null
 	if player == null:
@@ -117,6 +116,21 @@ func configure(owner_visual: Node, profile: Dictionary) -> void:
 	var fighter: Node = visual.fighter
 	if fighter != null and fighter.has_signal("impact") and not fighter.impact.is_connected(_on_impact):
 		fighter.impact.connect(_on_impact)
+
+## The character scene: the imported resource when the editor has seen
+## the file, otherwise a glTF decoded on the spot (a rig dropped into the
+## folder plays without opening the editor first).
+static func _load_character(path: String) -> Node3D:
+	if ResourceLoader.exists(path):
+		var packed: PackedScene = load(path)
+		if packed != null and packed.can_instantiate():
+			return packed.instantiate() as Node3D
+	if path.get_extension().to_lower() in ["glb", "gltf"] and FileAccess.file_exists(path):
+		var document := GLTFDocument.new()
+		var state := GLTFState.new()
+		if document.append_from_file(path, state) == OK:
+			return document.generate_scene(state) as Node3D
+	return null
 
 func _on_impact(_point: Vector2, blocked: bool, heavy: bool) -> void:
 	if not blocked:
@@ -296,6 +310,46 @@ func _prepare_guard() -> void:
 			if bone >= 0:
 				guard_tracks.append([track, bone])
 
+## What a clip is usually called in a downloaded rig, per logical clip;
+## the first keyword that appears in an animation's name wins, earlier
+## keywords first. Lets a rigged model dropped into a fighter's folder play
+## without a hand-written clip table.
+const CLIP_KEYWORDS := {
+	"idle": ["fight_idle", "boxing_idle", "idle", "stand", "breath"],
+	"walk": ["walk_forward", "walking", "walk"],
+	"walk_back": ["walk_back", "walking_back", "backward", "backwards"],
+	"sidestep_left": ["strafe_left", "step_left", "side_left"],
+	"sidestep_right": ["strafe_right", "step_right", "side_right"],
+	"run": ["run", "sprint", "jog"],
+	"dash": ["dash"], "backdash": ["dodge", "evade"],
+	"jump": ["jump"], "land": ["land", "fall"],
+	"block": ["block", "guard", "defend"], "block_hit": ["block_hit", "guard_hit"],
+	"hit": ["head_hit", "hit_react", "hit", "hurt", "impact", "damage", "react", "flinch"],
+	"hit_heavy": ["body_hit", "big_hit", "heavy_hit", "knockback", "stagger"],
+	"ko": ["knocked_out", "knockout", "death", "dying", "die", "dead", "ko", "defeat"],
+	"jab": ["jab", "left_punch", "punch", "attack-melee", "melee", "attack"],
+	"punch_heavy": ["hook", "haymaker", "heavy_punch", "right_punch", "cross", "punch"],
+	"uppercut": ["upper"], "kick": ["kick"], "kick_spin": ["spin", "roundhouse", "flip"],
+	"kick_front": ["front_kick", "push_kick"], "grapple": ["throw", "grab", "grapple", "slam"],
+	"taunt": ["taunt"], "victory": ["victory", "win", "cheer", "celebrat", "dance"],
+	"injured": ["injured", "limp"],
+}
+
+## The animation in `names` that best fits `logical`, or "" when none does.
+## Names are compared lower-case with spaces and dashes folded to
+## underscores; bind-pose leftovers ("Take 001", "bind") never match.
+static func match_clip(logical: String, names: Array) -> String:
+	var keywords: Array = CLIP_KEYWORDS.get(logical, [])
+	for keyword in keywords:
+		var key: String = String(keyword).replace("-", "_")
+		for name in names:
+			var folded := String(name).to_lower().replace(" ", "_").replace("-", "_").replace("|", "_")
+			if folded.begins_with("take_") or folded.contains("bind") or folded.contains("t_pose") or folded.contains("tpose"):
+				continue
+			if folded.contains(key):
+				return String(name)
+	return ""
+
 func _resolve_clips() -> void:
 	var available := player.get_animation_list()
 	var wanted: Dictionary = config.get("clips", {})
@@ -304,6 +358,13 @@ func _resolve_clips() -> void:
 		for candidate in [name, "files/" + name]:
 			if available.has(candidate):
 				clip_names[logical] = candidate
+	# Anything the table did not name is matched by keyword, so a rig
+	# dropped into the folder with its own animations plays as it is.
+	for logical in CLIP_KEYWORDS:
+		if not clip_names.has(logical):
+			var guess := match_clip(logical, Array(available))
+			if guess != "":
+				clip_names[logical] = guess
 	for logical in FALLBACK.keys() + ["idle"]:
 		var probe: String = logical
 		var guard := 0

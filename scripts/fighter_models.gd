@@ -121,7 +121,30 @@ const MODELS := {
 	},
 }
 
+## A rigged model dropped straight into the fighter's folder (a Meshy
+## auto-rig export, a Mixamo character with clips baked in, any rigged
+## glTF): assets/fighters/<id>/meshy_rig.glb, rig.glb or <id>.glb. It is
+## used as-is, its own animations matched to the game's clips by name (see
+## fighter_animated.gd match_clip), so no table entry is needed. Open the
+## project in the editor once so the file imports.
+const DROP_NAMES := ["meshy_rig.glb", "rig.glb", "meshy_rig.gltf", "rig.gltf"]
+
+static func dropped_scene(fighter_id: String) -> String:
+	var folder := "res://assets/fighters/%s/" % fighter_id
+	for name in DROP_NAMES + [fighter_id + ".glb", fighter_id + ".gltf"]:
+		if FileAccess.file_exists(folder + name):
+			return folder + name
+	return ""
+
 static func entry(fighter_id: String) -> Dictionary:
+	var dropped := dropped_scene(fighter_id)
+	if dropped != "":
+		var style: Dictionary = STYLES.get(fighter_id, {})
+		return {
+			"scene": dropped, "enabled": true, "body": "",
+			"height": style.get("height", 1.8), "width": 1.0, "tint": [],
+			"yaw": PI / 2.0, "files": {}, "clips": {}, "timing": {},
+		}
 	if STYLES.has(fighter_id):
 		return _mixamo(fighter_id)
 	var data: Dictionary = MODELS.get(fighter_id, {})
