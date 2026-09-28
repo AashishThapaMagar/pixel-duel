@@ -43,6 +43,8 @@ const ROUND_PAUSE := 2.2
 ## round's call (the animated KO takes ~2.5 s to reach the floor).
 const KO_PAUSE := 1.8
 var advance_timer := 0.0
+## The round just ended was won without taking damage (HUD callout).
+var perfect_round := false
 
 var p1_start_pos: Vector2
 var p2_start_pos: Vector2
@@ -218,6 +220,14 @@ func _end_round(winner: int) -> void:
 	elif winner == 2:
 		round_wins[1] += 1
 	_update_pips()
+	# Ledger: a perfect is a round won without a scratch; recorded before the
+	# result panel so the menus can show it the moment the match ends.
+	var records := get_node_or_null("/root/Records")
+	if records != null:
+		var victor: Node = player1 if winner == 1 else (player2 if winner == 2 else null)
+		var loser: Node = player2 if winner == 1 else player1
+		perfect_round = victor != null and victor.health == victor.max_health
+		records.record_round(winner, victor != null and loser.state == loser.State.KO, perfect_round)
 
 	var round_no := round_index + 1
 	var winner_text := "DRAW"
@@ -234,6 +244,11 @@ func _end_round(winner: int) -> void:
 		elif round_wins[1] > round_wins[0]:
 			match_winner = player2.character_profile.name
 		result_label.text = "MATCH DRAW" if match_winner == "DRAW" else match_winner + " TAKES THE MATCH"
+		if records != null:
+			var outcome := 0 if match_winner == "DRAW" else (1 if round_wins[0] > round_wins[1] else 2)
+			records.record_match(records.mode_key(MatchSetup), player1.character_profile.id, player2.character_profile.id, outcome, round_wins)
+			if outcome == 1 and MatchSetup.arcade and MatchSetup.is_final_boss():
+				records.record_arcade_clear()
 	else:
 		result_label.text = winner_text
 		var knockout: bool = player1.state == player1.State.KO or player2.state == player2.State.KO

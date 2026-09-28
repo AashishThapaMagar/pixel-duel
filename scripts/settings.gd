@@ -31,6 +31,12 @@ var shadows: int = 2
 var detailed_textures: bool = true
 var vsync: bool = true
 var show_fps: bool = false
+## Bloom and the per-arena finishing grade (nepal_stage_3d.gd).
+var post_effects: bool = true
+## Sparks, shock rings, dust, trails and the impact punch (arena_3d.gd).
+var hit_effects: bool = true
+## Training-style input history under each fighter's side of the HUD.
+var input_display: bool = false
 var fps_label: Label
 
 func _ready() -> void:
@@ -133,6 +139,9 @@ func _load() -> void:
 		detailed_textures = cfg.get_value("graphics", "detailed_textures", detailed_textures)
 		vsync = cfg.get_value("graphics", "vsync", vsync)
 		show_fps = cfg.get_value("graphics", "show_fps", show_fps)
+		post_effects = cfg.get_value("graphics", "post_effects", post_effects)
+		hit_effects = cfg.get_value("fight", "hit_effects", hit_effects)
+		input_display = cfg.get_value("fight", "input_display", input_display)
 
 func _save() -> void:
 	var cfg := ConfigFile.new()
@@ -140,6 +149,30 @@ func _save() -> void:
 	cfg.set_value("audio", "volume", volume)
 	cfg.set_value("audio", "sfx_volume", sfx_volume)
 	cfg.set_value("display", "touch_controls", touch_controls)
-	for key in ["quality", "render_scale", "anti_aliasing", "shadows", "detailed_textures", "vsync", "show_fps"]:
+	for key in ["quality", "render_scale", "anti_aliasing", "shadows", "detailed_textures", "vsync", "show_fps", "post_effects"]:
 		cfg.set_value("graphics", key, get(key))
+	for key in ["hit_effects", "input_display"]:
+		cfg.set_value("fight", key, get(key))
 	cfg.save(SAVE_PATH)
+
+## A named option that is neither a preset graphic nor audio: saved and,
+## for post effects, pushed to the arena lighting straight away.
+func set_option(option: String, value: Variant) -> void:
+	set(option, value)
+	if option == "post_effects":
+		graphics_changed.emit()
+	_save()
+
+## Everything back to how it ships, saved.
+func reset_defaults() -> void:
+	fullscreen = false
+	volume = 0.8
+	sfx_volume = 0.9
+	touch_controls = DisplayServer.is_touchscreen_available()
+	vsync = true
+	show_fps = false
+	post_effects = true
+	hit_effects = true
+	input_display = false
+	_apply()
+	set_quality(Quality.HIGH)

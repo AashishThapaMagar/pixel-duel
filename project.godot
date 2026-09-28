@@ -22,6 +22,7 @@ Settings="*res://scripts/settings.gd"
 MatchSetup="*res://scripts/match_setup.gd"
 StoryDirector="*res://scripts/story_director.gd"
 Sfx="*res://scripts/sfx.gd"
+Records="*res://scripts/records.gd"
 
 [display]
 
