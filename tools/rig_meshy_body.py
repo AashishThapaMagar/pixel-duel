@@ -3,6 +3,10 @@ Mixamo skeleton and writes it as a fighter body the game grafts on.
 
     blender -b --python tools/rig_meshy_body.py -- <model.fbx|.glb> <fighter_id> [--preview out.png]
 
+A model Meshy has already rigged (its "All Animations" .glb, Mixamo bone
+names) keeps its own skin weights; an unrigged one gets weights copied
+from the Mixamo body.
+
 The model should stand in an A-pose or T-pose, facing front (-Y in
 Blender, as Meshy exports). Steps:
 
@@ -41,16 +45,56 @@ def world_points(obj):
     return [obj.matrix_world @ v.co for v in obj.data.vertices]
 
 
+def own_weights(mesh):
+    """Keeps the skin weights of a model rigged with Mixamo bone names (a
+    Meshy auto-rig): groups are renamed to the shared skeleton's
+    "mixamorig:" names, and bones it lacks are folded into their parent
+    (Meshy's "headfront" into the head, its hand tips into the hands).
+    Returns False, clearing the groups, if the rig isn't Mixamo-named."""
+    names = [g.name for g in mesh.vertex_groups]
+    if not any(n.replace(":", "_").startswith("mixamorig_Hips") for n in names):
+        mesh.vertex_groups.clear()
+        return False
+    folds = {"headfront": "mixamorig_Head", "mixamorig_LeftHandMiddle4": "mixamorig_LeftHand",
+             "mixamorig_RightHandMiddle4": "mixamorig_RightHand", "mixamorig_HeadTop_End": "mixamorig_Head"}
+    for group in list(mesh.vertex_groups):
+        key = group.name.replace(":", "_")
+        target = folds.get(key)
+        if target:
+            if target.replace("_", ":", 1) not in mesh.vertex_groups and target not in mesh.vertex_groups:
+                mesh.vertex_groups.new(name=target)
+            into = mesh.vertex_groups.get(target) or mesh.vertex_groups.get(target.replace("_", ":", 1))
+            for vert in mesh.data.vertices:
+                for element in vert.groups:
+                    if element.group == group.index and element.weight > 0.0:
+                        into.add([vert.index], element.weight, "ADD")
+            mesh.vertex_groups.remove(group)
+    for group in mesh.vertex_groups:
+        if group.name.startswith("mixamorig_"):
+            group.name = "mixamorig:" + group.name[len("mixamorig_"):]
+    return True
+
+
 def load_model(path):
+    """Returns (model, rigged): rigged is True when the file's own
+    Mixamo-named skin weights were kept."""
     objects = import_any(path)
     meshes = [o for o in objects if o.type == "MESH"]
-    for obj in objects:
-        if obj.type == "ARMATURE":
-            # A rig the tool didn't make would fight ours; keep only meshes.
-            for mesh in meshes:
-                for mod in [m for m in mesh.modifiers if m.type == "ARMATURE"]:
-                    mesh.modifiers.remove(mod)
-                mesh.vertex_groups.clear()
+    rigged = any(o.type == "ARMATURE" for o in objects)
+    if rigged:
+        # Meshy's rigged exports carry a stray unskinned sphere; only the
+        # skinned body is the character.
+        skinned = [m for m in meshes if len(m.vertex_groups) > 0]
+        extras = [m for m in meshes if m not in skinned]
+        objects = [o for o in objects if o not in extras]
+        for extra in extras:
+            bpy.data.objects.remove(extra, do_unlink=True)
+        meshes = skinned
+        # Our skeleton replaces theirs; the mesh keeps its bind pose.
+        for mesh in meshes:
+            for mod in [m for m in mesh.modifiers if m.type == "ARMATURE"]:
+                mesh.modifiers.remove(mod)
+            rigged = own_weights(mesh) and rigged
     bpy.ops.object.select_all(action="DESELECT")
     for mesh in meshes:
         world = mesh.matrix_world.copy()
@@ -81,7 +125,7 @@ def load_model(path):
     for vert in model.data.vertices:
         vert.co -= Vector((cx, cy, low))
     model.name = "Body"
-    return model
+    return model, rigged
 
 
 def load_skeleton():
@@ -388,7 +432,8 @@ def main():
     args = sys.argv[sys.argv.index("--") + 1:]
     model_path, fighter_id = args[0], args[1]
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    model = load_model(model_path)
+    model, rigged = load_model(model_path)
+    print("OWN WEIGHTS" if rigged else "COPIED WEIGHTS")
     rest_arm, source = load_skeleton()
     height = max(p.z for p in world_points(model))
     skeleton_height = max(p.z for p in world_points(source))
@@ -408,10 +453,11 @@ def main():
     bpy.context.view_layer.update()
     fit_pose(fit_arm, model)
     apply_modifiers(source)
-    transfer_weights(model, source)
-    # Coat first, then the arms have the final say over what rides on them.
-    free_the_sides(model, fit_arm)
-    claim_the_arms(model, fit_arm)
+    if not rigged:
+        transfer_weights(model, source)
+        # Coat first, then the arms have the final say over what rides on them.
+        free_the_sides(model, fit_arm)
+        claim_the_arms(model, fit_arm)
     make_fists(model, fit_arm)
     rig_the_hands(model, fit_arm)
     unbend(model, fit_arm, rest_arm)
