@@ -226,11 +226,13 @@ func _flash(color: Color) -> void:
 		return
 	if _flash_tween != null:
 		_flash_tween.kill()
+	# A hard white-hot pop on the first frame that settles into the hit
+	# colour: bright enough to bloom, short enough not to hide the pose.
 	for surface in visual.materials.values():
 		surface.emission_enabled = true
-		surface.emission = color
-		surface.emission_energy_multiplier = 0.35
+		surface.emission = color.lerp(Color.WHITE, 0.25)
+		surface.emission_energy_multiplier = 0.6
 	_flash_tween = create_tween()
 	_flash_tween.tween_method(func(amount: float):
 		for surface in visual.materials.values():
-			surface.emission_energy_multiplier = amount, 0.35, 0.0, 0.15)
+			surface.emission_energy_multiplier = amount, 0.6, 0.0, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)

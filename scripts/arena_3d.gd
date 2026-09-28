@@ -13,8 +13,18 @@ const CAMERA_HEIGHT := 1.05
 const CAMERA_CLOSE := 4.9
 const CAMERA_FOV := 38.0
 var camera_yaw := 0.0
+## Short-lived hit effects: {mesh, age, life, update: Callable}.
 var impact_meshes: Array[Dictionary] = []
 var shake_3d := 0.0
+var fov_kick := 0.0
+## Dash and heavy-attack afterimages, per fighter: {mesh, age, life}.
+var ghosts: Array[Dictionary] = []
+var ghost_clock: Array[float] = [0.0, 0.0]
+var last_states: Array[int] = [-1, -1]
+var contact_shadows: Array[MeshInstance3D] = []
+const RING_SHADER := preload("res://scripts/impact_ring.gdshader")
+const CONTACT_SHADOW := preload("res://scripts/contact_shadow.gdshader")
+const TEAM_COLORS := [Color("58a9ff"), Color("ff6868")]
 var nepal_stage: Node3D
 ## Arena every round uses when a versus mode picked one; -1 plays the journey.
 var fixed_stage := -1
@@ -96,6 +106,8 @@ func _ready() -> void:
 	player2.ko.connect(func(): _end_round(1))
 	for fighter in [player1, player2]:
 		fighter.ko.connect(func(): preload("res://scripts/sfx.gd").fire("ko"))
+		fighter.ko.connect(_ko_3d.bind(fighter))
+	_contact_shadows()
 	_build_move_ui()
 	add_child(preload("res://scripts/match_hud.gd").new())
 	if Settings.touch_controls:
@@ -132,9 +144,14 @@ func _begin_round(index: int) -> void:
 	camera_yaw = 0.0
 	_update_fight_camera(0.0)
 	shake_3d = 0
+	fov_kick = 0
 	for spark in impact_meshes:
 		spark.mesh.queue_free()
 	impact_meshes.clear()
+	for ghost in ghosts:
+		ghost.mesh.queue_free()
+	ghosts.clear()
+	last_states = [-1, -1]
 
 func _process(delta: float) -> void:
 	super._process(delta)
@@ -143,16 +160,24 @@ func _process(delta: float) -> void:
 	if move_guide.visible or is_paused():
 		return
 	_update_fight_camera(delta)
-	shake_3d = move_toward(shake_3d, 0.0, delta * 0.65)
-	camera_3d.h_offset = sin(Time.get_ticks_msec() * 0.11) * minf(shake_3d, 0.012) if MatchSetup.camera_shake else 0.0
+	shake_3d = move_toward(shake_3d, 0.0, delta * 0.5)
+	fov_kick = move_toward(fov_kick, 0.0, delta * 28.0)
+	# Two-axis decaying jolt: the offsets drift at different rates so the
+	# shake reads as a knock rather than a horizontal buzz.
+	var t := Time.get_ticks_msec() * 0.001
+	var jolt := minf(shake_3d, 0.02) if MatchSetup.camera_shake else 0.0
+	camera_3d.h_offset = sin(t * 110.0) * jolt
+	camera_3d.v_offset = cos(t * 83.0) * jolt * 0.7
 	nepal_stage.animate(delta)
 	for spark in impact_meshes:
 		spark.age += delta
-		spark.mesh.scale = Vector3.ONE * (0.05 + spark.age * 3.0)
-		spark.mesh.material_override.albedo_color.a = maxf(0, 1.0 - spark.age / 0.22)
-		if spark.age >= 0.22:
+		spark.update.call(spark)
+		if spark.age >= spark.life:
 			spark.mesh.queue_free()
-	impact_meshes = impact_meshes.filter(func(spark): return spark.age < 0.22)
+	impact_meshes = impact_meshes.filter(func(spark): return spark.age < spark.life)
+	_update_ghosts(delta)
+	_update_contact_shadows()
+	_footwork_dust()
 
 func _update_fight_camera(delta: float) -> void:
 	# Scene transitions can detach this arena before its last callback runs.
@@ -218,27 +243,265 @@ func _update_fight_camera(delta: float) -> void:
 		var ease_in := intro * intro * (3.0 - 2.0 * intro)
 		var orbit := Basis(Vector3.UP, ease_in * 0.22)
 		eye = camera_target + orbit * (back * camera_distance * (1.0 + 0.55 * ease_in)) + Vector3.UP * (1.6 * ease_in)
-	camera_3d.fov = CAMERA_FOV
+	# A heavy hit kicks the lens in for a few frames.
+	camera_3d.fov = CAMERA_FOV - (fov_kick if MatchSetup.camera_shake else 0.0)
 	camera_3d.position = eye
 	camera_3d.look_at(camera_target)
 
 func _impact_3d(fighter: Node, blocked: bool, heavy: bool) -> void:
 	preload("res://scripts/sfx.gd").fire("block" if blocked else ("hit_heavy" if heavy else "hit_light"))
-	var material := _material(Color("8bdeff") if blocked else Color("ffd78b"))
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	var mesh := MeshInstance3D.new()
+	var point: Vector3 = fighter.body.position + fighter.forward * 0.25 + Vector3.UP * (1.03 if heavy else 1.37)
+	var color := Color("8bdeff") if blocked else (Color("ffb347") if heavy else Color("ffd78b"))
+	_impact_burst(point, color, blocked, heavy)
+	if not blocked and heavy:
+		_dust(fighter.body.position, 10, Color(0.62, 0.55, 0.46, 0.5), 0.35)
+	if blocked:
+		shake_3d = 0.012
+	else:
+		shake_3d = 0.06 if heavy else 0.028
+		fov_kick = 2.6 if heavy else 0.0
+	if is_instance_valid(camera_3d) and is_inside_tree() and get_viewport() != null:
+		var size := get_viewport().get_visible_rect().size
+		var screen := camera_3d.unproject_position(point) / size
+		nepal_stage.punch(screen, 0.3 if blocked else (1.0 if heavy else 0.5))
+
+## Core flash, a camera-facing shock ring and a burst of sparks. Guarded
+## hits are cold blue chips that die fast; clean hits are hot and fling
+## sparks that fall under gravity.
+func _impact_burst(point: Vector3, color: Color, blocked: bool, heavy: bool) -> void:
+	var size := (0.7 if heavy else 0.5) * (0.7 if blocked else 1.0)
+	var core := MeshInstance3D.new()
 	var sphere := SphereMesh.new()
 	sphere.radius = 0.5
 	sphere.height = 1
-	mesh.mesh = sphere
-	mesh.material_override = material
-	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	world.add_child(mesh)
-	mesh.position = fighter.body.position + fighter.forward * 0.25 + Vector3.UP * (1.03 if heavy else 1.37)
-	mesh.scale = Vector3.ONE * 0.05
-	impact_meshes.append({"mesh": mesh, "age": 0.0})
-	shake_3d = 0.055 if heavy else 0.025
+	sphere.radial_segments = 12
+	sphere.rings = 6
+	core.mesh = sphere
+	var glow := StandardMaterial3D.new()
+	glow.albedo_color = color.lightened(0.5)
+	glow.emission_enabled = true
+	glow.emission = color
+	glow.emission_energy_multiplier = 3.0
+	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	core.material_override = glow
+	core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(core)
+	core.position = point
+	core.scale = Vector3.ONE * 0.05
+	impact_meshes.append({"mesh": core, "age": 0.0, "life": 0.14, "update": func(fx: Dictionary):
+		var k: float = clampf(fx.age / fx.life, 0.0, 1.0)
+		fx.mesh.scale = Vector3.ONE * size * 0.5 * (0.3 + 0.7 * sqrt(k))
+		fx.mesh.material_override.albedo_color.a = 1.0 - k})
+	var ring := MeshInstance3D.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	ring.mesh = quad
+	var rim := ShaderMaterial.new()
+	rim.shader = RING_SHADER
+	rim.set_shader_parameter("color", color)
+	ring.material_override = rim
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(ring)
+	ring.position = point
+	impact_meshes.append({"mesh": ring, "age": 0.0, "life": 0.22 if heavy else 0.17, "update": func(fx: Dictionary):
+		var k: float = clampf(fx.age / fx.life, 0.0, 1.0)
+		fx.mesh.scale = Vector3.ONE * size * 2.4 * (0.25 + 0.75 * (1.0 - pow(1.0 - k, 2.5)))
+		fx.mesh.material_override.set_shader_parameter("progress", k)})
+	var sparks := CPUParticles3D.new()
+	sparks.one_shot = true
+	sparks.explosiveness = 1.0
+	sparks.amount = 8 if blocked else (22 if heavy else 14)
+	sparks.lifetime = 0.28 if blocked else 0.45
+	sparks.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	sparks.emission_sphere_radius = 0.06
+	sparks.direction = Vector3.UP
+	sparks.spread = 180.0
+	sparks.initial_velocity_min = 2.0 if blocked else 3.0
+	sparks.initial_velocity_max = 4.5 if blocked else (7.5 if heavy else 5.5)
+	sparks.gravity = Vector3(0, -6.0 if blocked else -14.0, 0)
+	sparks.damping_min = 2.0
+	sparks.damping_max = 5.0
+	sparks.scale_amount_min = 0.5
+	sparks.scale_amount_max = 1.0
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color.WHITE)
+	ramp.set_color(1, Color(color.r, color.g, color.b, 0.0))
+	ramp.add_point(0.35, color)
+	sparks.color_ramp = ramp
+	var chip := QuadMesh.new()
+	chip.size = Vector2(0.09, 0.09) if blocked else Vector2(0.08, 0.08)
+	var spark_material := StandardMaterial3D.new()
+	spark_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	spark_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	spark_material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	spark_material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	spark_material.vertex_color_use_as_albedo = true
+	spark_material.albedo_texture = nepal_stage.soft_dot()
+	chip.material = spark_material
+	sparks.mesh = chip
+	sparks.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(sparks)
+	sparks.position = point
+	sparks.emitting = true
+	impact_meshes.append({"mesh": sparks, "age": 0.0, "life": sparks.lifetime + 0.05, "update": func(_fx: Dictionary): pass})
+
+## A puff of courtyard dust at floor level: landings, dashes and the
+## stagger of a heavy hit.
+func _dust(at: Vector3, amount: int, color: Color, speed: float) -> void:
+	var puff := CPUParticles3D.new()
+	puff.one_shot = true
+	puff.explosiveness = 0.9
+	puff.amount = amount
+	puff.lifetime = 0.55
+	puff.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	puff.emission_sphere_radius = 0.18
+	puff.direction = Vector3.UP
+	puff.spread = 70.0
+	puff.initial_velocity_min = speed * 0.5
+	puff.initial_velocity_max = speed * 1.6
+	puff.gravity = Vector3(0, 0.6, 0)
+	puff.damping_min = 1.5
+	puff.damping_max = 3.0
+	puff.scale_amount_min = 0.7
+	puff.scale_amount_max = 1.6
+	puff.scale_amount_curve = null
+	var ramp := Gradient.new()
+	ramp.set_color(0, color)
+	ramp.set_color(1, Color(color.r, color.g, color.b, 0.0))
+	puff.color_ramp = ramp
+	var mote := QuadMesh.new()
+	mote.size = Vector2(0.26, 0.26)
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	material.vertex_color_use_as_albedo = true
+	material.albedo_texture = nepal_stage.soft_dot()
+	mote.material = material
+	puff.mesh = mote
+	puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(puff)
+	puff.position = Vector3(at.x, 0.06, at.z)
+	puff.emitting = true
+	impact_meshes.append({"mesh": puff, "age": 0.0, "life": puff.lifetime + 0.05, "update": func(_fx: Dictionary): pass})
+
+## Landings and dashes kick up dust; a knockout is a bright flash that
+## drains the colour out of the square for a moment.
+func _footwork_dust() -> void:
+	for i in 2:
+		var fighter: Node = [player1, player2][i]
+		var state: int = fighter.state
+		if state != last_states[i] and last_states[i] >= 0:
+			if state == fighter.State.LAND:
+				_dust(fighter.body.position, 8, Color(0.6, 0.54, 0.46, 0.4), 0.6)
+			elif state == fighter.State.DASH:
+				_dust(fighter.body.position - fighter.forward * 0.2, 6, Color(0.6, 0.54, 0.46, 0.35), 0.5)
+		last_states[i] = state
+
+func _ko_3d(fighter: Node) -> void:
+	shake_3d = 0.09
+	fov_kick = 3.5
+	nepal_stage.flash(Color(1.0, 0.96, 0.88), 0.6, 0.55)
+	_dust(fighter.body.position, 16, Color(0.6, 0.54, 0.46, 0.5), 0.9)
+
+## Afterimages: while a fighter dashes or swings a heavy attack, the
+## procedural rig is snapshotted into one merged mesh every few frames and
+## left behind as a translucent ghost in the player's colour. Skinned
+## models are skipped (their surfaces would snapshot in the bind pose).
+func _update_ghosts(delta: float) -> void:
+	for i in 2:
+		var fighter: Node = [player1, player2][i]
+		ghost_clock[i] -= delta
+		if ghost_clock[i] > 0.0 or not _wants_ghost(fighter):
+			continue
+		ghost_clock[i] = 0.065
+		var ghost := _snapshot(fighter, TEAM_COLORS[i])
+		if ghost != null:
+			ghosts.append({"mesh": ghost, "age": 0.0, "life": 0.22})
+	for ghost in ghosts:
+		ghost.age += delta
+		var k: float = clampf(ghost.age / ghost.life, 0.0, 1.0)
+		ghost.mesh.material_override.albedo_color.a = 0.2 * (1.0 - k) * (1.0 - k)
+		if ghost.age >= ghost.life:
+			ghost.mesh.queue_free()
+	ghosts = ghosts.filter(func(ghost): return ghost.age < ghost.life)
+
+func _wants_ghost(fighter: Node) -> bool:
+	if fighter.hitstop_remaining > 0.0 or fighter.combat_paused:
+		return false
+	var S: Dictionary = fighter.State
+	if fighter.state == S.DASH:
+		return true
+	if fighter.state in [S.PUNCH, S.KICK]:
+		var heavy: bool = fighter.state == S.KICK or fighter.attack_variant in ["cross", "hook", "rear_hook", "uppercut", "overhand", "backfist", "body_hook", "finisher", "spin"]
+		return heavy and fighter.attack_timer < fighter.attack_startup() + fighter.attack_active_time()
+	return false
+
+func _snapshot(fighter: Node, color: Color) -> MeshInstance3D:
+	var visual: Node = fighter.visual
+	if visual == null or visual.model == null or not visual.model.visible:
+		return null
+	var animated = visual.get("animated")
+	if animated != null and animated.active:
+		return null
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var to_world := Transform3D.IDENTITY
+	var any := false
+	for part: MeshInstance3D in visual.model.find_children("*", "MeshInstance3D", true, false):
+		if part.mesh == null or not part.is_visible_in_tree():
+			continue
+		# Tiny facial pieces add draw weight and read as noise in a ghost
+		# (sizes in world metres: the rig lives under a 1/64 pivot).
+		if part.get_aabb().get_longest_axis_size() * part.global_transform.basis.get_scale().length() < 0.06:
+			continue
+		for surface in part.mesh.get_surface_count():
+			tool.append_from(part.mesh, surface, part.global_transform)
+			any = true
+	if not any:
+		return null
+	var ghost := MeshInstance3D.new()
+	ghost.mesh = tool.commit()
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(color.r, color.g, color.b, 0.2)
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	material.cull_mode = BaseMaterial3D.CULL_BACK
+	ghost.material_override = material
+	ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(ghost)
+	ghost.global_transform = to_world
+	return ghost
+
+## A soft dark blob under each fighter, whatever the lamps and moon are
+## doing; it shrinks and fades as the fighter leaves the ground.
+func _contact_shadows() -> void:
+	for i in 2:
+		var blob := MeshInstance3D.new()
+		blob.name = "ContactShadow%d" % (i + 1)
+		var quad := QuadMesh.new()
+		quad.size = Vector2(1.15, 1.15)
+		quad.orientation = PlaneMesh.FACE_Y
+		blob.mesh = quad
+		var material := ShaderMaterial.new()
+		material.shader = CONTACT_SHADOW
+		blob.material_override = material
+		blob.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		world.add_child(blob)
+		contact_shadows.append(blob)
+
+func _update_contact_shadows() -> void:
+	for i in contact_shadows.size():
+		var fighter: Node = [player1, player2][i]
+		var blob := contact_shadows[i]
+		var height: float = maxf(fighter.body.position.y, 0.0)
+		blob.position = Vector3(fighter.body.position.x, 0.012, fighter.body.position.z)
+		var lift := clampf(height / 1.6, 0.0, 1.0)
+		blob.scale = Vector3.ONE * (1.0 + lift * 0.6)
+		blob.material_override.set_shader_parameter("strength", 0.5 * (1.0 - lift * 0.8))
 
 func _material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
