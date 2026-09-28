@@ -13,6 +13,6 @@ void fragment() {
 	float width = mix(0.22, 0.05, progress);
 	float rim = smoothstep(edge - width, edge, r) * (1.0 - smoothstep(edge, edge + 0.04, r));
 	float fade = 1.0 - progress;
-	ALBEDO = color * rim * fade * 1.6;
-	ALPHA = rim * fade;
+	ALBEDO = color * rim * fade * 0.9;
+	ALPHA = rim * fade * 0.7;
 }

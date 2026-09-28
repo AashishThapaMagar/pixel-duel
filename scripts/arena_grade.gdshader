@@ -10,8 +10,8 @@ uniform vec3 highlight_tint : source_color = vec3(1.0);
 uniform float saturation = 1.0;
 uniform float contrast = 1.0;
 uniform float vignette = 0.3;
-// Impact punch: a radial colour split and a bright ring spreading out from
-// the hit, both fading with `punch` (1 at the moment of contact).
+// Impact punch: a soft ring of light spreading out from the hit, fading
+// with `punch` (1 at the moment of contact).
 uniform float punch = 0.0;
 uniform vec2 punch_center = vec2(0.5, 0.5);
 uniform vec3 punch_color : source_color = vec3(1.0, 0.85, 0.6);
@@ -24,20 +24,13 @@ void fragment() {
 	vec2 uv = SCREEN_UV;
 	vec2 from_hit = uv - punch_center;
 	from_hit.x *= 1.777;
-	vec3 col;
+	vec3 col = texture(screen, uv).rgb;
 	if (punch > 0.002) {
-		float spread = punch * punch * 0.007 * clamp(length(from_hit) * 2.0, 0.15, 1.0);
-		vec2 dir = normalize(from_hit + vec2(1e-4, 0.0));
-		dir.x /= 1.777;
-		col.r = texture(screen, uv + dir * spread).r;
-		col.g = texture(screen, uv).g;
-		col.b = texture(screen, uv - dir * spread).b;
-		// A thin shock ring races outward and thins as it goes.
-		float radius = (1.0 - punch) * 0.55 + 0.03;
-		float ring = exp(-pow((length(from_hit) - radius) * 45.0, 2.0)) * punch * 0.55;
+		// A soft, brief pressure ring spreading from the hit: no colour
+		// fringing or glitching, just a breath of light across the scene.
+		float radius = (1.0 - punch) * 0.45 + 0.05;
+		float ring = exp(-pow((length(from_hit) - radius) * 14.0, 2.0)) * punch * 0.12;
 		col += punch_color * ring;
-	} else {
-		col = texture(screen, uv).rgb;
 	}
 	float luma = dot(col, vec3(0.3, 0.59, 0.11));
 	col = mix(vec3(luma), col, saturation * (1.0 - drain));

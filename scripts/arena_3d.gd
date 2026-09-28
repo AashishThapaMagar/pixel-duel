@@ -24,7 +24,8 @@ var last_states: Array[int] = [-1, -1]
 var contact_shadows: Array[MeshInstance3D] = []
 const RING_SHADER := preload("res://scripts/impact_ring.gdshader")
 const CONTACT_SHADOW := preload("res://scripts/contact_shadow.gdshader")
-const TEAM_COLORS := [Color("58a9ff"), Color("ff6868")]
+## Motion-trail tint per player: barely tinted so trails read as blur.
+const TEAM_COLORS := [Color("cfdcef"), Color("efd6cf")]
 var nepal_stage: Node3D
 ## Arena every round uses when a versus mode picked one; -1 plays the journey.
 var fixed_stage := -1
@@ -258,12 +259,12 @@ func _impact_3d(fighter: Node, blocked: bool, heavy: bool) -> void:
 	if blocked:
 		shake_3d = 0.012
 	else:
-		shake_3d = 0.06 if heavy else 0.028
-		fov_kick = 2.6 if heavy else 0.0
+		shake_3d = 0.045 if heavy else 0.022
+		fov_kick = 1.6 if heavy else 0.0
 	if is_instance_valid(camera_3d) and is_inside_tree() and get_viewport() != null:
 		var size := get_viewport().get_visible_rect().size
 		var screen := camera_3d.unproject_position(point) / size
-		nepal_stage.punch(screen, 0.3 if blocked else (1.0 if heavy else 0.5))
+		nepal_stage.punch(screen, 0.25 if blocked else (1.0 if heavy else 0.45))
 
 ## Core flash, a camera-facing shock ring and a burst of sparks. Guarded
 ## hits are cold blue chips that die fast; clean hits are hot and fling
@@ -281,7 +282,7 @@ func _impact_burst(point: Vector3, color: Color, blocked: bool, heavy: bool) -> 
 	glow.albedo_color = color.lightened(0.5)
 	glow.emission_enabled = true
 	glow.emission = color
-	glow.emission_energy_multiplier = 3.0
+	glow.emission_energy_multiplier = 1.6
 	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -292,7 +293,7 @@ func _impact_burst(point: Vector3, color: Color, blocked: bool, heavy: bool) -> 
 	core.scale = Vector3.ONE * 0.05
 	impact_meshes.append({"mesh": core, "age": 0.0, "life": 0.14, "update": func(fx: Dictionary):
 		var k: float = clampf(fx.age / fx.life, 0.0, 1.0)
-		fx.mesh.scale = Vector3.ONE * size * 0.5 * (0.3 + 0.7 * sqrt(k))
+		fx.mesh.scale = Vector3.ONE * size * 0.32 * (0.3 + 0.7 * sqrt(k))
 		fx.mesh.material_override.albedo_color.a = 1.0 - k})
 	var ring := MeshInstance3D.new()
 	var quad := QuadMesh.new()
@@ -307,12 +308,12 @@ func _impact_burst(point: Vector3, color: Color, blocked: bool, heavy: bool) -> 
 	ring.position = point
 	impact_meshes.append({"mesh": ring, "age": 0.0, "life": 0.22 if heavy else 0.17, "update": func(fx: Dictionary):
 		var k: float = clampf(fx.age / fx.life, 0.0, 1.0)
-		fx.mesh.scale = Vector3.ONE * size * 2.4 * (0.25 + 0.75 * (1.0 - pow(1.0 - k, 2.5)))
+		fx.mesh.scale = Vector3.ONE * size * 1.6 * (0.25 + 0.75 * (1.0 - pow(1.0 - k, 2.5)))
 		fx.mesh.material_override.set_shader_parameter("progress", k)})
 	var sparks := CPUParticles3D.new()
 	sparks.one_shot = true
 	sparks.explosiveness = 1.0
-	sparks.amount = 8 if blocked else (22 if heavy else 14)
+	sparks.amount = 6 if blocked else (14 if heavy else 9)
 	sparks.lifetime = 0.28 if blocked else 0.45
 	sparks.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 	sparks.emission_sphere_radius = 0.06
@@ -331,7 +332,7 @@ func _impact_burst(point: Vector3, color: Color, blocked: bool, heavy: bool) -> 
 	ramp.add_point(0.35, color)
 	sparks.color_ramp = ramp
 	var chip := QuadMesh.new()
-	chip.size = Vector2(0.09, 0.09) if blocked else Vector2(0.08, 0.08)
+	chip.size = Vector2(0.07, 0.07) if blocked else Vector2(0.06, 0.06)
 	var spark_material := StandardMaterial3D.new()
 	spark_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	spark_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -401,9 +402,9 @@ func _footwork_dust() -> void:
 		last_states[i] = state
 
 func _ko_3d(fighter: Node) -> void:
-	shake_3d = 0.09
-	fov_kick = 3.5
-	nepal_stage.flash(Color(1.0, 0.96, 0.88), 0.6, 0.55)
+	shake_3d = 0.07
+	fov_kick = 2.2
+	nepal_stage.flash(Color(1.0, 0.96, 0.88), 0.35, 0.45)
 	_dust(fighter.body.position, 16, Color(0.6, 0.54, 0.46, 0.5), 0.9)
 
 ## Afterimages: while a fighter dashes or swings a heavy attack, the
@@ -419,11 +420,11 @@ func _update_ghosts(delta: float) -> void:
 		ghost_clock[i] = 0.065
 		var ghost := _snapshot(fighter, TEAM_COLORS[i])
 		if ghost != null:
-			ghosts.append({"mesh": ghost, "age": 0.0, "life": 0.22})
+			ghosts.append({"mesh": ghost, "age": 0.0, "life": 0.16})
 	for ghost in ghosts:
 		ghost.age += delta
 		var k: float = clampf(ghost.age / ghost.life, 0.0, 1.0)
-		ghost.mesh.material_override.albedo_color.a = 0.2 * (1.0 - k) * (1.0 - k)
+		ghost.mesh.material_override.albedo_color.a = 0.1 * (1.0 - k) * (1.0 - k)
 		if ghost.age >= ghost.life:
 			ghost.mesh.queue_free()
 	ghosts = ghosts.filter(func(ghost): return ghost.age < ghost.life)
@@ -465,10 +466,11 @@ func _snapshot(fighter: Node, color: Color) -> MeshInstance3D:
 	var ghost := MeshInstance3D.new()
 	ghost.mesh = tool.commit()
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(color.r, color.g, color.b, 0.2)
+	# A faint alpha-blended trail in the fighter's own tone, not a neon copy.
+	material.albedo_color = Color(color.r, color.g, color.b, 0.1)
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	material.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
 	material.cull_mode = BaseMaterial3D.CULL_BACK
 	ghost.material_override = material
 	ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

@@ -40,11 +40,13 @@ static var photo_materials: Dictionary = {}
 const IMPORTED_SURFACE := preload("res://scripts/arena_surface.gdshader")
 ## Five traditional prayer-flag colours, in their customary order.
 const FLAG_COLORS := [Color("2f6fc4"), Color("f1ede2"), Color("c8342c"), Color("2f8f4e"), Color("e6b62f")]
-## Per-round ambient life: [kind, colour, amount].
+## Per-round ambient life: [kind, colour, amount]. The squares keep their
+## air clear: floating motes read as stray pixels over a real scene. Only
+## the finale keeps its sky lanterns, rising far behind the stupa.
 const AMBIENCE := [
-	["embers", Color(1.0, 0.74, 0.4, 0.85), 22],
-	["embers", Color(1.0, 0.7, 0.32, 0.9), 34],
-	["petals", Color(0.86, 0.2, 0.27, 0.95), 40],
+	["none", Color.WHITE, 0],
+	["none", Color.WHITE, 0],
+	["none", Color.WHITE, 0],
 	["sky_lanterns", Color(1.0, 0.66, 0.3, 0.95), 16],
 ]
 ## Sky and light per round: [sky top, horizon, sun colour, sun energy,
@@ -1375,8 +1377,7 @@ func _ambience() -> void:
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	material.vertex_color_use_as_albedo = true
-	if spec[0] != "petals":
-		material.albedo_texture = soft_dot()
+	material.albedo_texture = soft_dot()
 	quad.material = material
 	particles.mesh = quad
 	particles.color = spec[1]
@@ -1391,7 +1392,7 @@ func _ambience() -> void:
 			particles.initial_velocity_min = 0.05
 			particles.initial_velocity_max = 0.15
 		"embers":
-			quad.size = Vector2(0.035, 0.035)
+			quad.size = Vector2(0.05, 0.05)
 			particles.position = Vector3(0, 0.3, -1.2)
 			particles.emission_box_extents = Vector3(6, 0.3, 1.2)
 			particles.direction = Vector3(0, 1, 0)
@@ -1400,7 +1401,7 @@ func _ambience() -> void:
 			particles.initial_velocity_max = 0.35
 			particles.lifetime = 7.0
 		"petals":
-			quad.size = Vector2(0.075, 0.055)
+			quad.size = Vector2(0.09, 0.07)
 			particles.position = Vector3(0, 4.2, -0.6)
 			particles.emission_box_extents = Vector3(7, 0.2, 1.8)
 			particles.gravity = Vector3(0.18, -0.32, 0)
