@@ -52,6 +52,16 @@ def own_weights(mesh):
     (Meshy's "headfront" into the head, its hand tips into the hands).
     Returns False, clearing the groups, if the rig isn't Mixamo-named."""
     names = [g.name for g in mesh.vertex_groups]
+    # Meshy's biped FBX uses its own names for the same skeleton; translate
+    # them to Mixamo's (its spine runs Spine02 -> Spine01 -> Spine).
+    if "Hips" in names and "Spine02" in names:
+        native = {"Spine02": "Spine", "Spine01": "Spine1", "Spine": "Spine2", "neck": "Neck",
+                  "head_end": "HeadTop_End", "LeftHand_End": "LeftHandMiddle4",
+                  "RightHand_End": "RightHandMiddle4", "LeftToe_end": "LeftToe_End",
+                  "RightToe_end": "RightToe_End"}
+        for group in mesh.vertex_groups:
+            group.name = "mixamorig_" + native.get(group.name, group.name)
+        names = [g.name for g in mesh.vertex_groups]
     if not any(n.replace(":", "_").startswith("mixamorig_Hips") for n in names):
         mesh.vertex_groups.clear()
         return False
