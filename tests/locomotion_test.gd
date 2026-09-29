@@ -1,4 +1,9 @@
 extends SceneTree
+## Locomotion on the current fighter renderer (fighter_visual.gd, which the
+## 3D rig extends): the gait cycle turns with the ground covered, never
+## with a clock, so a blocked body stops stepping; speed shapes the stride
+## into a run; standing still fades the stride out; and retreat stays a
+## guarded walk facing the rival, with run held or not.
 var failures: Array[String] = []
 
 func _initialize() -> void:
@@ -13,6 +18,14 @@ func frames(count: int) -> void:
 	for i in count:
 		await physics_frame
 		await process_frame
+
+## One combat tick of walking: the body moves, the fighter syncs its visual
+## (as the physics step does), then a rendered frame passes.
+func tick(p1: Node, visual: Node, distance: float) -> void:
+	p1.position.x += distance
+	p1.combat_time += 1.0 / 60.0
+	p1._update_animation()
+	visual._process(1.0 / 60.0)
 
 func run() -> void:
 	var setup: Node = root.get_node("MatchSetup")
@@ -32,87 +45,49 @@ func run() -> void:
 	p2.set_physics_process(false)
 	p1.visual.set_process(false)
 	p2.visual.set_process(false)
-	p1.position.x = 300
-	p2.position.x = 650
 	for i in 7:
 		p1.apply_character(i)
-		# Pin both fighters back to their starting spots before each character's
-		# pass: earlier passes drift p1.position.x, and reset_for_new_round()'s
-		# _update_facing() would otherwise flip facing once drift crosses p2.
 		p1.position.x = 300
 		p2.position.x = 650
 		p1.reset_for_new_round()
 		var visual: Node = p1.visual
-		check(visual.get_child_count() == 2, "A fighter renders one standing sprite plus the leg-deformation gait mesh")
-		check(visual.sprite.visible and not visual.gait.visible, "Standing shows the authored sprite, not the gait mesh")
+		visual.reset_pose()
+		p1._update_animation()
+		visual._process(1.0 / 60.0)
+		check(visual.gait_weight < 0.05, "Standing has no stride")
 		p1.state = p1.State.WALK
 		p1.velocity.x = 169
-		p1.position.x += 2
-		p1.combat_time += 1.0 / 60.0
-		p1._update_animation()
-		check(visual.gait.visible and not visual.sprite.visible, "Walking swaps to the deformed-leg mesh, hiding the authored sprite")
-		check(visual.walk_phase == 0.0, "The first movement update enters on contact, not mid-step")
-		var seen_phases := {}
-		for tick in 90:
-			p1.position.x += 2
-			p1.combat_time += 1.0 / 60.0
-			p1._update_animation()
-			seen_phases[snappedf(visual.walk_phase, 0.01)] = true
-			var before: float = visual.walk_phase
-			visual._process(1.0 / 144.0)
-			p1._update_animation()
-			check(visual.walk_phase == before, "Extra rendering or sync calls cannot advance the combat animation clock")
-		check(seen_phases.size() > 8, "Movement advances the gait phase continuously, not in a handful of steps")
-		var phase_before_duplicate: float = visual.walk_phase
-		p1.position.x += 2
-		p1._update_animation()
-		check(visual.walk_phase == phase_before_duplicate, "Same-clock movement waits for the authoritative sample")
-		p1.combat_time += 1.0 / 60.0
-		p1._update_animation()
-		check(visual.walk_phase != phase_before_duplicate, "A duplicate sync cannot discard unsampled displacement")
-		var held_phase: float = visual.walk_phase
-		p1.combat_time += 0.1
-		p1._update_animation()
-		check(visual.walk_phase == held_phase, "A blocked body cannot keep cycling its feet")
-		p1.state = p1.State.IDLE
-		p1._update_animation()
-		check(visual.sprite.visible and not visual.gait.visible, "Stopping returns to the standing sprite without waiting for a fade")
-		p1.state = p1.State.WALK
-		p1.velocity.x = -122
-		p1.position.x -= 15
-		p1.combat_time += 1.0 / 60.0
-		p1._update_animation()
-		check(visual.walk_phase == 0.0, "Retreat starts on contact without consuming earlier displacement")
-		p1.state = p1.State.WALK
+		var seen := {}
+		var previous: float = visual.gait_phase
+		var reversed := false
+		for step in 60:
+			tick(p1, visual, 2.8)
+			seen[snappedf(visual.gait_phase, 0.01)] = true
+			if fposmod(visual.gait_phase - previous, 1.0) > 0.2:
+				reversed = true
+			previous = visual.gait_phase
+		check(seen.size() > 8, "Walking advances the gait cycle continuously (%s)" % p1.character_profile.id)
+		check(not reversed, "The gait cycle never reverses mid-step (%s)" % p1.character_profile.id)
+		check(visual.gait_weight > 0.5, "A moving body strides")
+		var held: float = visual.gait_phase
+		for step in 12:
+			tick(p1, visual, 0.0)
+		check(is_equal_approx(visual.gait_phase, held), "A blocked body cannot keep cycling its feet")
+		var extra: float = visual.gait_phase
+		visual._process(1.0 / 144.0)
+		visual._process(1.0 / 144.0)
+		check(is_equal_approx(visual.gait_phase, extra), "Extra rendered frames cannot advance the combat gait")
+		var walk_mix: float = visual._run_mix
 		p1.running = true
-		p1.position.x += 4
-		p1.combat_time += 1.0 / 60.0
-		p1._update_animation()
-		check(visual.locomotion_running, "Held run engages the faster gait")
-		# A full stride's worth of travel must bring the phase back to (near) 0,
-		# in both walk and run, without ever reversing mid-step.
-		for running in [false, true]:
-			p1.state = p1.State.IDLE
-			p1._update_animation()
-			p1.state = p1.State.WALK
-			p1.running = running
-			p1.velocity.x = 260 if running else 169
-			p1._update_animation()
-			var stride: float = visual.gait.cycle_length(running)
-			var previous_phase: float = visual.walk_phase
-			for step in 40:
-				p1.position.x += stride / 40.0 + 0.05
-				p1.combat_time += 1.0 / 60.0
-				p1._update_animation()
-				var advanced := fposmod(visual.walk_phase - previous_phase, 1.0)
-				check(advanced < 0.2, "Chronological, non-reversing gait phase %s run=%s step=%d phase=%f" % [visual.loaded_id, running, step, visual.walk_phase])
-				previous_phase = visual.walk_phase
-		var phase_before_switch: float = visual.walk_phase
+		for step in 40:
+			tick(p1, visual, 4.6)
+		check(visual._run_mix > walk_mix + 0.3 and visual._run_mix > 0.5, "Held run engages the faster, longer stride (%s)" % p1.character_profile.id)
 		p1.running = false
-		p1._update_animation()
-		check(visual.walk_phase == phase_before_switch, "Changing run to walk preserves the supporting leg phase")
-		check(not visual.sprite.is_playing(), "Render-time autoplay cannot advance the standing sprite")
-	# Real retreat input: stay facing rival, don't run backwards even with run held.
+		p1.state = p1.State.IDLE
+		for step in 40:
+			tick(p1, visual, 0.0)
+		check(visual.gait_weight < 0.05, "Stopping fades the stride out")
+	# Real retreat input: stay facing the rival, never run backwards.
 	p1.position.x = 300
 	p2.position.x = 650
 	p1.apply_character(0)

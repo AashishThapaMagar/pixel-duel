@@ -32,6 +32,11 @@ var stats: Array = [{}, {}]
 var stat_values: Array = [[], []]
 var last_health: Array = [0, 0]
 var ko_label: Label
+## Practice mode: what the last strike was and what it did.
+var readout: Label
+var readout_pending := -1
+var readout_move := ""
+var readout_blocked := false
 
 func _ready() -> void:
 	arena = get_parent()
@@ -228,8 +233,14 @@ func _ready() -> void:
 		var fighter: Node = arena.player1 if i == 0 else arena.player2
 		fighter.ko.connect(_knockout.bind(i))
 		fighter.health_changed.connect(_track_damage.bind(i))
+		fighter.impact.connect(_note_impact.bind(i))
 		last_health[i] = fighter.health
 	_reset_stats()
+	if str(arena.get_script().resource_path).ends_with("practice_3d.gd"):
+		readout = UI.label(layer, "", Vector2(36, 470), Vector2(420, 20), 12, UI.GOLD)
+		readout.add_theme_font_override("font", UI.strong_font())
+		readout.add_theme_constant_override("outline_size", 4)
+		readout.add_theme_color_override("font_outline_color", UI.INK)
 	# Slanted plates behind the fighter names, in each player's colour.
 	for i in 2:
 		var plate := Polygon2D.new()
@@ -358,7 +369,24 @@ func _reset_stats() -> void:
 func _track_damage(health: int, _maximum: int, player: int) -> void:
 	if health < last_health[player]:
 		stats[1 - player].damage += last_health[player] - health
+		if readout != null and readout_pending == player:
+			var attacker: Node = arena.player2 if player == 0 else arena.player1
+			var verdict := "BLOCKED" if readout_blocked else ("COUNTER HIT" if attacker.combat_notice == "COUNTER HIT" and attacker.combat_time < attacker.notice_until else "HIT")
+			readout.text = "LAST STRIKE   %s   /   %d DMG   /   %s" % [readout_move.to_upper().replace("_", " "), last_health[player] - health, verdict]
+			readout.modulate.a = 1.0
+			readout.create_tween().tween_property(readout, "modulate:a", 0.0, 0.6).set_delay(2.4)
+			readout_pending = -1
 	last_health[player] = health
+
+## The defender emits the impact before its health changes; remember which
+## move landed so the readout can pair it with the damage.
+func _note_impact(_point: Vector2, blocked: bool, _heavy: bool, defender: int) -> void:
+	if readout == null:
+		return
+	var attacker: Node = arena.player2 if defender == 0 else arena.player1
+	readout_pending = defender
+	readout_move = str(attacker.attack_variant)
+	readout_blocked = blocked
 
 func _knockout(loser: int) -> void:
 	stats[1 - loser].kos += 1

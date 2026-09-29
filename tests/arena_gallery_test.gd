@@ -25,30 +25,14 @@ func _run() -> void:
 	var setup: Node = root.get_node("MatchSetup")
 	setup.vs_ai = false
 	setup.selected_arena = 0
-	var menu: Node = load("res://scenes/MainMenu.tscn").instantiate()
-	root.add_child(menu)
-	current_scene = menu
-	menu._show_match_setup()
-	await settle()
-	await save_view("arena-picker")
-	menu._cycle_arena(-1)
-	check(setup.selected_arena == 6, "Previous wraps to the seventh arena")
-	menu._cycle_arena(1)
-	check(setup.selected_arena == 0, "Next wraps to the first arena")
+	# The seven illustrated backdrops behind the legacy 2D arena: every entry
+	# names a real texture, and the selection wraps in both directions.
 	for i in 7:
 		var data: Dictionary = CATALOG.arena(i)
-		check(menu.arena_name_label.text == data.name, "Picker shows " + data.name)
-		check(menu.arena_preview.texture != null and menu.arena_preview.texture.resource_path == data.texture, "Preview matches " + data.name)
-		menu._cycle_arena(1)
-	# Use the actual Fight button inside the modal, not the main menu shortcut.
-	for child in menu.modal_content.get_children():
-		if child is Button and child.text == "FIGHT  /  ENTER":
-			child.pressed.emit()
-			break
-	await settle()
-	check(current_scene != menu and current_scene.has_node("Player1"), "Fight starts the selected arena from Match Setup")
-	current_scene.queue_free()
-	await process_frame
+		check(not str(data.name).is_empty() and ResourceLoader.exists(data.texture), "Arena %d has a name and artwork" % (i + 1))
+	var count: int = CATALOG.ARENAS.size()
+	check(CATALOG.arena(posmod(-1, count)).name == CATALOG.arena(6).name, "Previous wraps to the seventh arena")
+	check(CATALOG.arena(posmod(7, count)).name == CATALOG.arena(0).name, "Next wraps to the first arena")
 	for i in 7:
 		setup.selected_arena = i
 		var arena: Node = load("res://scenes/Arena.tscn").instantiate()

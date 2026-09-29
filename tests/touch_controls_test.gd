@@ -23,7 +23,7 @@ func _run() -> void:
 	root.add_child(solo)
 	await process_frame
 	var solo_buttons: Array[Node] = solo.find_children("*", "Button", false, false)
-	check(solo_buttons.size() == 6, "A lone touch player gets exactly 6 buttons (move x3, action x3)")
+	check(solo_buttons.size() == 7, "A lone touch player gets exactly 7 buttons (move x4 with run, action x3)")
 	var solo_left_x: Array[float] = []
 	var solo_right_x: Array[float] = []
 	for b in solo_buttons:
@@ -32,7 +32,7 @@ func _run() -> void:
 			solo_left_x.append(center_x)
 		else:
 			solo_right_x.append(center_x)
-	check(solo_left_x.size() == 3 and solo_right_x.size() == 3, "Movement and actions land on opposite halves for a lone touch player")
+	check(solo_left_x.size() == 4 and solo_right_x.size() == 3, "Movement and actions land on opposite halves for a lone touch player")
 	solo.queue_free()
 	await process_frame
 
@@ -43,14 +43,14 @@ func _run() -> void:
 	root.add_child(duo)
 	await process_frame
 	var duo_buttons: Array[Node] = duo.find_children("*", "Button", false, false)
-	check(duo_buttons.size() == 12, "Local 2P gets 6 buttons per player")
+	check(duo_buttons.size() == 14, "Local 2P gets 7 buttons per player")
 	var all_left := true
 	var all_right := true
 	for i in duo_buttons.size():
 		var center_x: float = duo_buttons[i].position.x + duo_buttons[i].size.x * 0.5
-		if i < 6 and center_x >= 480.0:
+		if i < 7 and center_x >= 480.0:
 			all_left = false
-		if i >= 6 and center_x < 480.0:
+		if i >= 7 and center_x < 480.0:
 			all_right = false
 	check(all_left, "Every P1 touch button stays in the left half in local 2P")
 	check(all_right, "Every P2 touch button stays in the right half in local 2P")

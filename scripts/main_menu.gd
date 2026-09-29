@@ -332,6 +332,16 @@ func _point_at(key: String) -> void:
 	cursor_key = key
 	_refresh_mode_summary()
 
+func _step_entries(step: int) -> void:
+	var current := cursor_key if not cursor_key.is_empty() else _selected_mode()
+	var next: String = ENTRIES[posmod(ENTRIES.find(current) + step, ENTRIES.size())]
+	if next in MODE_KEYS:
+		_choose_home_mode(next)
+	else:
+		_point_at(next)
+	preload("res://scripts/sfx.gd").fire("menu_move")
+	play_button.grab_focus()
+
 ## Start the highlighted mode, or open / run the highlighted other entry.
 func _confirm() -> void:
 	if cursor_key.is_empty():
@@ -349,7 +359,19 @@ func _activate_extra(key: String) -> void:
 		"settings":
 			_show_settings()
 		"exit":
-			get_tree().quit()
+			_confirm_exit()
+
+## Leaving is one keypress away from the list, so it asks first.
+func _confirm_exit() -> void:
+	if transitioning or is_instance_valid(modal):
+		return
+	_open_modal("LEAVE THE CHAMPIONSHIP?", "EXIT")
+	UI.label(modal_content, "Your records and settings are saved. See you next time.", Vector2(28, 110), Vector2(560, 40), 15, UI.WHITE)
+	var leave := UI.button(modal_content, "QUIT GAME", Vector2(28, 170), Vector2(200, 44), true)
+	leave.pressed.connect(func(): get_tree().quit())
+	var stay := UI.button(modal_content, "STAY", Vector2(240, 170), Vector2(160, 44))
+	stay.pressed.connect(_close_modal)
+	stay.grab_focus()
 
 ## Two lines under the splash card: the last fight and the running record.
 func _refresh_record_strip() -> void:
@@ -698,7 +720,26 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _input(event: InputEvent) -> void:
-	if transitioning or is_instance_valid(modal) or not (event is InputEventKey) or not event.pressed or event.echo:
+	if transitioning or is_instance_valid(modal):
+		return
+	# Gamepad: up and down walk the list, left and right browse the
+	# featured fighter, A confirms.
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		if event.is_action_pressed("ui_down"):
+			_step_entries(1)
+		elif event.is_action_pressed("ui_up"):
+			_step_entries(-1)
+		elif event.is_action_pressed("ui_right"):
+			_browse_hero(1)
+		elif event.is_action_pressed("ui_left"):
+			_browse_hero(-1)
+		elif event.is_action_pressed("ui_accept"):
+			_confirm()
+		else:
+			return
+		get_viewport().set_input_as_handled()
+		return
+	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	if event.physical_keycode == KEY_F2:
 		_start_practice()
@@ -709,15 +750,7 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.physical_keycode in [KEY_UP, KEY_DOWN]:
-		var step := 1 if event.physical_keycode == KEY_DOWN else -1
-		var current := cursor_key if not cursor_key.is_empty() else _selected_mode()
-		var next: String = ENTRIES[posmod(ENTRIES.find(current) + step, ENTRIES.size())]
-		if next in MODE_KEYS:
-			_choose_home_mode(next)
-		else:
-			_point_at(next)
-		preload("res://scripts/sfx.gd").fire("menu_move")
-		play_button.grab_focus()
+		_step_entries(1 if event.physical_keycode == KEY_DOWN else -1)
 		get_viewport().set_input_as_handled()
 	elif event.physical_keycode == KEY_ENTER and (play_button.has_focus() or home_modes.values().has(get_viewport().gui_get_focus_owner())):
 		_confirm()

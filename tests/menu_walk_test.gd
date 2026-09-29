@@ -15,18 +15,26 @@ func run() -> void:
 	root.add_child(menu)
 	current_scene = menu
 	for mode in ["story", "arcade", "ai", "local"]:
-		menu.home_modes[mode].pressed.emit()
-		check(setup.story == (mode == "story"), "Home cards select the correct story state")
-		check(setup.vs_ai == (mode != "local"), "Home cards select correct opponent control")
+		menu._choose_home_mode(mode)
+		check(setup.story == (mode == "story"), "Home rows select the correct story state")
+		check(setup.vs_ai == (mode != "local"), "Home rows select correct opponent control")
 	menu._show_fight_options()
 	var pickers: Array[Node] = menu.modal_content.find_children("*", "OptionButton", true, false)
 	pickers[0].item_selected.emit(2)
 	pickers[1].item_selected.emit(0)
 	check(setup.ai_difficulty == 2 and setup.round_seconds == 60, "Options controls store selected rules")
 	menu._close_modal()
-	menu._start_fight()
-	await create_timer(0.4).timeout
-	var arena: Node = current_scene
+	# Clicking a mode starts the wipe into fighter select; the fight rules
+	# chosen above must reach the arena that follows.
+	menu.home_modes["local"].pressed.emit()
+	check(menu.transitioning, "A mode row starts the transition to fighter select")
+	menu.queue_free()
+	await process_frame
+	setup.vs_ai = false
+	var arena: Node = load("res://scenes/Arena.tscn").instantiate()
+	root.add_child(arena)
+	current_scene = arena
+	await process_frame
 	check(arena.time_remaining == 60 and arena.timer_label.text == "60", "Selected timer reaches the actual match")
 	arena.set_process(false)
 	arena.intro_timer = 0.0

@@ -244,7 +244,31 @@ func _confirm_quit() -> void:
 	confirming = true
 
 func _input(event: InputEvent) -> void:
-	if not visible or not (event is InputEventKey) or not event.pressed or event.echo:
+	if not visible:
+		return
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		if event.is_action_pressed("ui_up"):
+			if not is_instance_valid(page):
+				_focus(cursor - 1)
+		elif event.is_action_pressed("ui_down"):
+			if not is_instance_valid(page):
+				_focus(cursor + 1)
+		elif event.is_action_pressed("ui_accept"):
+			if not is_instance_valid(page) and not rows.is_empty():
+				preload("res://scripts/sfx.gd").fire("menu_confirm")
+				rows[cursor].pressed.emit()
+			elif confirming:
+				quit_requested.emit()
+		elif event.is_action_pressed("ui_cancel"):
+			if is_instance_valid(page):
+				_close_page()
+			else:
+				resume_requested.emit()
+		else:
+			return
+		get_viewport().set_input_as_handled()
+		return
+	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	match event.physical_keycode:
 		KEY_UP, KEY_W:

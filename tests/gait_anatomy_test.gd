@@ -132,6 +132,14 @@ func run() -> void:
 	var fighter: Node = load("res://scenes/Player.tscn").instantiate()
 	root.add_child(fighter)
 	fighter.set_physics_process(false)
+	# These checks cover the archived arcade sprite renderer; live fighters
+	# render through fighter_visual_3d.gd, so it is installed here on purpose.
+	var legacy := Node2D.new()
+	legacy.name = "Visual"
+	legacy.set_script(load("res://scripts/fighter_sprite_visual.gd"))
+	fighter.get_node("Visual").free()
+	fighter.add_child(legacy)
+	fighter.visual = legacy
 	fighter.apply_style(load("res://resources/styles/action.tres"))
 	fighter.visual.set_process(false)
 	for character_index in 7:

@@ -231,6 +231,15 @@ func _process(delta: float) -> void:
 	target[0].y += breath * 0.4
 	target[1].y += breath
 	target[2].y += breath
+	if fighter.state == fighter.State.IDLE:
+		# Nobody stands dead still: a slow shift of weight from foot to
+		# foot, the guard hands drifting with it, the head settling last.
+		var shift := sin(phase * 0.42)
+		target[0].x += shift * 0.8
+		target[1].x += shift * 0.7
+		target[2].x += shift * 0.5
+		target[3] += Vector2(shift * 0.8, sin(phase * 1.6) * 0.9)
+		target[4] += Vector2(shift * 0.5, cos(phase * 1.6) * 0.9)
 	# Style-specific guard silhouette and stance width.
 	if fighter.current_style != null:
 		match fighter.current_style.style_id:

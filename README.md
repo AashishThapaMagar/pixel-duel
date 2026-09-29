@@ -30,7 +30,7 @@ A rigged character with its own animations (a Meshy auto-rig export, a Mixamo ch
 
 ## Menus, records and options
 
-The title screen keeps its slanted mode column and live arena, now with a gold light sweeping the title and a two-line ledger under the splash card: your last fight and your running record. A **RECORDS** entry opens the ledger: matches, wins, win rate, best streak, knockouts, perfect rounds, arcade clears and play time as stat tiles, wins per mode, a per-fighter column with your favourite in gold, and a reset. Records live in `user://records.cfg` (`scripts/records.gd`, the `Records` autoload) and are written by the arena at the end of every round and match.
+Practice mode shows a readout of the last strike: the move, its damage, and whether it hit, was blocked or was a counter. Exit asks before quitting. The title screen keeps its slanted mode column and live arena, now with a gold light sweeping the title and a two-line ledger under the splash card: your last fight and your running record. A **RECORDS** entry opens the ledger: matches, wins, win rate, best streak, knockouts, perfect rounds, arcade clears and play time as stat tiles, wins per mode, a per-fighter column with your favourite in gold, and a reset. Records live in `user://records.cfg` (`scripts/records.gd`, the `Records` autoload) and are written by the arena at the end of every round and match.
 
 **Settings** is a hub: fullscreen, master and sound-effect volume, touch controls, the graphics preset, then Fight Options, Controls, How to Play and Reset Defaults. **Fight Options** adds Hit Effects (sparks, dust, trails and flashes) and Input Display (training-style key chips low on each player's side of the screen) beside AI difficulty, round timer and camera shake. **Controls** lists every key for both players. **Graphics** adds a Bloom and Grade toggle for the post-processing pass. The pause menu carries the same sliders and toggles mid-fight.
 
@@ -60,6 +60,8 @@ Hold a direction to walk; hold **Shift + forward** (P2: **Ctrl**) to run. **Doub
 | Kick (heavy) | G | L |
 | Restart after round ends | R | R |
 | Back to main menu | Esc | Esc |
+
+**Gamepads.** Pad 1 drives player one and pad 2 player two, on every action above: left stick or d-pad to approach, retreat and sidestep, **A** punch, **X** kick, **Y** jump, **right shoulder** guard, **left shoulder** run, **right trigger** grapple, **Start** or **B** pause, **Back** movebook. Menus follow the stick or d-pad with A to confirm and B to go back; on fighter select the d-pad picks, A locks in, and A again starts once both sides are ready.
 
 Pressing an attack shortly before recovery ends queues it for the first available frame (a 130 ms input buffer). A **landed light attack into heavy** can cancel its recovery after contact; a blocked or missed light must finish recovery. A forward dash can be interrupted with an attack or guard; a backdash has no invulnerability.
 
@@ -212,7 +214,7 @@ Character stats live in `scripts/fighter_roster.gd`, attacks in `scripts/action_
 
 ## Art and animation
 
-`Player.tscn` uses the arcade sprite renderer in `scripts/fighter_sprite_visual.gd`. Each fighter has a distinct atlas. The footwork cycle follows distance traveled, so walking into an obstacle does not keep the walk cycle running.
+`Player.tscn` renders through `scripts/fighter_visual_3d.gd` (the procedural 3D rig, or a rigged model when one is supplied); the arcade sprite renderer in `scripts/fighter_sprite_visual.gd` is archived. The footwork cycle follows distance traveled, so walking into an obstacle does not keep the walk cycle running, and an idle fighter shifts weight slowly from foot to foot rather than standing rigid. `tests/locomotion_test.gd` covers the gait on the current renderer.
 
 The original PNG fighter frames and their Pillow generator remain in `assets/sprites/fighter/` as legacy assets; they are no longer the default character visuals. The preserved legacy skyline backdrop uses `assets/backgrounds/arena_bg.png`.
 

@@ -542,6 +542,8 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_ENTER:
 		_start_match()
+	elif event is InputEventJoypadButton and event.is_action_pressed("ui_accept") and ready_players[0] and ready_players[1]:
+		_start_match()
 
 func _start_match() -> void:
 	if transitioning or not (ready_players[0] and ready_players[1]):
