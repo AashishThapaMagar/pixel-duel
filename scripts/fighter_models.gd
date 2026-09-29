@@ -61,7 +61,17 @@ const STYLE_MOVES := {
 	"sidestep_right": "strafe_right", "run": "run",
 }
 ## The only clips a fighter's style folder may override.
-const STRIKES := ["jab", "punch_heavy", "uppercut", "kick", "kick_front", "kick_spin", "grapple", "taunt", "victory"]
+const STRIKES := ["jab", "cross", "hook", "punch_heavy", "uppercut", "kick", "kick_front", "kick_spin", "grapple", "taunt", "victory"]
+## Fighters with Meshy's own moves (a "Merged Animations" .fbx, kept local
+## like the Mixamo files): logical clip -> Meshy animation name. These
+## replace the shared strikes, so each hit of a combo has its own motion.
+const MESHY_MOVES := {
+	"anug": {
+		"jab": "Left_Jab_from_Guard", "cross": "Right_Jab_from_Guard", "hook": "Left_Hook_from_Guard",
+		"uppercut": "Right_Uppercut_from_Guard", "punch_heavy": "Punch_Combo",
+		"kick": "Roundhouse_Kick", "kick_front": "High_Kick", "kick_spin": "Sweep_Kick",
+	},
+}
 ## Per-fighter style: body build and tint, plus style clips (file in
 ## style/ -> logical clip) and their timing. Impact times were measured
 ## from each download (peak extension of the striking hand, foot or head).
@@ -171,6 +181,14 @@ static func _mixamo(fighter_id: String) -> Dictionary:
 			clips[logical] = "style_" + logical
 	var timing: Dictionary = SHARED_TIMING.duplicate()
 	timing.merge(style.get("timing", {}), true)
+	var meshy := {}
+	var meshy_file := "res://assets/fighters/%s/meshy_moves.fbx" % fighter_id
+	if MESHY_MOVES.has(fighter_id) and ResourceLoader.exists(meshy_file):
+		meshy = {"file": meshy_file, "clips": MESHY_MOVES[fighter_id]}
+		for logical in MESHY_MOVES[fighter_id]:
+			clips[logical] = "meshy_" + logical
+			# Meshy clips are whole moves; the impact sits at 45%.
+			timing.erase(logical)
 	# A fighter's own rigged body (assets/fighters/<id>/body.fbx, from Mixamo
 	# "With Skin") replaces the X Bot and keeps its real textures untinted.
 	var body := "res://assets/fighters/%s/body.fbx" % fighter_id
@@ -188,4 +206,5 @@ static func _mixamo(fighter_id: String) -> Dictionary:
 		"files": files,
 		"clips": clips,
 		"timing": timing,
+		"meshy": meshy,
 	} if ResourceLoader.exists(SHARED + "idle.fbx") else {}

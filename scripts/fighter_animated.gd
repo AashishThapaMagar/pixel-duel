@@ -23,6 +23,7 @@ const FALLBACK := {
 	"land": "idle", "block_hit": "block", "block": "idle", "hit_heavy": "hit",
 	"hit": "idle", "punch_heavy": "jab", "kick_spin": "kick", "kick_front": "kick", "grapple": "jab",
 	"taunt": "idle", "jump": "idle", "ko": "idle", "kick": "jab", "jab": "idle",
+	"cross": "punch_heavy", "hook": "punch_heavy",
 }
 ## Attack variants (from move data poses) that use the heavy-punch clip.
 const HEAVY_PUNCHES := ["cross", "hook", "rear_hook", "uppercut", "overhand", "backfist", "body_hook"]
@@ -43,7 +44,12 @@ const INJURED_HEALTH := 0.25
 ## a diving catch) would drift away from the body and snap back.
 const TRAVELLING := ["ko"]
 ## Attack-like clips driven by the fighter's attack timer.
-const SCRUBBED := ["jab", "punch_heavy", "uppercut", "kick", "kick_spin", "kick_front", "grapple", "taunt"]
+const SCRUBBED := ["jab", "cross", "hook", "punch_heavy", "uppercut", "kick", "kick_spin", "kick_front", "grapple", "taunt"]
+## Meshy's biped skeleton names -> Mixamo bone keys (see _bone_key); every
+## other bone already shares the Mixamo name.
+const MESHY_BONES := {"spine02": "spine", "spine01": "spine1", "spine": "spine2", "neck": "neck",
+	"head_end": "headtop_end", "lefthand_end": "", "righthand_end": "", "headfront": "",
+	"lefttoe_end": "lefttoe_end", "righttoe_end": "righttoe_end"}
 var visual: Node
 var root: Node3D
 var character: Node3D
@@ -287,7 +293,160 @@ func _add_clip_files() -> void:
 				library.add_animation(key, animation)
 				break
 		scene.free()
+	var meshy: Dictionary = config.get("meshy", {})
+	if not meshy.is_empty() and ResourceLoader.exists(meshy.file):
+		_add_meshy_clips(library, meshy.file, meshy.clips, skeleton[0], to_skeleton)
 	player.add_animation_library("files", library)
+
+## Meshy's own animations (its "Merged Animations" download) retargeted onto
+## this skeleton. The two rigs share a hierarchy but not bone names, rest
+## orientations or scale, so each frame is rebuilt: a bone's world rotation
+## keeps the same offset from its rest that the Meshy bone has from its own
+## rest, and the hips' travel is scaled by the ratio of hip heights.
+func _add_meshy_clips(library: AnimationLibrary, path: String, wanted: Dictionary, target: Skeleton3D, to_skeleton: NodePath) -> void:
+	var scene: Node = (load(path) as PackedScene).instantiate()
+	var sources := scene.find_children("*", "Skeleton3D", true, false)
+	var players := scene.find_children("*", "AnimationPlayer", true, false)
+	if sources.is_empty() or players.is_empty():
+		scene.free()
+		return
+	var source: Skeleton3D = sources[0]
+	var from: AnimationPlayer = players[0]
+	# Source bone -> target bone.
+	var pairs := {}
+	var target_keys := {}
+	for bone in target.get_bone_count():
+		target_keys[_bone_key(target.get_bone_name(bone))] = bone
+	for bone in source.get_bone_count():
+		var key := _bone_key(source.get_bone_name(bone))
+		key = MESHY_BONES.get(key, key)
+		if key != "" and target_keys.has(key):
+			pairs[bone] = target_keys[key]
+	var source_hips := source.find_bone(source.get_bone_name(0))
+	for bone in pairs:
+		if _bone_key(source.get_bone_name(bone)) == "hips":
+			source_hips = bone
+	var target_hips: int = target_keys.get("hips", 0)
+	# The rigs rest in different poses (Meshy's A-pose, Mixamo's T-pose), so
+	# bones are matched by where they point, not by their rest rotation: each
+	# mapped bone gets a frame built from its direction in the rest pose, and
+	# the target bone is turned so its frame follows the source bone's.
+	var s_node := _node_rotation(source, scene)
+	var t_node := _node_rotation(target, character)
+	var inverse_pairs := {}
+	for bone in pairs:
+		inverse_pairs[pairs[bone]] = bone
+	var s_frame := {}  # source bone -> frame in bone-local space
+	var t_frame := {}
+	for bone in pairs:
+		var target_bone: int = pairs[bone]
+		var s_dir := _rest_direction(source, s_node, bone, pairs.keys())
+		var t_dir := _rest_direction(target, t_node, target_bone, inverse_pairs.keys())
+		s_frame[bone] = (s_node * source.get_bone_global_rest(bone).basis.get_rotation_quaternion()).inverse() * _frame(s_dir)
+		t_frame[target_bone] = (t_node * target.get_bone_global_rest(target_bone).basis.get_rotation_quaternion()).inverse() * _frame(t_dir)
+	var s_height := source.get_bone_global_rest(source_hips).origin.length()
+	var t_height := target.get_bone_global_rest(target_hips).origin.length()
+	var scale := t_height / maxf(s_height, 0.0001)
+	var names := from.get_animation_list()
+	for logical in wanted:
+		var clip_name := ""
+		for candidate in names:
+			if String(candidate).ends_with(String(wanted[logical])):
+				clip_name = candidate
+		if clip_name == "":
+			continue
+		var clip := from.get_animation(clip_name)
+		var rotation_tracks := {}
+		var position_track := -1
+		for track in clip.get_track_count():
+			var bone := source.find_bone(String(clip.track_get_path(track).get_concatenated_subnames()))
+			if bone < 0:
+				continue
+			if clip.track_get_type(track) == Animation.TYPE_ROTATION_3D:
+				rotation_tracks[bone] = track
+			elif clip.track_get_type(track) == Animation.TYPE_POSITION_3D and bone == source_hips:
+				position_track = track
+		var out := Animation.new()
+		out.length = clip.length
+		var out_tracks := {}
+		for bone in pairs.values():
+			var track := out.add_track(Animation.TYPE_ROTATION_3D)
+			out.track_set_path(track, NodePath(str(to_skeleton) + ":" + target.get_bone_name(bone)))
+			out_tracks[bone] = track
+		var hips_track := out.add_track(Animation.TYPE_POSITION_3D)
+		out.track_set_path(hips_track, NodePath(str(to_skeleton) + ":" + target.get_bone_name(target_hips)))
+		var step := 1.0 / 30.0
+		var time := 0.0
+		while time <= clip.length + 0.0001:
+			var at := minf(time, clip.length)
+			# Source world rotations, parents before children.
+			var s_world := {}
+			for bone in source.get_bone_count():
+				var local := source.get_bone_rest(bone).basis.get_rotation_quaternion()
+				if rotation_tracks.has(bone):
+					local = clip.rotation_track_interpolate(rotation_tracks[bone], at)
+				var parent := source.get_bone_parent(bone)
+				s_world[bone] = (s_world[parent] if parent >= 0 else s_node) * local
+			var t_world := {}
+			for bone in target.get_bone_count():
+				var parent := target.get_bone_parent(bone)
+				var parent_world: Quaternion = t_world[parent] if parent >= 0 else t_node
+				var source_bone = pairs.find_key(bone)
+				if source_bone != null:
+					t_world[bone] = (s_world[source_bone] as Quaternion) * (s_frame[source_bone] as Quaternion) * (t_frame[bone] as Quaternion).inverse()
+					out.rotation_track_insert_key(out_tracks[bone], at, (parent_world.inverse() * t_world[bone]).normalized())
+				else:
+					t_world[bone] = parent_world * target.get_bone_rest(bone).basis.get_rotation_quaternion()
+			var hips := target.get_bone_rest(target_hips).origin
+			if position_track >= 0:
+				var moved: Vector3 = clip.position_track_interpolate(position_track, at) - source.get_bone_rest(source_hips).origin
+				hips += t_node.inverse() * (s_node * moved) * scale
+			out.position_track_insert_key(hips_track, at, hips)
+			time += step
+		var key: String = "meshy_" + logical
+		clip_pace["files/" + key] = _pin_hips(out)
+		library.add_animation(key, out)
+	scene.free()
+
+## Where a bone points in the rest pose (world space): toward its main
+## mapped child (the spine, neck or head over the shoulders and legs), or on
+## from its parent for end bones.
+static func _rest_direction(skeleton: Skeleton3D, node: Quaternion, bone: int, mapped: Array) -> Vector3:
+	var here := skeleton.get_bone_global_rest(bone).origin
+	var best := -1
+	for child in skeleton.get_bone_children(bone):
+		if not mapped.has(child):
+			continue
+		var key := _bone_key(skeleton.get_bone_name(child))
+		if best < 0 or key.contains("spine") or key.contains("neck") or key.contains("head"):
+			best = child
+	var direction := Vector3.ZERO
+	if best >= 0:
+		direction = skeleton.get_bone_global_rest(best).origin - here
+	elif skeleton.get_bone_parent(bone) >= 0:
+		direction = here - skeleton.get_bone_global_rest(skeleton.get_bone_parent(bone)).origin
+	if direction.length() < 0.00001:
+		direction = Vector3.UP
+	return (node * direction).normalized()
+
+## A rotation whose Y axis runs along direction, twist fixed by the
+## character's forward (+Z), or up when the bone points forward.
+static func _frame(direction: Vector3) -> Quaternion:
+	var reference := Vector3.BACK
+	if absf(direction.dot(reference)) > 0.9:
+		reference = Vector3.UP
+	var x := direction.cross(reference).normalized()
+	var z := x.cross(direction).normalized()
+	return Basis(x, direction, z).get_rotation_quaternion()
+
+static func _node_rotation(skeleton: Skeleton3D, top: Node) -> Quaternion:
+	var rotation := Quaternion.IDENTITY
+	var node: Node = skeleton
+	while node != null and node != top:
+		if node is Node3D:
+			rotation = (node as Node3D).transform.basis.get_rotation_quaternion() * rotation
+		node = node.get_parent()
+	return rotation
 
 ## Holds the root bone's horizontal position at its first key (keeping the
 ## up-down bob), making a travelling clip play in place. Returns how fast
@@ -599,6 +758,12 @@ func _attack_clip(fighter: Node) -> String:
 		return "kick_spin"
 	if variant in ["uppercut", "overhand", "body_hook"]:
 		return "uppercut"
+	# Punch chains show a different strike for each hit when the fighter
+	# has them (they fall back to the heavy punch otherwise).
+	if variant == "cross":
+		return "cross"
+	if variant in ["hook", "rear_hook", "backfist"]:
+		return "hook"
 	return "punch_heavy" if variant in HEAVY_PUNCHES else "jab"
 
 func _move_clip(fighter: Node) -> String:
