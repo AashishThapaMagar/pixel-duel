@@ -124,6 +124,17 @@ func _build_pause_menu() -> void:
 		_resume()
 		_toggle_move_guide())
 	pause_menu.quit_requested.connect(func(): get_tree().change_scene_to_file("res://scenes/MainMenu.tscn"))
+	pause_menu.restart_requested.connect(func():
+		_resume()
+		_restart_match())
+
+## Round one again with the score wiped: the pause menu's restart.
+func _restart_match() -> void:
+	round_wins = [0, 0]
+	match_over = false
+	result_label.visible = false
+	_update_pips()
+	_begin_round(0)
 
 func is_paused() -> bool:
 	return is_instance_valid(pause_menu) and pause_menu.visible

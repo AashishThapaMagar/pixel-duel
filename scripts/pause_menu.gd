@@ -9,6 +9,7 @@ const QUALITY_NAMES := ["LOW", "MEDIUM", "HIGH", "CUSTOM"]
 signal resume_requested
 signal move_list_requested
 signal quit_requested
+signal restart_requested
 var arena: Node
 var panel: Control
 var page: Control
@@ -79,6 +80,7 @@ func _show_main() -> void:
 		["MOVE LIST", func(): move_list_requested.emit()],
 		["SETTINGS", _show_settings],
 		["HOW TO PLAY", _show_guide],
+		["RESTART MATCH", _confirm_restart],
 		["QUIT TO MENU", _confirm_quit],
 	]
 	for i in entries.size():
@@ -229,6 +231,18 @@ func _close_page() -> void:
 		page.queue_free()
 		page = null
 		preload("res://scripts/sfx.gd").fire("menu_back")
+
+## Restarting throws the score away, so it asks first.
+func _confirm_restart() -> void:
+	var to := _open_page("RESTART MATCH?", "PAUSED  /  RESTART")
+	var warning := UI.label(to, "Back to round one with the score wiped. Same fighters, same arena.", Vector2(26, 100), Vector2(400, 50), 15, UI.WHITE)
+	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var yes := UI.button(to, "RESTART", Vector2(26, 170), Vector2(200, 44), true)
+	yes.focus_mode = Control.FOCUS_NONE
+	yes.pressed.connect(func(): restart_requested.emit())
+	var no := UI.button(to, "KEEP FIGHTING", Vector2(236, 170), Vector2(190, 44))
+	no.focus_mode = Control.FOCUS_NONE
+	no.pressed.connect(func(): resume_requested.emit())
 
 ## Quitting mid-fight loses the match, so it asks first.
 func _confirm_quit() -> void:

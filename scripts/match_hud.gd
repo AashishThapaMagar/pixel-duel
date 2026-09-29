@@ -366,9 +366,29 @@ func _reset_stats() -> void:
 	for i in 2:
 		stats[i] = {"damage": 0, "combo": 0, "kos": 0, "perfects": 0}
 
+## A damage number pops off the struck fighter and drifts up: gold for a
+## clean hit, white and smaller for chip damage through the guard.
+func _damage_number(player: int, amount: int, blocked: bool) -> void:
+	if not ("camera_3d" in arena) or arena.camera_3d == null or not arena.is_inside_tree():
+		return
+	var fighter: Node = arena.player1 if player == 0 else arena.player2
+	var screen: Vector2 = arena.camera_3d.unproject_position(fighter.body.position + Vector3.UP * 1.75)
+	var at: Vector2 = get_viewport().get_final_transform().affine_inverse() * screen
+	var number := UI.heading(arena.get_node("UI"), str(amount), at + Vector2(-60, -30), Vector2(120, 40), 16 if blocked else 26, Color(0.9, 0.93, 1.0) if blocked else UI.GOLD, UI.CRIMSON)
+	number.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	number.z_index = 9
+	number.pivot_offset = number.size * 0.5
+	number.scale = Vector2.ONE * 1.5
+	var rise := number.create_tween().set_parallel(true)
+	rise.tween_property(number, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	rise.tween_property(number, "position:y", at.y - 78, 0.7).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	rise.tween_property(number, "modulate:a", 0.0, 0.3).set_delay(0.45)
+	rise.chain().tween_callback(number.queue_free)
+
 func _track_damage(health: int, _maximum: int, player: int) -> void:
 	if health < last_health[player]:
 		stats[1 - player].damage += last_health[player] - health
+		_damage_number(player, last_health[player] - health, readout_blocked_for(player))
 		if readout != null and readout_pending == player:
 			var attacker: Node = arena.player2 if player == 0 else arena.player1
 			var verdict := "BLOCKED" if readout_blocked else ("COUNTER HIT" if attacker.combat_notice == "COUNTER HIT" and attacker.combat_time < attacker.notice_until else "HIT")
@@ -379,8 +399,11 @@ func _track_damage(health: int, _maximum: int, player: int) -> void:
 	last_health[player] = health
 
 ## The defender emits the impact before its health changes; remember which
-## move landed so the readout can pair it with the damage.
+## move landed and whether it was guarded, for the readout and the number.
+var last_blocked: Array = [false, false]
+
 func _note_impact(_point: Vector2, blocked: bool, _heavy: bool, defender: int) -> void:
+	last_blocked[defender] = blocked
 	if readout == null:
 		return
 	var attacker: Node = arena.player2 if defender == 0 else arena.player1
@@ -388,8 +411,18 @@ func _note_impact(_point: Vector2, blocked: bool, _heavy: bool, defender: int) -
 	readout_move = str(attacker.attack_variant)
 	readout_blocked = blocked
 
+func readout_blocked_for(defender: int) -> bool:
+	return last_blocked[defender]
+
 func _knockout(loser: int) -> void:
 	stats[1 - loser].kos += 1
+	_slam("K.O.", 132)
+
+## The big callout (K.O., TIME UP) slams in and holds the winner line back
+## for a beat.
+func _slam(text: String, size: int) -> void:
+	ko_label.text = text
+	ko_label.add_theme_font_size_override("font_size", size)
 	ko_label.show()
 	ko_label.pivot_offset = ko_label.size * 0.5
 	ko_label.scale = Vector2.ONE * 3.0
@@ -436,6 +469,8 @@ func _process(_delta: float) -> void:
 	if callout != callout_style:
 		_style_result(callout)
 	# A round won without a scratch earns a PERFECT under the callout.
+	if show_result and not last_result_visible and arena.time_remaining <= 0.0 and arena.player1.state != arena.player1.State.KO and arena.player2.state != arena.player2.State.KO:
+		_slam("TIME UP", 96)
 	if show_result and not last_result_visible:
 		# Between rounds the PERFECT rides under the callout; at the end of
 		# the match it is counted on the results card instead.
