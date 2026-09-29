@@ -33,9 +33,9 @@ const GUARDED := ["walk", "walk_back", "sidestep", "sidestep_left", "sidestep_ri
 const UPPER_BODY := ["Spine", "Neck", "Head", "Shoulder", "Arm", "Hand"]
 ## Playback speed limits for locomotion: beyond these the legs look frantic
 ## (too fast) or floaty (too slow), so a little foot slide is accepted.
-const MOVE_SPEED_RANGE := {"walk": [0.6, 2.4], "walk_back": [0.6, 2.4], "sidestep": [0.6, 2.4],
-	"sidestep_left": [0.6, 2.4], "sidestep_right": [0.6, 2.4],
-	"run": [0.6, 1.8], "injured": [0.6, 2.0], "dash": [1.0, 2.2], "backdash": [1.2, 3.0]}
+const MOVE_SPEED_RANGE := {"walk": [0.7, 1.7], "walk_back": [0.7, 1.7], "sidestep": [0.7, 1.7],
+	"sidestep_left": [0.7, 1.7], "sidestep_right": [0.7, 1.7],
+	"run": [0.7, 1.5], "injured": [0.7, 1.6], "dash": [1.0, 1.9], "backdash": [1.0, 2.2]}
 ## Health fraction at or below which forward movement limps.
 const INJURED_HEALTH := 0.25
 ## Clips allowed to move the hips across the floor. Everything else plays in
@@ -67,6 +67,18 @@ var guard_weight := 0.0
 ## plays as-is whatever the fight state says. Empty leaves the fight in charge.
 var pose_override := ""
 var guard_time := 0.0
+## Blend into a scrubbed attack from whatever pose the rig was in, so a
+## jab never snaps from the guard to the clip's first frame.
+var _blend_from: Dictionary = {}
+var _blend_time := 0.0
+const ATTACK_BLEND := 0.09
+## Procedural layers on top of the clips: a knee tuck for rigs with no
+## jump clip and a lean back for guarded hits. Bones are found by name and
+## their bend direction is calibrated once, so any humanoid rig works.
+var _tuck := 0.0
+var _lean := 0.0
+var _legs: Array = []      # [[upper bone, knee bone, upper sign, knee sign, axis], ...]
+var _spine: Array = []     # [[bone, sign, axis], ...]
 
 func configure(owner_visual: Node, profile: Dictionary) -> void:
 	visual = owner_visual
@@ -111,6 +123,8 @@ func configure(owner_visual: Node, profile: Dictionary) -> void:
 	_prepare_guard()
 	_fit(float(config.get("height", 1.8)))
 	_tint(config.get("tint", []))
+	_polish_materials()
+	_calibrate()
 	visual.model.visible = false
 	active = true
 	var fighter: Node = visual.fighter
@@ -423,7 +437,8 @@ func update(delta: float) -> void:
 	_last_state = state
 	if logical in SCRUBBED and pose_override == "":
 		guard_weight = 0.0
-		_scrub_attack(fighter, logical, clip)
+		_scrub_attack(fighter, logical, clip, delta, frozen)
+		_procedural(fighter, logical, delta, frozen)
 		return
 	if clip != current or (entered and not logical in LOOPING):
 		player.play(clip, 0.12)
@@ -434,6 +449,125 @@ func update(delta: float) -> void:
 		guard_time += delta
 		guard_weight = move_toward(guard_weight, 1.0 if logical in GUARDED else 0.0, delta * 8.0)
 	_apply_guard()
+	_procedural(fighter, logical, delta, frozen)
+
+## Bones by the Mixamo-style key their name ends with (see _bone_key).
+func _bone(key: String) -> int:
+	if skeleton == null:
+		return -1
+	for bone in skeleton.get_bone_count():
+		if _bone_key(skeleton.get_bone_name(bone)) == key:
+			return bone
+	return -1
+
+## Finds the spine and leg bones and works out, for each, which local axis
+## and sign bends it the way the layers below want: knees folding the foot
+## back, hips lifting the knee forward, the spine leaning the head back.
+func _calibrate() -> void:
+	_legs.clear()
+	_spine.clear()
+	if skeleton == null:
+		var skeletons := character.find_children("*", "Skeleton3D", true, false)
+		if skeletons.is_empty():
+			return
+		skeleton = skeletons[0]
+	var forward: Vector3 = skeleton.global_transform.basis.inverse() * root.global_transform.basis.x
+	var up: Vector3 = skeleton.global_transform.basis.inverse() * root.global_transform.basis.y
+	for side in ["left", "right"]:
+		var upper := _bone(side + "upleg")
+		var knee := _bone(side + "leg")
+		var foot := _bone(side + "foot")
+		if upper < 0 or knee < 0 or foot < 0:
+			continue
+		var knee_axis := _best_axis(knee, foot, -forward)
+		var hip_axis := _best_axis(upper, knee, forward + up * 0.5)
+		if knee_axis.is_empty() or hip_axis.is_empty():
+			continue
+		_legs.append([upper, knee, hip_axis[1], knee_axis[1], hip_axis[0], knee_axis[0]])
+	var head := _bone("head")
+	for key in ["spine", "spine1", "spine2"]:
+		var bone := _bone(key)
+		if bone < 0 or head < 0:
+			continue
+		var axis := _best_axis(bone, head, -forward)
+		if not axis.is_empty():
+			_spine.append([bone, axis[1], axis[0]])
+
+## [axis, sign] for rotating `bone` so that `tip` moves along `want`, or
+## [] when no local axis moves it there. Probes with a test rotation and
+## restores the pose.
+func _best_axis(bone: int, tip: int, want: Vector3) -> Array:
+	var rest := skeleton.get_bone_pose_rotation(bone)
+	skeleton.force_update_all_bone_transforms()
+	var before := skeleton.get_bone_global_pose(tip).origin
+	var best: Array = []
+	var best_dot := 0.05
+	for axis in [Vector3.RIGHT, Vector3.FORWARD, Vector3.UP]:
+		skeleton.set_bone_pose_rotation(bone, rest * Quaternion(axis, 0.6))
+		skeleton.force_update_all_bone_transforms()
+		var moved := skeleton.get_bone_global_pose(tip).origin - before
+		var along := moved.dot(want.normalized())
+		if absf(along) > best_dot:
+			best_dot = absf(along)
+			best = [axis, signf(along)]
+	skeleton.set_bone_pose_rotation(bone, rest)
+	return best
+
+## Jump tuck (only when the rig has no jump clip of its own) and the lean
+## back of a guarded hit, both eased so they read as weight, not a switch.
+func _procedural(fighter: Node, logical: String, delta: float, frozen: bool) -> void:
+	if skeleton == null:
+		return
+	var S: Dictionary = fighter.State
+	var tuck_target := 0.0
+	if clip_names.get("jump", "") == clip_names.get("idle", "") and pose_override == "":
+		match fighter.state:
+			S.JUMP_START:
+				tuck_target = 0.35
+			S.JUMP:
+				tuck_target = 0.9 if fighter.velocity.y < 0.0 else 0.55
+			S.LAND:
+				tuck_target = 0.4
+	var lean_target := 0.0
+	if fighter.state == S.BLOCKSTUN and clip_names.get("block_hit", "") == clip_names.get("block", ""):
+		lean_target = 0.32 * visual._recoil()
+	if not frozen:
+		_tuck = move_toward(_tuck, tuck_target, delta * 9.0)
+		_lean = move_toward(_lean, lean_target, delta * 12.0)
+	_apply_layers()
+
+## Bends the calibrated bones by the current tuck and lean amounts.
+func _apply_layers() -> void:
+	if skeleton == null:
+		return
+	if _tuck > 0.001:
+		for leg in _legs:
+			var hip := skeleton.get_bone_pose_rotation(leg[0])
+			skeleton.set_bone_pose_rotation(leg[0], hip * Quaternion(leg[4], leg[2] * 0.5 * _tuck))
+			var knee := skeleton.get_bone_pose_rotation(leg[1])
+			skeleton.set_bone_pose_rotation(leg[1], knee * Quaternion(leg[5], leg[3] * 1.05 * _tuck))
+	if _lean > 0.001:
+		for part in _spine:
+			var pose := skeleton.get_bone_pose_rotation(part[0])
+			skeleton.set_bone_pose_rotation(part[0], pose * Quaternion(part[2], part[1] * _lean / _spine.size()))
+
+## Imported bodies arrive with whatever finish their exporter chose, often
+## a metallic, glossy plastic. Bring them to a matte skin-and-cloth look
+## that sits in the arena lighting: no metal, a soft rim, sharp mipmaps.
+func _polish_materials() -> void:
+	for mesh: MeshInstance3D in character.find_children("*", "MeshInstance3D", true, false):
+		for surface in mesh.mesh.get_surface_count() if mesh.mesh != null else 0:
+			var material := mesh.get_active_material(surface)
+			if not material is StandardMaterial3D or material.has_meta("polished"):
+				continue
+			material.set_meta("polished", true)
+			material.metallic = minf(material.metallic, 0.12)
+			material.roughness = maxf(material.roughness, 0.72)
+			material.metallic_specular = 0.28
+			material.rim_enabled = true
+			material.rim = 0.12
+			material.rim_tint = 0.5
+			material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 
 ## Restarts the current clip on the next update (cutscenes repeating a move).
 func replay() -> void:
@@ -505,13 +639,16 @@ func _loop_speed(fighter: Node, logical: String, clip: String) -> float:
 
 ## Maps attack_timer onto the clip: wind-up covers the clip up to its
 ## impact point, and the blow's active frames and recovery cover the rest.
-func _scrub_attack(fighter: Node, logical: String, clip: String) -> void:
+func _scrub_attack(fighter: Node, logical: String, clip: String, delta: float, frozen: bool) -> void:
 	var animation := player.get_animation(clip)
 	if animation == null:
 		return
-	# No cross-fade: the player is held at speed 0 while scrubbing, so a
-	# blend would never finish and the previous clip would stay on screen.
+	# The player is held at speed 0 while scrubbing, so its own cross-fade
+	# would never finish. Instead the pose the rig was in is captured and
+	# blended toward the clip by hand over the first few frames.
 	if clip != current:
+		_capture_pose()
+		_blend_time = 0.0
 		player.play(clip, 0.0)
 		current = clip
 	player.speed_scale = 0.0
@@ -532,3 +669,16 @@ func _scrub_attack(fighter: Node, logical: String, clip: String) -> void:
 	if t > startup:
 		position = impact + (end - impact) * clampf((t - startup) / (total - startup), 0.0, 1.0)
 	player.seek(minf(position, animation.length - 0.001), true)
+	if not frozen:
+		_blend_time += delta
+	if _blend_time < ATTACK_BLEND and skeleton != null and not _blend_from.is_empty():
+		var k := smoothstep(0.0, 1.0, _blend_time / ATTACK_BLEND)
+		for bone in _blend_from:
+			skeleton.set_bone_pose_rotation(bone, (_blend_from[bone] as Quaternion).slerp(skeleton.get_bone_pose_rotation(bone), k))
+
+func _capture_pose() -> void:
+	_blend_from.clear()
+	if skeleton == null:
+		return
+	for bone in skeleton.get_bone_count():
+		_blend_from[bone] = skeleton.get_bone_pose_rotation(bone)

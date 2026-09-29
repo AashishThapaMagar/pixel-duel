@@ -60,7 +60,7 @@ void fragment() {
 	float beam = 1.0 - smoothstep(0.0, 0.55, length(d));
 	float rays = 0.5 + 0.5 * sin(atan(d.y, d.x) * 9.0 + TIME * 0.6);
 	float floor_glow = (1.0 - smoothstep(0.86, 1.0, UV.y)) * smoothstep(0.7, 0.9, UV.y);
-	COLOR = vec4(tint.rgb, (beam * (0.42 + 0.14 * rays) + floor_glow * 0.35) * tint.a);
+	COLOR = vec4(tint.rgb, (beam * (0.6 + 0.18 * rays) + floor_glow * 0.45) * tint.a);
 }
 """
 func _ready() -> void:

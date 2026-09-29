@@ -59,5 +59,55 @@ func run() -> void:
 		await process_frame
 		DirAccess.remove_absolute(folder + "meshy_rig.glb")
 		DirAccess.remove_absolute(folder)
+	# The procedural layers on a Mixamo-shaped skeleton: the calibration
+	# must find the legs and spine and bend them the right way, whatever
+	# axis convention the rig uses.
+	var rig := Node3D.new()
+	root.add_child(rig)
+	rig.rotation.y = 0.0
+	var character := Node3D.new()
+	rig.add_child(character)
+	var skeleton := Skeleton3D.new()
+	character.add_child(skeleton)
+	var chain := [["mixamorig_Hips", -1, Transform3D(Basis(), Vector3(0, 1.0, 0))],
+		["mixamorig_Spine", 0, Transform3D(Basis(), Vector3(0, 0.15, 0))], ["mixamorig_Spine1", 1, Transform3D(Basis(), Vector3(0, 0.15, 0))],
+		["mixamorig_Spine2", 2, Transform3D(Basis(), Vector3(0, 0.15, 0))], ["mixamorig_Neck", 3, Transform3D(Basis(), Vector3(0, 0.12, 0))],
+		["mixamorig_Head", 4, Transform3D(Basis(), Vector3(0, 0.12, 0))]]
+	for side in ["Left", "Right"]:
+		var x := 0.1 if side == "Left" else -0.1
+		# Leg bones point down: their local Y is turned to world -Y, as Mixamo rigs do.
+		chain.append(["mixamorig_%sUpLeg" % side, 0, Transform3D(Basis(Vector3.RIGHT, PI), Vector3(x, 0, 0))])
+		chain.append(["mixamorig_%sLeg" % side, chain.size() - 1, Transform3D(Basis(), Vector3(0, 0.45, 0))])
+		chain.append(["mixamorig_%sFoot" % side, chain.size() - 1, Transform3D(Basis(), Vector3(0, 0.45, 0))])
+	for bone in chain:
+		var index := skeleton.add_bone(bone[0])
+		if bone[1] >= 0:
+			skeleton.set_bone_parent(index, bone[1])
+		skeleton.set_bone_rest(index, bone[2])
+		skeleton.set_bone_pose_position(index, bone[2].origin)
+		skeleton.set_bone_pose_rotation(index, bone[2].basis.get_rotation_quaternion())
+	var layers = animated.new()
+	layers.root = rig
+	layers.character = character
+	layers.skeleton = skeleton
+	layers._calibrate()
+	check(layers._legs.size() == 2 and layers._spine.size() == 3, "Calibration finds both legs and the spine on a Mixamo-shaped rig")
+	var foot := skeleton.find_bone("mixamorig_LeftFoot")
+	var head := skeleton.find_bone("mixamorig_Head")
+	skeleton.force_update_all_bone_transforms()
+	var foot_before: Vector3 = skeleton.get_bone_global_pose(foot).origin
+	var head_before: Vector3 = skeleton.get_bone_global_pose(head).origin
+	layers._tuck = 1.0
+	layers._apply_layers()
+	skeleton.force_update_all_bone_transforms()
+	var foot_after: Vector3 = skeleton.get_bone_global_pose(foot).origin
+	check(foot_after.x <= foot_before.x + 0.02 and foot_after.y > foot_before.y + 0.08, "A jump tuck lifts the foot without swinging it forward (rig faces +X)")
+	layers._tuck = 0.0
+	layers._lean = 0.3
+	layers._apply_layers()
+	skeleton.force_update_all_bone_transforms()
+	var head_after: Vector3 = skeleton.get_bone_global_pose(head).origin
+	check(head_after.x < head_before.x - 0.03, "A guarded hit leans the head back")
+	rig.queue_free()
 	print("DROPPED_MODEL_TEST: ", "ALL PASS" if failures.is_empty() else failures)
 	quit(0 if failures.is_empty() else 1)

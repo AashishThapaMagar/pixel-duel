@@ -21,6 +21,11 @@ var viewport: SubViewport
 ## showcases at 30 Hz, and nothing is skinned between updates.
 var refresh_rate := 30.0
 var _accumulated := 0.0
+## Portraits are stills: the fighter settles into the guard for a moment
+## and is drawn once, redrawn only when the fighter changes. No idle
+## motion on the select screen, and no skinning every frame.
+var still := true
+var _pending := 0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -106,17 +111,23 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if fighter == null or camera == null:
 		return
-	_accumulated += delta
 	if not is_visible_in_tree():
 		viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 		return
-	if _accumulated < 1.0 / refresh_rate:
-		viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
-		return
-	fighter.get_node("Visual")._process(_accumulated)
-	_accumulated = 0.0
-	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
-	if not bust:
+	var refresh := false
+	if still:
+		if _pending > 0:
+			_pending -= 1
+			fighter.get_node("Visual")._process(0.12)
+			refresh = true
+	else:
+		_accumulated += delta
+		if _accumulated >= 1.0 / refresh_rate:
+			fighter.get_node("Visual")._process(_accumulated)
+			_accumulated = 0.0
+			refresh = true
+	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE if refresh else SubViewport.UPDATE_DISABLED
+	if not refresh or not bust:
 		return
 	var animated = fighter.get_node("Visual").animated
 	if not animated.active or animated.skeleton == null:
@@ -141,8 +152,10 @@ func show_fighter(value: int) -> void:
 		fighter.apply_character(value)
 		fighter.apply_style(load("res://resources/styles/action.tres"))
 		fighter._update_animation()
-		# Redraw with the new fighter straight away.
+		# Redraw with the new fighter straight away; a still settles over a
+		# few steps so the guard is up and the head is framed.
 		_accumulated = 1.0
+		_pending = 6
 		if bust:
 			_clear_guard()
 
